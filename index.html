@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ruskin</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2016%2016%27%3E%3Crect%20width%3D%2716%27%20height%3D%2716%27%20rx%3D%271.6%27%20fill%3D%27%237a2b24%27%2F%3E%3Cg%20fill%3D%27%23f2ede4%27%3E%3Cpath%20d%3D%27M3.5%203.1h1.9v9.8H3.5z%27%2F%3E%3Cpath%20d%3D%27M5.4%203.1h3.9a2.75%202.75%200%200%201%200%205.5H5.4V6.9h3.7a1.15%201.15%200%200%200%200-2.3H5.4z%27%2F%3E%3Cpath%20d%3D%27M7.5%208.6h2.2l2.7%204.3h-2.3z%27%2F%3E%3C%2Fg%3E%3Crect%20x%3D%273.5%27%20y%3D%2713.6%27%20width%3D%278.9%27%20height%3D%270.75%27%20fill%3D%27%23c9a24a%27%2F%3E%3C%2Fsvg%3E">
+<meta name="description" content="Everything the literary press reviewed, scored out of ten against one reader's taste.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,700&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="app.css">
+
+<!-- Added to a home screen this runs without Safari's chrome, so it needs a name,
+     an opaque icon and a status-bar colour of its own. iOS ignores an SVG icon
+     here and will screenshot the page instead, which is why the touch icon is a
+     PNG. theme-color is declared per scheme so the notch area matches the page
+     in both, rather than staying light behind a dark feed. -->
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/ruskin-180.png">
+<meta name="apple-mobile-web-app-title" content="Ruskin">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#e9ece8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#171b1a" media="(prefers-color-scheme: dark)">
+</head>
+<body>
+<a class="skip" href="#feed">Skip to the feed</a>
+
+<header class="masthead">
+  <div class="wrap masthead-row">
+    <div class="brand">
+      <span class="mark" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" rx="1.6" fill="#7a2b24"/><g fill="#f2ede4"><path d="M3.5 3.1h1.9v9.8H3.5z"/><path d="M5.4 3.1h3.9a2.75 2.75 0 0 1 0 5.5H5.4V6.9h3.7a1.15 1.15 0 0 0 0-2.3H5.4z"/><path d="M7.5 8.6h2.2l2.7 4.3h-2.3z"/></g><rect x="3.5" y="13.6" width="8.9" height="0.75" fill="#c9a24a"/></svg></span>
+      <div>
+        <h1>Ruskin</h1>
+        <p class="sub" id="masthead-sub">Everything the literary press reviewed, scored out of ten.</p>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:var(--s3)">
+      <span class="built" id="built"></span>
+      <nav class="views" aria-label="Sections">
+        <button class="btn" id="view-feed" aria-current="page">Feed</button>
+        <button class="btn" id="view-saved">Saved books <span class="n" id="savedCount">0</span></button>
+        <button class="btn" id="view-taste">Taste</button>
+        <button class="btn" id="view-profile">Profile <span class="nav-mark" id="profile-mark" hidden aria-hidden="true">•</span></button>
+      </nav>
+      <button class="btn" id="theme" aria-label="Switch between light and dark">Theme</button>
+    </div>
+  </div>
+</header>
+
+<nav class="controls" aria-label="Sorting and filtering">
+  <div class="wrap">
+    <div class="controls-grid">
+      <div class="field">
+        <label for="q">Search</label>
+        <input type="search" id="q" placeholder="title, author, publisher, critic" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="order">Order</label>
+        <select id="order">
+          <option value="latest">Newest reviews</option>
+          <option value="fit">Best fit for me</option>
+          <option value="published">Newest books</option>
+          <option value="reviewed">Most reviewed</option>
+          <option value="title">Title A–Z</option>
+        </select>
+      </div>
+    </div>
+
+    <details id="more">
+    <summary class="more-toggle">Filters <span class="more-count" id="more-count"></span></summary>
+    <div class="controls-grid" style="margin-top:var(--s3)">
+      <div class="field">
+        <label for="minScore">Min score</label>
+        <input type="number" id="minScore" min="1" max="10" step="0.5" placeholder="any">
+      </div>
+      <div class="field">
+        <label for="minPages">Min pages</label>
+        <input type="number" id="minPages" min="0" max="2000" step="50" placeholder="any">
+      </div>
+      <div class="group">
+        <span class="legend" id="lg-src">Publication</span>
+        <div class="chips" id="sources" role="group" aria-labelledby="lg-src"></div>
+      </div>
+
+    </div>
+
+    <div class="toggle-row toggle-row-in-more" style="margin-top:var(--s3)">
+      <label class="switch"><input type="checkbox" id="fWindow" checked> Inside the 10-year window</label>
+      <label class="switch"><input type="checkbox" id="fNonfiction"> Hide nonfiction</label>
+      <label class="switch"><input type="checkbox" id="fIdentity"> Only where the book is identified</label>
+      <label class="switch"><input type="checkbox" id="fPenalised"> Only profile-penalised</label>
+      <label class="switch"><input type="checkbox" id="fGroup"> Group by subject engine</label>
+      <label class="switch"><input type="checkbox" id="fUnseen"> Hide what I've ruled on</label>
+      <label class="switch"><input type="checkbox" id="fTune" checked> Tune scores from my saves</label>
+      <button class="btn" id="reset">Reset filters</button>
+    </div>
+    <div class="more-done">
+      <button class="btn btn-done" id="filters-done">Done</button>
+    </div>
+      <details id="tags-panel">
+        <summary class="more-toggle">Browse tags</summary>
+        <div id="tag-dir"></div>
+      </details>
+    </details>
+  </div>
+</nav>
+
+<main class="wrap" id="main">
+  <div class="tag-bar" id="tag-bar" hidden></div>
+  <div class="tally">
+    <p class="status" id="status" role="status" aria-live="polite"></p>
+    <button class="rec-toggle" id="recToggle" aria-pressed="false">
+      <span class="rec-star" aria-hidden="true">★</span>
+      <span id="recCount">0</span>&nbsp;recommended
+    </button>
+  </div>
+
+  <section class="section" id="feed-section">
+    <h2 id="feed" class="sr-only">Every book reviewed</h2>
+    <p class="note" id="feed-note"></p>
+    <div id="feed-body"></div>
+  </section>
+
+  <section class="section" id="saved-section" hidden>
+    <div class="section-head">
+      <h2 id="saved">Saved Books</h2>
+      <div class="field">
+        <label for="savedSort">Sort by</label>
+        <select id="savedSort">
+          <option value="recent">Recently saved</option>
+          <option value="title">Title</option>
+          <option value="author">Author</option>
+        </select>
+      </div>
+    </div>
+    <p class="status" id="saved-status" role="status" aria-live="polite"></p>
+    <div id="saved-body"></div>
+  </section>
+
+  <section class="section" id="profile-section" hidden>
+    <div class="section-head">
+      <h2 id="profile">Your ordering</h2>
+    </div>
+    <div id="profile-body"></div>
+  </section>
+
+  <section class="section" id="taste-section" hidden>
+    <div class="section-head">
+      <h2 id="taste">What your saves have taught it</h2>
+    </div>
+    <div id="taste-body"></div>
+  </section>
+</main>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<footer class="foot wrap">
+  <p id="foot-note"></p>
+  <span style="display:flex;gap:var(--s2);flex-wrap:wrap">
+    <button class="btn" id="export">Export my verdicts</button>
+    <button class="btn" id="sources-info">Source status</button>
+  </span>
+</footer>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

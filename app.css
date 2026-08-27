@@ -1,0 +1,863 @@
+/* Ruskin — see DESIGN.md. Tokens only below this block.
+
+   Antiquarian bookstore on a foggy morning in Inverness. The ground is haar:
+   pale, cool, faintly green, and light rather than gloomy, because fog is bright.
+   The warmth comes from what is on the shelves — oxblood morocco on the spines,
+   gilt on the lettering — so the page is cool and the marks on it are warm.
+
+   Every text pair here clears WCAG AA at 4.5:1 and every border clears 3:1.
+   Checked, not eyeballed: --ink-faint carries the 0.6875rem metadata that runs
+   through the whole app, so it is the tier most likely to fail and it is set at
+   the darkest value the fog will take. */
+
+:root {
+  --bg: #e9ece8;
+  --surface: #f7f8f5;
+  --surface-2: #dde2dc;
+  --ink: #191e1c;
+  --ink-muted: #4d5653;
+  --ink-faint: #5c6663;
+  --rule: #c8cfc9;
+  --rule-strong: #7e8883;
+  --accent: #7a2b24;
+  --accent-soft: #eddfdb;
+  --gilt: #6b5320;
+  --warn: #7a5410;
+  --ok: #245c43;
+
+  --serif: "EB Garamond", Charter, "Iowan Old Style", Georgia, serif;
+  --display: "Bodoni Moda", "EB Garamond", Charter, Georgia, serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px;
+  --s6: 32px; --s7: 48px; --s8: 64px; --s9: 96px;
+
+  --r-sm: 2px; --r-md: 4px; --r-lg: 8px;
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / .06);
+
+  --fast: 120ms; --normal: 200ms; --slow: 320ms;
+  --ease: cubic-bezier(.2, .6, .3, 1);
+}
+
+:root[data-theme="dark"],
+:root:not([data-theme="light"]) {
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #171b1a; --surface: #1f2523; --surface-2: #2a312e;
+    --ink: #e6eae5; --ink-muted: #a3aca7; --ink-faint: #9ba49f;
+    --rule: #333b38; --rule-strong: #606b66;
+    --accent: #e3948a; --accent-soft: #33211f;
+    --gilt: #cbab68;
+    --warn: #d9a441; --ok: #7fc9a2;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #171b1a; --surface: #1f2523; --surface-2: #2a312e;
+  --ink: #e6eae5; --ink-muted: #a3aca7; --ink-faint: #9ba49f;
+  --rule: #333b38; --rule-strong: #606b66;
+  --accent: #e3948a; --accent-soft: #33211f;
+  --gilt: #cbab68;
+  --warn: #d9a441; --ok: #7fc9a2;
+  color-scheme: dark;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0ms !important; transition-duration: 0ms !important; }
+}
+
+* { box-sizing: border-box; }
+
+/* Several components below set display explicitly, which outranks the UA rule
+   the hidden attribute relies on. Without this a hidden section stays on screen. */
+[hidden] { display: none !important; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--serif);
+  /* EB Garamond sets small for its point size and its strokes are lighter than
+     Source Serif's, so the base goes up a step and the leading opens with it.
+     Below this the metadata tier stops being comfortable on fog. */
+  font-size: 1.0625rem;
+  line-height: 1.5;
+  font-synthesis-weight: none;
+}
+
+a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+a:hover { text-decoration-thickness: 2px; }
+
+:where(a, button, select, input, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+.skip {
+  position: absolute; left: -9999px; top: 0; z-index: 20;
+  background: var(--surface); color: var(--ink);
+  padding: var(--s3) var(--s4); border: 1px solid var(--rule-strong);
+}
+.skip:focus { left: var(--s4); top: var(--s2); }
+
+.wrap { max-width: 1080px; margin: 0 auto; padding: 0 var(--s5); }
+
+/* ------------------------------------------------------------ masthead */
+
+.masthead {
+  /* A gilt hairline under the heavy rule, the way a stamped board carries a thin
+     line of gold under the title. Gilt does one job in this app and this is it,
+     plus the rule above the recommendation counter. It never sets type: at
+     6.1:1 it would pass, but a gold that is dark enough to read stops reading
+     as gold, and a lighter one fails. So it stays a line. */
+  border-bottom: 2px solid var(--ink);
+  box-shadow: 0 3px 0 -2px var(--gilt);
+  padding: var(--s6) 0 var(--s4);
+  margin-bottom: var(--s5);
+}
+.masthead-row { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--s4); flex-wrap: wrap; }
+.masthead h1 {
+  /* Bodoni for the masthead alone. The Scotch Romans came out of Edinburgh
+     foundries and sat on the title pages this feed is pastiching, so the
+     reference is regional rather than decorative. Weight 700 because Didone
+     hairlines disappear against a pale ground at any lighter setting. */
+  font-family: var(--display);
+  font-size: 2.75rem; line-height: 1.05; margin: 0;
+  font-weight: 700; letter-spacing: -.01em;
+}
+.masthead .sub {
+  font-family: var(--mono); font-size: .75rem; color: var(--ink-muted);
+  margin: var(--s2) 0 0; max-width: 60ch; line-height: 1.5;
+}
+.masthead .built { font-family: var(--mono); font-size: .6875rem; color: var(--ink-faint); }
+
+/* ------------------------------------------------------------ controls */
+
+.controls {
+  position: sticky; top: 0; z-index: 10;
+  background: var(--bg);
+  border-bottom: 1px solid var(--rule);
+  padding: var(--s3) 0;
+  margin-bottom: var(--s5);
+}
+.controls-grid { display: flex; flex-wrap: wrap; gap: var(--s3) var(--s4); align-items: flex-end; }
+
+.field { display: flex; flex-direction: column; gap: var(--s1); }
+.field > label,
+.group > .legend {
+  font-family: var(--mono); font-size: .625rem; text-transform: uppercase;
+  letter-spacing: .09em; color: var(--ink-faint);
+}
+
+input[type="search"], select, input[type="number"] {
+  font-family: var(--mono); font-size: .8125rem;
+  color: var(--ink); background: var(--surface);
+  border: 1px solid var(--rule-strong); border-radius: var(--r-md);
+  padding: var(--s2) var(--s3); min-height: 36px;
+}
+input[type="search"] { min-width: 15rem; }
+select { min-width: 11rem; }
+input[type="number"] { width: 6rem; }
+
+.group { display: flex; flex-direction: column; gap: var(--s1); }
+.chips { display: flex; flex-wrap: wrap; gap: var(--s1); }
+
+.chip {
+  font-family: var(--mono); font-size: .6875rem;
+  background: transparent; color: var(--ink-muted);
+  border: 1px solid var(--rule-strong); border-radius: var(--r-md);
+  padding: var(--s1) var(--s2); min-height: 26px; cursor: pointer;
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+.chip:hover { background: var(--surface-2); color: var(--ink); }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.chip .n { opacity: .6; margin-left: var(--s1); }
+
+.toggle-row { display: flex; flex-wrap: wrap; gap: var(--s4); align-items: center; }
+.switch { display: inline-flex; align-items: center; gap: var(--s2); font-family: var(--mono); font-size: .75rem; color: var(--ink-muted); cursor: pointer; min-height: 32px; }
+.switch input { accent-color: var(--accent); width: 15px; height: 15px; }
+
+.btn {
+  font-family: var(--mono); font-size: .6875rem;
+  background: var(--surface); color: var(--ink);
+  border: 1px solid var(--rule-strong); border-radius: var(--r-md);
+  padding: var(--s2) var(--s3); min-height: 32px; cursor: pointer;
+  transition: background var(--fast) var(--ease), transform 80ms var(--ease);
+}
+.btn:hover { background: var(--surface-2); }
+.btn:active { transform: scale(.97); }
+.btn[disabled] { opacity: .45; cursor: not-allowed; }
+
+/* ------------------------------------------------------------ sections */
+
+.section { margin-bottom: var(--s7); }
+.section-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: var(--s4); border-bottom: 1px solid var(--rule-strong);
+  padding-bottom: var(--s2); margin-bottom: var(--s2);
+}
+.section-head h2 { font-size: 1.25rem; margin: 0; font-weight: 600; letter-spacing: -.01em; }
+.section-head .note { font-family: var(--mono); font-size: .6875rem; color: var(--ink-faint); text-align: right; max-width: 42ch; }
+
+.group-head {
+  font-family: var(--mono); font-size: .6875rem; text-transform: uppercase;
+  letter-spacing: .09em; color: var(--ink-faint);
+  border-bottom: 1px solid var(--rule); padding: var(--s5) 0 var(--s2);
+}
+
+.status { font-family: var(--mono); font-size: .6875rem; color: var(--ink-faint); padding: var(--s2) 0; }
+
+/* ------------------------------------------------------------ rows */
+
+.list { list-style: none; margin: 0; padding: 0; }
+
+.row {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) auto;
+  gap: var(--s5);
+  padding: var(--s5) var(--s2);
+  border-bottom: 1px solid var(--rule);
+  transition: background var(--fast) var(--ease);
+}
+.row:hover { background: var(--surface-2); }
+.row.is-open { background: var(--surface-2); }
+.row.is-excluded .title { text-decoration: line-through; text-decoration-color: var(--rule-strong); }
+.row.is-excluded { opacity: .72; }
+
+.score { text-align: right; padding-top: 2px; }
+.score .num {
+  /* The score is the one judgment on the row, so it is set rather than reported:
+     Bodoni figures at the same size the mono numeral used to hold. Tabular so a
+     column of them lines up, which is the whole reason the mono was there. */
+  display: block; font-family: var(--display); font-size: 2.125rem; line-height: 1;
+  font-weight: 700; letter-spacing: -.01em; color: var(--ink);
+  font-variant-numeric: tabular-nums lining;
+}
+.score .band {
+  display: block; font-family: var(--mono); font-size: .625rem;
+  text-transform: uppercase; letter-spacing: .1em; color: var(--ink-faint);
+  margin-top: var(--s1);
+}
+.row[data-band="lead"] .score .num { color: var(--accent); }
+.row[data-band="lead"] .score .band { color: var(--accent); }
+.row[data-band="excluded"] .score .num { color: var(--ink-faint); font-size: 1.25rem; }
+
+.title { font-size: 1.25rem; line-height: 1.2; margin: 0 0 var(--s1); font-weight: 600; letter-spacing: -.01em; }
+.title .author { font-weight: 400; color: var(--ink-muted); }
+.title .author::before { content: " · "; color: var(--ink-faint); }
+
+.meta {
+  font-family: var(--mono); font-size: .6875rem; color: var(--ink-muted);
+  margin: 0 0 var(--s2); display: flex; flex-wrap: wrap; gap: var(--s1) var(--s3);
+}
+.meta .sep { color: var(--ink-faint); }
+.meta .guess { color: var(--warn); }
+
+.standfirst { margin: 0; color: var(--ink-muted); font-size: .9375rem; max-width: 68ch; }
+
+/* One line saying how far to trust the row, in place of the bordered flag chips
+   that used to sit above a tag row already carrying the same words. No border and
+   no fill: it is a note, and giving it a box made it compete with the tags. */
+.caveat-line {
+  font-family: var(--mono); font-size: .6875rem; color: var(--ink-faint);
+  margin: var(--s2) 0 0; max-width: 68ch; line-height: 1.5;
+}
+
+.risk {
+  font-family: var(--mono); font-size: .6875rem; color: var(--warn);
+  margin: var(--s2) 0 0; max-width: 68ch; line-height: 1.5;
+}
+.risk::before { content: "▲ "; }
+
+.row-actions { display: flex; flex-direction: column; gap: var(--s1); align-items: stretch; }
+.row-actions .btn { white-space: nowrap; }
+.btn.is-on[data-verdict="saved"] { background: var(--ok); border-color: var(--ok); color: var(--bg); }
+.btn.is-on[data-verdict="passed"] { background: var(--ink-muted); border-color: var(--ink-muted); color: var(--bg); }
+
+/* ------------------------------------------------------------ detail */
+
+.detail {
+  grid-column: 1 / -1;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-md);
+  padding: var(--s4);
+  margin-top: var(--s3);
+}
+.detail[hidden] { display: none; }
+
+.dims { display: grid; gap: var(--s2); margin: 0 0 var(--s4); }
+.dim { display: grid; grid-template-columns: 2.5rem 1fr 2.25rem; gap: var(--s3); align-items: baseline; }
+.dim-id { font-family: var(--mono); font-size: .6875rem; color: var(--ink-faint); }
+.dim-label { font-size: .875rem; }
+.dim-label .why { display: block; font-family: var(--mono); font-size: .6875rem; color: var(--ink-muted); margin-top: 2px; }
+.dim-label .ev { display: block; font-family: var(--mono); font-size: .625rem; color: var(--ink-faint); margin-top: 2px; word-break: break-word; }
+.dim-score { font-family: var(--mono); font-size: .875rem; text-align: right; }
+.dim-track { height: 2px; background: var(--rule); margin-top: var(--s1); }
+.dim-fill { height: 2px; background: var(--ink-muted); }
+.dim.is-default .dim-score, .dim.is-default .dim-label { color: var(--ink-faint); }
+
+.detail h3 {
+  font-family: var(--mono); font-size: .625rem; text-transform: uppercase;
+  letter-spacing: .09em; color: var(--ink-faint); margin: var(--s4) 0 var(--s2);
+  border-top: 1px solid var(--rule); padding-top: var(--s3);
+}
+.detail h3:first-child { margin-top: 0; border-top: 0; padding-top: 0; }
+
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: var(--s1) var(--s4); font-family: var(--mono); font-size: .75rem; margin: 0; }
+.kv dt { color: var(--ink-faint); }
+.kv dd { margin: 0; color: var(--ink); word-break: break-word; }
+
+.adjust { font-family: var(--mono); font-size: .75rem; margin: 0; padding: 0; list-style: none; }
+.adjust li { padding: 2px 0; }
+.adjust .pts { color: var(--accent); }
+.adjust .pts.plus { color: var(--ok); }
+
+/* ------------------------------------------------------------ empty, error, loading */
+
+.panel {
+  border: 1px solid var(--rule-strong); border-radius: var(--r-md);
+  background: var(--surface); padding: var(--s6); text-align: center;
+}
+.panel h2 { margin: 0 0 var(--s2); font-size: 1.25rem; }
+.panel p { margin: 0 auto var(--s4); color: var(--ink-muted); max-width: 56ch; font-size: .9375rem; }
+.panel code {
+  font-family: var(--mono); font-size: .8125rem; background: var(--surface-2);
+  padding: 2px var(--s1); border-radius: var(--r-sm);
+}
+
+.skeleton { padding: var(--s4) var(--s2); border-bottom: 1px solid var(--rule); display: grid; grid-template-columns: 72px 1fr; gap: var(--s4); }
+.sk { background: var(--rule); border-radius: var(--r-sm); animation: pulse 1.5s ease-in-out infinite; }
+.sk.num { height: 34px; }
+.sk.line { height: 12px; margin-bottom: var(--s2); }
+.sk.line.w70 { width: 70%; } .sk.line.w40 { width: 40%; } .sk.line.w90 { width: 90%; }
+@keyframes pulse { 0%, 100% { opacity: .5; } 50% { opacity: 1; } }
+
+/* ------------------------------------------------------------ footer */
+
+.foot {
+  border-top: 1px solid var(--rule-strong); margin-top: var(--s8);
+  padding: var(--s5) 0 var(--s9);
+  font-family: var(--mono); font-size: .6875rem; color: var(--ink-faint);
+  display: flex; flex-wrap: wrap; gap: var(--s4); justify-content: space-between; align-items: center;
+}
+.foot p { margin: 0; max-width: 70ch; line-height: 1.6; }
+
+/* ------------------------------------------------------------ responsive */
+
+@media (max-width: 760px) {
+  .wrap { padding: 0 var(--s4); }
+  .masthead h1 { font-size: 2rem; }
+  .row { grid-template-columns: 56px minmax(0, 1fr); gap: var(--s3); }
+  .score .num { font-size: 1.5rem; }
+  .row-actions { grid-column: 1 / -1; flex-direction: row; margin-top: var(--s2); }
+  .row-actions .btn { flex: 1; min-height: 44px; }
+  .chip { min-height: 44px; padding: var(--s2) var(--s3); }
+  .btn { min-height: 44px; }
+  input[type="search"] { min-width: 100%; }
+  .field, .group { width: 100%; }
+  .dim { grid-template-columns: 2.25rem 1fr 2rem; }
+  .section-head { flex-direction: column; gap: var(--s1); }
+  .section-head .note { text-align: left; }
+}
+
+/* The filter block is taller than a phone screen; it collapses there. */
+.more-toggle {
+  display: none;
+  font-family: var(--mono); font-size: .75rem; color: var(--ink);
+  background: var(--surface); border: 1px solid var(--rule-strong);
+  border-radius: var(--r-md); padding: var(--s2) var(--s3);
+  margin-top: var(--s3); min-height: 44px; cursor: pointer;
+  list-style: none; align-items: center;
+}
+.more-toggle::-webkit-details-marker { display: none; }
+.more-toggle::after { content: " ▾"; }
+details[open] > .more-toggle::after { content: " ▴"; }
+
+@media (max-width: 760px) {
+  .controls { position: static; }
+}
+
+/* ---------------------------------------------------------- score out of ten */
+
+.score .num { font-size: 1.75rem; }
+.score .outof { font-family: var(--mono); font-size: .6875rem; color: var(--ink-faint); }
+.row[data-rec="true"] .score .num { color: var(--accent); }
+
+/* The recommended tag is a claim, so it reads as one and it is a control. */
+.rec-tag {
+  display: inline-flex; align-items: center; gap: var(--s1);
+  font-family: var(--mono); font-size: .625rem; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--accent); background: var(--accent-soft);
+  border: 1px solid var(--accent); border-radius: var(--r-sm);
+  padding: 2px var(--s2); min-height: 24px; cursor: pointer;
+}
+.rec-tag:hover { background: var(--accent); color: var(--bg); }
+
+.tally { display: flex; align-items: center; gap: var(--s4); flex-wrap: wrap; padding: var(--s2) 0 0; }
+.rec-toggle {
+  display: inline-flex; align-items: center; gap: var(--s2);
+  font-family: var(--mono); font-size: .75rem;
+  color: var(--accent); background: transparent;
+  border: 1px solid var(--accent); border-radius: var(--r-md);
+  padding: var(--s2) var(--s3); min-height: 36px; cursor: pointer;
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+.rec-toggle:hover { background: var(--accent-soft); }
+.rec-toggle[aria-pressed="true"] { background: var(--accent); color: var(--bg); }
+.rec-star { font-size: .875rem; line-height: 1; }
+
+/* The read on how the book sits against the profile. */
+.reading {
+  margin: var(--s2) 0 0; font-size: .9375rem; color: var(--ink);
+  max-width: 68ch; line-height: 1.5;
+}
+.reading-caveat {
+  font-family: var(--mono); font-size: .6875rem; color: var(--ink-faint);
+  margin: var(--s1) 0 0; max-width: 68ch; line-height: 1.5;
+}
+
+@media (max-width: 760px) {
+  .rec-toggle { min-height: 44px; }
+  .rec-tag { min-height: 32px; }
+}
+
+/* ---------------------------------------------------------------- tags */
+
+.tags { display: flex; flex-wrap: wrap; gap: var(--s1); margin-top: var(--s3); }
+
+.tag-chip {
+  font-family: var(--mono); font-size: .625rem; letter-spacing: .04em;
+  color: var(--ink-muted); background: transparent;
+  border: 1px solid var(--rule-strong); border-radius: var(--r-sm);
+  padding: 2px var(--s2); min-height: 22px; cursor: pointer;
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+.tag-chip:hover { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.tag-chip .n { opacity: .5; margin-left: var(--s1); }
+
+/* Kind is carried by a left edge rather than a fill, so a row of tags stays quiet. */
+.tag-chip.k-subject, .tag-chip.k-period, .tag-chip.k-form { border-left-width: 3px; border-left-color: var(--ink-muted); }
+.tag-chip.k-genre { border-left-width: 3px; border-left-color: var(--accent); color: var(--accent); }
+.tag-chip.k-caveat, .tag-chip.k-rule { color: var(--warn); border-color: var(--warn); }
+.tag-chip.k-attention { color: var(--ok); border-color: var(--ok); }
+
+.tag-bar {
+  display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap;
+  border: 1px solid var(--ink); background: var(--surface-2);
+  padding: var(--s2) var(--s3); margin: var(--s4) 0 0;
+}
+.tag-bar[hidden] { display: none; }
+.tag-bar strong { font-size: 1rem; }
+.lab-sm {
+  font-family: var(--mono); font-size: .625rem; text-transform: uppercase;
+  letter-spacing: .09em; color: var(--ink-faint);
+}
+
+#tag-dir { display: grid; gap: var(--s4); margin-top: var(--s3); }
+.tag-group { display: flex; flex-direction: column; gap: var(--s1); }
+#tags-panel > .more-toggle { display: flex; }
+
+@media (max-width: 760px) { .tag-chip { min-height: 32px; } }
+
+/* --- saved books, retailer chooser --- */
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+.views { display: flex; gap: var(--s1); }
+.views .btn[aria-current="page"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.views .n { opacity: .6; margin-left: var(--s1); }
+
+/* The bookmark carries the state as a shape — outlined, then filled — and the
+   accessible name changes with it. Colour is confirmation, never the signal. */
+.icon-btn { display: inline-flex; align-items: center; gap: var(--s2); }
+.icon-btn svg { flex: none; }
+.btn.is-on.js-save { background: var(--ok); border-color: var(--ok); color: var(--bg); }
+
+.toast {
+  position: fixed; left: 50%; bottom: var(--s5); transform: translateX(-50%);
+  z-index: 20; display: flex; align-items: center; gap: var(--s3);
+  background: var(--ink); color: var(--bg);
+  font-family: var(--mono); font-size: .75rem;
+  padding: var(--s3) var(--s4); border-radius: var(--r-md);
+  box-shadow: var(--shadow-sm); max-width: min(92vw, 44ch);
+}
+.toast[hidden] { display: none; }
+.toast.is-error { background: var(--accent); }
+.toast .btn { background: transparent; color: inherit; border-color: currentColor; min-height: 28px; }
+
+/* Inline under its row, per DESIGN.md — the app opens no modals. */
+.chooser { grid-column: 1 / -1; margin-top: var(--s3); }
+.chooser[hidden] { display: none; }
+.chooser-inner { background: var(--surface); border: 1px solid var(--rule-strong); border-radius: var(--r-md); padding: var(--s3); }
+.chooser-note { font-family: var(--mono); font-size: .6875rem; color: var(--ink-faint); margin: 0 0 var(--s3); max-width: 60ch; }
+.retailers { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; background: var(--rule); }
+/* Two columns, two rows, every child placed explicitly — auto-placement puts
+   the external-link arrow ahead of the name and reads back-to-front. */
+.retailer {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas: "name ext" "blurb ext";
+  gap: 0 var(--s3); padding: var(--s3); background: var(--surface);
+  text-decoration: none; color: var(--ink); min-height: 44px; align-items: center;
+}
+.retailer:hover { background: var(--surface-2); }
+.retailer:hover .retailer-name { text-decoration: underline; text-underline-offset: 2px; }
+.retailer-name { grid-area: name; font-weight: 600; align-self: end; }
+.retailer-blurb { grid-area: blurb; font-family: var(--mono); font-size: .6875rem; color: var(--ink-muted); align-self: start; }
+.retailer-ext { grid-area: ext; color: var(--ink-faint); font-size: .875rem; }
+
+.no-find { font-family: var(--mono); font-size: .6875rem; color: var(--warn); max-width: 52ch; align-self: center; }
+
+.saved-row {
+  display: grid; grid-template-columns: 44px 1fr auto;
+  gap: var(--s4); padding: var(--s4) var(--s2);
+  border-bottom: 1px solid var(--rule);
+}
+.saved-row:hover { background: var(--surface-2); }
+.cover { display: block; width: 44px; height: auto; border: 1px solid var(--rule); border-radius: var(--r-sm); object-fit: cover; }
+.cover-none {
+  display: grid; place-items: center; width: 44px; height: 66px;
+  background: var(--surface-2); color: var(--ink-faint);
+  font-family: var(--mono); font-size: 1.25rem; border: 1px solid var(--rule); border-radius: var(--r-sm);
+}
+.saved-title { font-size: 1.125rem; line-height: 1.2; margin: 0 0 var(--s1); font-weight: 600; letter-spacing: -.01em; }
+.saved-actions { display: flex; gap: var(--s2); flex-wrap: wrap; align-items: center; margin-top: var(--s3); }
+.saved-score { text-align: right; font-family: var(--mono); }
+.saved-score .num { font-size: 1.25rem; }
+.saved-score .outof { display: block; font-size: .6875rem; color: var(--ink-faint); }
+
+#saved-section .section-head { align-items: flex-end; }
+
+@media (max-width: 760px) {
+  /* The head is a space-between row; once it wraps, that pushes the heading to
+     the right-hand edge on its own line. Stack it instead. */
+  #saved-section .section-head { flex-direction: column; align-items: stretch; gap: var(--s3); }
+}
+
+@media (max-width: 760px) {
+  .saved-row { grid-template-columns: 44px 1fr; }
+  .saved-score { grid-column: 2; text-align: left; }
+  .saved-actions .btn { min-height: 44px; }
+  .icon-btn-text { position: static; }
+  .views { width: 100%; }
+  .views .btn { flex: 1; }
+}
+
+/* --- tuning from saves --- */
+
+/* The delta beside the numeral. The arrow and the sign both carry the direction,
+   so the colour is confirmation and never the signal. */
+.tune-mark {
+  display: block; font-family: var(--mono); font-size: .625rem;
+  letter-spacing: .02em; margin-top: 2px; white-space: nowrap;
+}
+.tune-mark.up { color: var(--ok); }
+.tune-mark.down { color: var(--ink-faint); }
+
+.tune-line {
+  margin: 0 0 var(--s2); font-family: var(--mono); font-size: .6875rem;
+  color: var(--ink-muted); line-height: 1.5; max-width: 68ch;
+}
+.tune-from {
+  text-transform: uppercase; letter-spacing: .06em;
+  color: var(--ink-faint); margin-right: var(--s1);
+}
+.tune-line em { font-style: italic; color: var(--ink); }
+
+/* --- the taste screen --- */
+
+.taste-head { border-bottom: 1px solid var(--rule); padding-bottom: var(--s4); margin-bottom: var(--s5); }
+.taste-lede { margin: 0 0 var(--s3); font-size: 1.125rem; line-height: 1.5; max-width: 60ch; }
+.taste-sub { margin: 0; font-family: var(--mono); font-size: .75rem; color: var(--ink-muted); line-height: 1.6; max-width: 68ch; }
+
+.taste-h {
+  font-family: var(--mono); font-size: .6875rem; text-transform: uppercase;
+  letter-spacing: .08em; color: var(--ink-faint);
+  margin: var(--s6) 0 var(--s3); padding-top: var(--s3); border-top: 1px solid var(--rule);
+}
+.taste-h:first-of-type { margin-top: 0; }
+
+.taste-list { list-style: none; margin: 0; padding: 0; }
+/* Each row is its own hairline-separated block. Laid out with only a gap between
+   them the affinity bar sat midway between two rows and read as belonging to the
+   wrong one. */
+.taste-list li {
+  display: grid; grid-template-columns: minmax(8rem, max-content) 1fr;
+  gap: var(--s2) var(--s3); align-items: center;
+  padding: var(--s3) 0; border-bottom: 1px solid var(--rule);
+}
+.taste-list li:first-child { padding-top: 0; }
+.taste-count { font-family: var(--mono); font-size: .6875rem; color: var(--ink-faint); }
+.taste-bar { grid-column: 1 / -1; height: 2px; background: var(--rule); margin-top: calc(var(--s1) * -1); }
+.taste-fill { display: block; height: 2px; }
+.taste-fill.up { background: var(--ok); }
+.taste-fill.down { background: var(--warn); }
+.dim-fill.up { background: var(--ok); }
+.dim-fill.down { background: var(--warn); }
+
+.taste-none, .taste-note, .taste-foot {
+  font-family: var(--mono); font-size: .75rem; color: var(--ink-muted);
+  line-height: 1.6; max-width: 68ch; margin: 0 0 var(--s3);
+}
+.taste-foot { margin-top: var(--s6); padding-top: var(--s3); border-top: 1px solid var(--rule); color: var(--ink-faint); }
+.taste-note code { background: var(--surface-2); padding: 1px 4px; border-radius: var(--r-sm); }
+
+.taste-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: .75rem; }
+.taste-table th {
+  text-align: left; font-weight: 400; color: var(--ink-faint);
+  text-transform: uppercase; letter-spacing: .06em; font-size: .625rem;
+  padding: 0 var(--s3) var(--s2) 0; border-bottom: 1px solid var(--rule-strong);
+}
+.taste-table td { padding: var(--s2) var(--s3) var(--s2) 0; border-bottom: 1px solid var(--rule); }
+.taste-table td.num { text-align: right; }
+.taste-table td.up { color: var(--ok); }
+.taste-table td.down { color: var(--warn); }
+
+@media (max-width: 760px) {
+  .taste-table { display: block; overflow-x: auto; }
+  .taste-list li { grid-template-columns: 1fr; }
+}
+
+/* ---------------------------------------------------------- density pass
+
+   The row carried four stacked blocks of small type and two rows of chips before
+   this. What was cut is not gone: the risk lines, the standfirst and the
+   metadata tags moved into "Why this score", which is where every other
+   diagnostic on this app already lives. What stayed on the row is the score, the
+   book, the read, one line of caveat and the tags that describe the book. */
+
+.row-links { margin-top: var(--s4); display: flex; gap: var(--s2); flex-wrap: wrap; }
+
+/* The disclosure is closed at every width now, so its summary carries a count of
+   what is set behind it. A filter left on must never be invisible. */
+.more-toggle { display: flex; }
+.more-count { font-size: .6875rem; color: var(--ink-faint); margin-left: var(--s2); }
+.more-count:empty { display: none; }
+
+/* The control bar is search and sort. Everything else is behind the summary, so
+   the bar no longer needs to be a grid seven fields wide. */
+.controls > .wrap > .controls-grid { max-width: 52rem; }
+
+.detail .standfirst {
+  font-size: .9375rem; line-height: 1.6; max-width: 68ch; margin: 0;
+  color: var(--ink-muted);
+}
+.detail .risk:first-of-type { margin-top: 0; }
+.detail .tags { margin-top: var(--s2); }
+
+/* ---------------------------------------------------------- the minimal pass
+
+   The page was a dashboard wearing a bookshop's clothes: four sort selects, a
+   tally saying five things, a row carrying five clusters of controls and chips.
+   What it should read like is a bookseller's list. A column of entries, the
+   score set in the margin like a shelfmark, and nothing else competing with the
+   book's own name.
+
+   Three rules did the cutting. One decision gets one control. Anything that
+   diagnoses the score rather than describing the book lives in "Why this score".
+   Nothing is boxed unless clicking it does something. */
+
+/* The bar holds a search and an order, so it no longer needs to be a grid. When
+   the filter panel opens it stops being sticky: at 441px against a 720px
+   viewport it pinned itself over the feed and the summary scrolled out of reach,
+   which is what left no way to close it. */
+.controls > .wrap > .controls-grid {
+  display: flex; flex-wrap: wrap; gap: var(--s4); max-width: none; align-items: end;
+}
+.controls > .wrap > .controls-grid .field { flex: 0 1 22rem; min-width: 12rem; }
+.controls > .wrap > .controls-grid .field:nth-child(2) { flex: 0 0 14rem; }
+.controls.is-open { position: static; }
+.controls.is-open #more { max-height: none; }
+
+.more-done { margin-top: var(--s4); padding-top: var(--s3); border-top: 1px solid var(--rule); }
+.btn-done { min-width: 8rem; justify-content: center; }
+
+/* Two facts. The count, and the one filter worth a control of its own. */
+.tally {
+  justify-content: space-between;
+  padding: 0 0 var(--s2);
+  border-bottom: 1px solid var(--rule-strong);
+  margin-bottom: var(--s2);
+}
+.tally .status { padding: 0; }
+
+/* The section heading repeated the masthead, so it is read out to screen readers
+   and drawn for nobody. */
+.section > .note { font-family: var(--mono); font-size: .6875rem; color: var(--ink-faint); margin: var(--s2) 0 0; }
+
+/* Recommended sits with the score, because it is a fact about the score. A star
+   in the margin, not a bordered tag in the middle of the reading column. */
+.rec-mark {
+  display: block; width: 100%; text-align: right; margin-top: var(--s2);
+  background: none; border: 0; padding: 0; cursor: pointer;
+  font-size: .8125rem; line-height: 1; color: var(--accent);
+}
+.rec-mark:hover { color: var(--ink); }
+.rec-mark:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--r-sm); }
+
+/* The controls under a row are secondary to the row. They stay reachable by
+   keyboard and readable at rest, and they stop drawing a box each. */
+.row-links .btn {
+  border-color: transparent; background: none; padding-left: 0; padding-right: var(--s3);
+  color: var(--ink-muted);
+}
+.row-links .btn:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+.row-links .btn:focus-visible { border-color: var(--accent); padding-left: var(--s3); }
+
+.row { padding: var(--s6) var(--s2); }
+.reading { max-width: 62ch; }
+
+/* ---------------------------------------------------------- your ordering
+
+   Seven dimensions, forty-six bands, four rules and five penalties. Everything
+   the density pass learned applies twice as hard here: one details per
+   dimension, closed, with the weight and the band scores inside it. The screen
+   opens showing seven closed rows and two short lists of switches. */
+
+.ov-lede { max-width: 68ch; margin: 0 0 var(--s3); }
+.ov-sub { max-width: 68ch; margin: 0 0 var(--s5); color: var(--ink-muted); font-size: .9375rem; }
+.ov-help { font-family: var(--mono); font-size: .6875rem; color: var(--ink-faint); max-width: 72ch; margin: 0 0 var(--s3); line-height: 1.5; }
+
+.ov-h {
+  font-family: var(--mono); font-size: .6875rem; text-transform: uppercase;
+  letter-spacing: .09em; color: var(--ink-faint); font-weight: 400;
+  border-bottom: 1px solid var(--rule); padding-bottom: var(--s2);
+  margin: var(--s7) 0 var(--s3);
+}
+
+.ov-status {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--s4);
+  flex-wrap: wrap; padding: var(--s3) 0; border-top: 1px solid var(--rule-strong);
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+.ov-dim { border-bottom: 1px solid var(--rule); }
+.ov-dim > .more-toggle {
+  border: 0; background: none; border-radius: 0; margin: 0;
+  padding: var(--s3) 0; width: 100%; justify-content: space-between;
+  font-family: var(--serif); font-size: 1rem;
+}
+.ov-dim > .more-toggle:hover { color: var(--accent); }
+.ov-dim-body { padding: 0 0 var(--s4); }
+
+/* A band is a label, a number and what the number used to be. Three columns, so
+   a column of numbers reads down and the "was" never shifts the input. */
+.ov-band {
+  display: grid; grid-template-columns: minmax(0, 1fr) 4.5rem 6rem;
+  gap: var(--s3); align-items: center;
+  padding: var(--s2) 0; border-top: 1px solid var(--rule);
+}
+.ov-weight { border-top: 0; padding-top: 0; }
+.ov-band-label { font-size: .9375rem; }
+.ov-note { font-family: var(--mono); font-size: .625rem; color: var(--ink-faint); margin-left: var(--s2); }
+.ov-was { font-family: var(--mono); font-size: .6875rem; color: var(--accent); }
+.ov-num {
+  font-family: var(--mono); font-size: .8125rem; text-align: right;
+  padding: var(--s2); min-height: 36px;
+  border: 1px solid var(--rule-strong); border-radius: var(--r-md);
+  background: var(--surface); color: var(--ink);
+}
+.ov-num:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.ov-rules { flex-direction: column; align-items: flex-start; gap: var(--s3); }
+.ov-switch { align-items: flex-start; line-height: 1.5; max-width: 76ch; }
+.ov-switch span { font-family: var(--serif); font-size: .9375rem; color: var(--ink); }
+
+/* An ordering in force is never invisible: the nav carries a mark. */
+.nav-mark { color: var(--accent); margin-left: 2px; }
+
+@media (max-width: 760px) {
+  .ov-band { grid-template-columns: minmax(0, 1fr) 5rem; }
+  .ov-was { grid-column: 1 / -1; text-align: right; }
+  /* DESIGN.md asks for 44px targets at phone width, and a number input is one. */
+  .ov-num { min-height: 44px; }
+}
+
+/* ---------------------------------------------------------- the row opens
+
+   The title was set as a heading and read as a link, so hovering it did nothing
+   and clicking it did less. It is a button now, and so is the description in
+   everything but the markup: same panel, same state, three ways in.
+
+   The title keeps its own type. A button reset is all that changes, because the
+   thing that made it feel clickable was always the typography. */
+
+.title button.js-open {
+  font: inherit; color: inherit; letter-spacing: inherit;
+  background: none; border: 0; padding: 0; margin: 0;
+  text-align: left; cursor: pointer; display: inline;
+}
+.title button.js-open:hover { text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
+.title button.js-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: var(--r-sm); }
+.row.is-open .title button.js-open { text-decoration: underline; text-underline-offset: 3px; }
+
+.js-open-soft { cursor: pointer; }
+
+/* "read on" earns its place only where the sentence was cut. It is the one thing
+   on the row telling you there is more behind the click. */
+.reading-more {
+  font-family: var(--mono); font-size: .625rem; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--accent); white-space: nowrap;
+}
+.js-open-soft:hover .reading-more { text-decoration: underline; text-underline-offset: 3px; }
+
+/* Inside the panel, the publication's own line is the first thing, and each one
+   is credited: three reviews of one book is three sentences, not one merged. */
+.detail .reading + .reading { margin-top: var(--s3); }
+.reading-src {
+  font-family: var(--mono); font-size: .625rem; letter-spacing: .06em;
+  color: var(--ink-faint); margin-left: var(--s2); white-space: nowrap;
+}
+.detail-actions {
+  display: flex; flex-wrap: wrap; gap: var(--s2);
+  margin: var(--s4) 0 var(--s5);
+  padding-bottom: var(--s4); border-bottom: 1px solid var(--rule);
+}
+
+/* ---------------------------------------------------------- the wordmark
+
+   Ruskin. He spent forty years telling England what was good and why, in prose
+   about buildings, painting, gilding and the binding of books, which is the
+   world this app is dressed in and roughly the job it does.
+
+   The mark is a stamped board: oxblood, a cream R, a gilt rule along the foot
+   echoing the hairline under the masthead. It is drawn in paths rather than set
+   in type, so the favicon does not depend on a font that a browser tab will
+   never load, and the same file serves the tab at 16px and the masthead at 30. */
+
+.brand { display: flex; align-items: center; gap: var(--s3); }
+.mark { display: block; flex: 0 0 auto; line-height: 0; }
+.mark svg { width: 30px; height: 30px; display: block; border-radius: 2px; }
+
+.masthead .sub {
+  /* One line, so it sits under the wordmark rather than stacking beside it. */
+  max-width: 56ch;
+  margin: var(--s1) 0 0;
+}
+
+@media (max-width: 760px) {
+  .mark svg { width: 24px; height: 24px; }
+}
+
+/* At phone width the masthead's right-hand group was a flex row holding the
+   build line, four section buttons and the theme toggle, so the build line got
+   squeezed into a seven-line column and the last button ran off the edge. The
+   group stacks instead: the line above, the buttons wrapping under it. */
+@media (max-width: 760px) {
+  .masthead-row { flex-direction: column; align-items: stretch; gap: var(--s3); }
+  .masthead-row > div:last-child { flex-direction: column !important; align-items: stretch !important; }
+  .masthead .built { order: -1; }
+  .views { display: flex; flex-wrap: wrap; gap: var(--s2); }
+  .views .btn { flex: 1 1 auto; }
+}
