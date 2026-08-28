@@ -1095,19 +1095,37 @@ import { CHIPS, buildProfile } from './lib/onboard.mjs';
     const tuning = state.tune && taste?.ready
       ? ` · tuned by ${taste.savedCount} saves`
       : state.tune && taste ? ` · ${MIN_SIGNAL - taste.savedCount} more saves until tuning starts` : '';
-    // What is on the screen, out of what there is, ordered how, and what is being
-    // held back and why. A filter that is on by default has to account for
-    // itself: "236 books" reads as the whole archive when 208 more are hidden.
+    // "236 books, newest reviews" answered none of the questions a reader has on
+    // arriving: 236 out of what, reviewed when, by whom, and does the number
+    // move. The standing facts moved into the menu when the masthead got
+    // crowded, which left the feed with no orientation at all. They belong here,
+    // above the first row, where they are the answer rather than decoration.
     const total = all.length;
-    const bits = [
-      shown.length === total ? `${total} books` : `${shown.length} of ${total} books`,
-      ORDERS[state.order]?.label || 'newest reviews',
-    ];
+    const dates = all.flatMap((e) => e.mentions.map((m) => m.reviewDate)).filter(Boolean).sort();
+    const month = (iso) => new Date(iso).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+    const pubs = new Set(all.flatMap((e) => e.mentions.map((m) => m.source.short))).size;
+
+    const bits = [shown.length === total ? `${total} books` : `${shown.length} of ${total} books`];
+    if (pubs) bits.push(`from ${pubs} publications`);
+    if (dates.length) bits.push(`reviewed since ${month(dates[0])}`);
+    bits.push(`${ORDERS[state.order]?.label || 'newest reviews'} first`);
     if (state.q) bits.push(`matching “${state.q}”`);
     if (state.recommendedOnly) bits.push('recommended only');
     if (overridesDirty()) bits.push('your ordering');
     $('status').textContent = bits.join(' · ');
-    $('feed-note').textContent = state.group ? 'Grouped by subject engine — the format with the best acquisition rate in the profile.' : '';
+
+    // How fresh it is, and that it grows, which is the other half of "236 of
+    // what". Kept apart from the count so the count stays scannable.
+    const note = $('feed-note');
+    if (note) {
+      const built = FEED.builtAt ? relative(FEED.builtAt) : null;
+      const standing = `Every book the literary press reviewed, published in the last ${FEED.windowYears} years, that the catalogue can confirm is a book. Rebuilt every morning${built ? `, last ${built}` : ''}.`;
+      // The grouping note used to overwrite this line rather than join it, so
+      // the orientation vanished the moment anyone grouped the feed.
+      note.textContent = state.group
+        ? `Grouped by subject engine, the format the profile records as having the best acquisition rate. ${standing}`
+        : standing;
+    }
 
     updateChipCounts(all);
     bindRows();

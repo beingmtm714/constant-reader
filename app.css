@@ -967,7 +967,7 @@ details[open] > .more-toggle::after { content: " ▴"; }
 .topbar.is-compact .masthead { padding: var(--s2) 0 0; }
 .topbar.is-compact .masthead h1 { font-size: 1.25rem; }
 .topbar.is-compact .controls { padding-bottom: var(--s1); }
-.topbar.is-compact .btn.tool { min-height: 34px; min-width: 34px; }
+.topbar.is-compact .btn.tool { padding: 0 var(--s1); }
 
 .tally { border-bottom: 0; padding: 0 0 var(--s2); margin-bottom: 0; }
 
@@ -1011,7 +1011,7 @@ body { overflow-x: clip; }
   /* The title gives up size first, because four icons and a menu cannot. */
   .topbar.is-compact .masthead h1 { font-size: 1rem; }
   .topbar.is-compact .toolrow { gap: 2px; }
-  .topbar.is-compact .btn.tool { min-width: 34px; padding: 0 var(--s1); }
+  .topbar.is-compact .btn.tool { padding: 0 2px; }
   .dock { right: var(--s3); bottom: var(--s3); }
 }
 
@@ -1164,8 +1164,12 @@ body { overflow-x: clip; }
      tracking gives way before the name does: truncating a masthead to
      "CONSTANT RE..." is worse than setting it tight. The drawn mark is wider
      than the diagram it replaced, so it gives a little here too. */
-  .masthead h1 { font-size: .6875rem; letter-spacing: .045em; }
-  .wordmark button.js-home { gap: .32em; }
+  /* Measured at 375px: the name needs 122px and has 109. The 13 comes back off
+     the gap between four 44px targets, which can afford it, and off the tracking,
+     which is the thing that yields before the name does. */
+  .masthead h1 { font-size: .6875rem; letter-spacing: .02em; }
+  .wordmark button.js-home { gap: .3em; }
+  .toolrow { gap: 4px; }
   .mark { width: 1.45em; height: 1.45em; }
   .topbar.is-compact .masthead h1 { font-size: .625rem; letter-spacing: .03em; }
 }
@@ -1213,8 +1217,12 @@ details:not([open]) > *:not(summary) { display: none; }
   font: inherit; color: inherit; letter-spacing: inherit; text-transform: inherit;
   background: none; border: 0; padding: 0; margin: 0;
   display: flex; align-items: center; gap: .55em;
-  cursor: pointer; min-width: 0; text-align: left;
+  cursor: pointer; min-width: 0; max-width: 100%; text-align: left;
 }
+/* The button is the flex parent now, so the rule that let the name shrink has to
+   sit on it rather than on the h1 it used to be. Without this the text keeps its
+   full width and truncates instead of the tracking giving way. */
+.wordmark button.js-home .wordmark-text { min-width: 0; }
 .wordmark button.js-home:hover .wordmark-text { color: var(--accent); }
 .wordmark button.js-home:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
@@ -1231,3 +1239,13 @@ details:not([open]) > *:not(summary) { display: none; }
    which is the wrong half to align when the word is the same every time. */
 .ov-dim > .more-toggle .more-count { margin-left: 0; text-align: left; font-variant-numeric: tabular-nums; }
 .ov-dim > .more-toggle::after { justify-self: end; }
+
+/* The count scans; the standing facts sit under it in the quieter tier. Two
+   lines above the first row is the whole orientation budget. */
+.tally { flex-direction: column; align-items: flex-start; gap: var(--s2); }
+.tally .status { font-size: .8125rem; color: var(--ink-muted); }
+.section > .note { margin: 0 0 var(--s4); max-width: 78ch; }
+
+@media (min-width: 761px) {
+  .tally { flex-direction: row; align-items: baseline; justify-content: space-between; }
+}
