@@ -1136,26 +1136,34 @@ body { overflow-x: clip; }
 }
 .wordmark-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* Sized in em so it tracks the heading rather than being set against it. */
-.mark { display: block; flex: 0 0 auto; line-height: 0; }
-.mark svg { width: 1.6em; height: 1.6em; display: block; }
+/* The mark is the drawn illustration, recoloured from the tokens: circle in
+   brass, book in ink, the ruled page lines carrying the red note, the table
+   grain a faint brass. Sized in em so it tracks the heading.
 
-/* Three tokens, each doing the job it does everywhere else. The circle is a
-   rule, and rules are brass. The book is ink. The ruffled page edges take the
-   single red note, which is the only ornament the system allows itself. */
-.m-rule { stroke: var(--brass); }
-.m-ink { stroke: var(--ink); }
-.m-edge { stroke: var(--accent); }
+   It is a raster because it is a drawing rather than a diagram, served at 128px
+   for a mark shown at about 30, so it stays sharp at 3x. The favicon is still
+   the simplified SVG: at 16px this illustration is a grey blob, and a tab icon
+   that cannot be told apart from any other tab icon is not doing its job. */
+.mark {
+  display: block; flex: 0 0 auto;
+  width: 1.7em; height: 1.7em;
+  background: url('icons/mark-light.png') center / contain no-repeat;
+}
+:root[data-theme="dark"] .mark { background-image: url('icons/mark-dark.png'); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .mark { background-image: url('icons/mark-dark.png'); }
+}
 
 .topbar.is-compact .masthead h1 { font-size: .9375rem; letter-spacing: .14em; border-top-width: 2px; }
 
 @media (max-width: 760px) {
   /* Fifteen letterspaced caps, a mark and four touch targets on 375px. The
      tracking gives way before the name does: truncating a masthead to
-     "CONSTANT RE..." is worse than setting it tight. */
-  .masthead h1 { font-size: .6875rem; letter-spacing: .07em; gap: .4em; }
-  .mark svg { width: 1.5em; height: 1.5em; }
-  .topbar.is-compact .masthead h1 { font-size: .625rem; letter-spacing: .05em; }
+     "CONSTANT RE..." is worse than setting it tight. The drawn mark is wider
+     than the diagram it replaced, so it gives a little here too. */
+  .masthead h1 { font-size: .6875rem; letter-spacing: .045em; gap: .32em; }
+  .mark { width: 1.45em; height: 1.45em; }
+  .topbar.is-compact .masthead h1 { font-size: .625rem; letter-spacing: .03em; }
 }
 
 @media (max-width: 359px) {
