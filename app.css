@@ -1088,3 +1088,30 @@ body { overflow-x: clip; }
   margin: var(--s3) 0 0; line-height: 1.5;
 }
 .menu-panel .sub { margin-top: var(--s1); }
+
+/* ---------------------------------------------------------- the same, wider
+
+   The phone layout carried straight over to the desktop and two of its
+   compromises came with it. The icons took a whole row of their own, 1032px of
+   it for 157px of buttons, because on a phone there is no room beside the name.
+   And the panels filled that row, which made the search box a metre wide.
+
+   There is room beside the name here, so the icons sit on the title line at
+   every scroll position and the bar never has a second row to collapse. The
+   panels take the width they need and sit under the icons that opened them. */
+@media (min-width: 761px) {
+  .masthead-row { flex-wrap: nowrap; }
+  .masthead-row .toolrow { order: 2; flex: 0 0 auto; margin-left: auto; }
+
+  /* Nothing left to collapse, so scrolling only trims the padding. */
+  .topbar.is-compact .masthead { padding: var(--s2) 0; }
+  .topbar.is-compact .masthead h1 { font-size: 1.375rem; }
+
+  /* A search box is as wide as a title and an author, not as wide as the page.
+     Right-aligned because that is where the icon that opened it is. */
+  /* .field is a column, so the horizontal edge is the cross axis: align-items,
+     not justify-content. */
+  .controls .wrap > .toolpanel { display: flex; align-items: flex-end; }
+  .controls .wrap > .toolpanel input[type="search"] { width: 26rem; }
+  .controls .wrap > .toolpanel select { width: 16rem; }
+}
