@@ -59,6 +59,9 @@ import { CHIPS, buildProfile } from './lib/onboard.mjs';
     sort1: 'reviewDate', dir1: 'desc', sort2: 'bookDate', dir2: 'desc',
     minPages: null, minScore: null, sources: new Set(), tag: null,
     window: true, nonfiction: false, identity: false, penalised: false,
+    // On by default. A title with nothing behind it is not an established book,
+    // and the feed's whole claim is that it lists books.
+    corroborated: true,
     recommendedOnly: false, group: false, unseen: false,
     view: 'feed', savedSort: 'recent', tune: true,
   };
@@ -288,6 +291,7 @@ import { CHIPS, buildProfile } from './lib/onboard.mjs';
     if (!e.book.title) return false;
     if (state.penalised && !e.score.filters.length) return false;
     if (state.recommendedOnly && !recommendedNow(e, scoreOf(e))) return false;
+    if (state.corroborated && e.book.corroborated === false) return false;
     if (state.identity && !identified(e)) return false;
     if (state.nonfiction && e.fiction === 'nonfiction') return false;
     if (state.window && e.inWindow === false) return false;
@@ -1028,6 +1032,7 @@ import { CHIPS, buildProfile } from './lib/onboard.mjs';
     if (state.minPages != null) n++;
     if (!state.window) n++;
     if (!state.tune) n++;
+    if (state.corroborated === false) n++;
     for (const k of ['nonfiction', 'identity', 'penalised', 'group', 'unseen']) if (state[k]) n++;
     return n;
   }
@@ -1095,11 +1100,20 @@ import { CHIPS, buildProfile } from './lib/onboard.mjs';
     const tuning = state.tune && taste?.ready
       ? ` · tuned by ${taste.savedCount} saves`
       : state.tune && taste ? ` · ${MIN_SIGNAL - taste.savedCount} more saves until tuning starts` : '';
-    // A reader who has re-scored a band is looking at a feed ranked by something
-    // the profile did not decide. The status line says so rather than leaving the
-    // order unexplained.
-    $('status').textContent = `${shown.length} ${shown.length === 1 ? 'book' : 'books'}, ${ORDERS[state.order]?.label || 'newest reviews'}`
-      + (overridesDirty() ? ' · your ordering' : '');
+    // What is on the screen, out of what there is, ordered how, and what is being
+    // held back and why. A filter that is on by default has to account for
+    // itself: "236 books" reads as the whole archive when 208 more are hidden.
+    const total = all.length;
+    const hiddenUnconfirmed = state.corroborated ? all.filter((e) => e.book.corroborated === false).length : 0;
+    const bits = [
+      shown.length === total ? `${total} books` : `${shown.length} of ${total} books`,
+      ORDERS[state.order]?.label || 'newest reviews',
+    ];
+    if (hiddenUnconfirmed) bits.push(`${hiddenUnconfirmed} unconfirmed, hidden`);
+    if (state.q) bits.push(`matching “${state.q}”`);
+    if (state.recommendedOnly) bits.push('recommended only');
+    if (overridesDirty()) bits.push('your ordering');
+    $('status').textContent = bits.join(' · ');
     $('feed-note').textContent = state.group ? 'Grouped by subject engine — the format with the best acquisition rate in the profile.' : '';
 
     updateChipCounts(all);
@@ -1229,11 +1243,13 @@ import { CHIPS, buildProfile } from './lib/onboard.mjs';
     Object.assign(state, {
       q: '', minPages: null, minScore: null, sources: new Set(), tag: null,
       window: true, nonfiction: false, identity: false, penalised: false,
+      corroborated: true,
       recommendedOnly: false, group: false, unseen: false,
     });
     // Tuning is not a filter and resetting the filters does not switch it off.
     $('q').value = ''; $('minPages').value = ''; $('minScore').value = '';
     $('fWindow').checked = true; $('fNonfiction').checked = false; $('fIdentity').checked = false;
+    $('fCorroborated').checked = true;
     $('fPenalised').checked = false; $('fGroup').checked = false; $('fUnseen').checked = false;
     for (const c of document.querySelectorAll('.chip')) c.setAttribute('aria-pressed', 'false');
     savePrefs(); render();
@@ -1262,6 +1278,7 @@ import { CHIPS, buildProfile } from './lib/onboard.mjs';
     $('order').value = state.order;
     $('minPages').value = state.minPages || ''; $('minScore').value = state.minScore || '';
     $('fWindow').checked = state.window; $('fNonfiction').checked = state.nonfiction;
+    $('fCorroborated').checked = state.corroborated !== false;
     $('fIdentity').checked = state.identity; $('fPenalised').checked = state.penalised;
     $('fGroup').checked = state.group; $('fUnseen').checked = state.unseen;
     $('fTune').checked = state.tune !== false;
@@ -1508,7 +1525,7 @@ import { CHIPS, buildProfile } from './lib/onboard.mjs';
     $('minPages').addEventListener('change', (e) => { state.minPages = Number(e.target.value) || null; rerender(); });
     $('minScore').addEventListener('change', (e) => { state.minScore = Number(e.target.value) || null; rerender(); });
     $('recToggle').addEventListener('click', () => { state.recommendedOnly = !state.recommendedOnly; rerender(); });
-    for (const [id, key] of [['fWindow', 'window'], ['fNonfiction', 'nonfiction'], ['fIdentity', 'identity'], ['fPenalised', 'penalised'], ['fGroup', 'group'], ['fUnseen', 'unseen']]) {
+    for (const [id, key] of [['fWindow', 'window'], ['fNonfiction', 'nonfiction'], ['fCorroborated', 'corroborated'], ['fIdentity', 'identity'], ['fPenalised', 'penalised'], ['fGroup', 'group'], ['fUnseen', 'unseen']]) {
       $(id).addEventListener('change', (e) => { state[key] = e.target.checked; rerender(); });
     }
     $('reset').addEventListener('click', resetFilters);
