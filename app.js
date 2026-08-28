@@ -965,9 +965,12 @@ import { rescore, summarize, isEmpty, bandKey, EMPTY as EMPTY_OVERRIDES } from '
   function render() {
     closeChooser();
     $('savedCount').textContent = saved.savedCount(verdicts);
-    const hidden = hiddenFilterCount();
     const mc = $('more-count');
-    if (mc) mc.textContent = hidden ? `${hidden} set` : '';
+    if (mc) { const n = hiddenFilterCount(); mc.textContent = n ? `${n} set` : ''; }
+    // The icons carry whether a control is holding something, so they have to be
+    // refreshed on every render rather than only when one is clicked: clearing a
+    // tag from the feed changes the filter count without touching the toolbar.
+    if (typeof syncTools === 'function') syncTools();
     if (state.view === 'saved') { renderSaved(); return; }
     if (state.view === 'taste') { renderTaste(); return; }
     if (state.view === 'profile') { renderProfile(); return; }
@@ -1263,38 +1266,89 @@ import { rescore, summarize, isEmpty, bandKey, EMPTY as EMPTY_OVERRIDES } from '
     apply();
   }
 
-  // The search field puts itself away in the collapsed bar and comes back on a
-  // click. Three ways out, matching the filter panel: the icon again, Escape, and
-  // leaving an empty field. A field with something in it never closes, because a
-  // query still filtering the feed with its box hidden is state you cannot see.
-  function bindSearchToggle() {
-    const bar = document.getElementById('topbar');
-    const btn = document.getElementById('search-toggle');
-    const input = $('q');
-    if (!bar || !btn) return;
+  // The three panels under the toolbar are one at a time. Opening the order
+  // closes the search, because two of them stacked is the vertical space this
+  // layout exists to save, and because only one of them is ever being used.
+  //
+  // A panel holding a value never closes on its own. A query still filtering the
+  // feed, or an order that is not the default, with its control put away is
+  // state the reader cannot see, which is the failure the filter count exists to
+  // avoid. Those keep a dot on their icon instead.
+  const PANELS = [
+    { btn: 'search-toggle', panel: 'panel-search', held: () => Boolean(state.q) },
+    { btn: 'order-toggle', panel: 'panel-order', held: () => state.order !== 'latest' },
+    { btn: 'filters-toggle', panel: 'more', held: () => hiddenFilterCount() > 0 },
+  ];
 
-    const sync = () => {
-      const on = bar.classList.contains('is-searching');
-      btn.setAttribute('aria-expanded', String(on));
-      $('search-toggle-n').hidden = !input.value;
-    };
-    const open = () => { bar.classList.add('is-searching'); sync(); input.focus(); input.select(); };
-    const close = () => { if (input.value) return; bar.classList.remove('is-searching'); sync(); };
+  function syncTools() {
+    for (const { btn, panel, held } of PANELS) {
+      const b = $(btn);
+      const p = $(panel);
+      if (!b || !p) continue;
+      const open = panel === 'more' ? p.open : !p.hidden;
+      b.setAttribute('aria-expanded', String(open));
+      const dot = b.querySelector('.tool-dot');
+      if (dot) dot.hidden = !held();
+    }
+  }
 
-    btn.addEventListener('click', () => (bar.classList.contains('is-searching') ? close() : open()));
-    input.addEventListener('blur', close);
-    input.addEventListener('keydown', (ev) => {
+  function openPanel(which) {
+    for (const { btn, panel } of PANELS) {
+      const p = $(panel);
+      if (!p) continue;
+      const on = panel === which;
+      if (panel === 'more') p.open = on; else p.hidden = !on;
+      if (on) document.querySelector('.controls')?.classList.add('has-panel');
+    }
+    if (!which) document.querySelector('.controls')?.classList.remove('has-panel');
+    syncTools();
+  }
+
+  function bindTools() {
+    for (const { btn, panel } of PANELS) {
+      const b = $(btn);
+      if (!b) continue;
+      b.addEventListener('click', () => {
+        const p = $(panel);
+        const open = panel === 'more' ? p.open : !p.hidden;
+        openPanel(open ? null : panel);
+        if (!open) p.querySelector('input, select, button')?.focus();
+      });
+    }
+
+    // Escape closes whatever is open and puts focus back on the icon that opened
+    // it, rather than leaving it inside a panel that is no longer there.
+    document.addEventListener('keydown', (ev) => {
       if (ev.key !== 'Escape') return;
-      if (input.value) { input.value = ''; input.dispatchEvent(new Event('input')); }
-      bar.classList.remove('is-searching');
-      sync();
-      btn.focus();
+      const open = PANELS.find(({ panel }) => {
+        const p = $(panel);
+        return p && (panel === 'more' ? p.open : !p.hidden);
+      });
+      if (!open) return;
+      openPanel(null);
+      $(open.btn).focus();
     });
-    // A query typed before the bar collapsed, or restored from a saved
-    // preference, has to arrive with the field already open.
-    input.addEventListener('input', () => { if (input.value) bar.classList.add('is-searching'); sync(); });
-    if (input.value) bar.classList.add('is-searching');
-    sync();
+
+    $('filters-done')?.addEventListener('click', () => { openPanel(null); $('filters-toggle').focus(); });
+    syncTools();
+  }
+
+  // Sections, the theme and the build line: read once, then never again. Behind
+  // the menu they cost one row instead of three.
+  function bindMenu() {
+    const btn = $('menu-toggle');
+    const panel = $('menu-panel');
+    if (!btn || !panel) return;
+    const set = (open) => {
+      panel.hidden = !open;
+      btn.setAttribute('aria-expanded', String(open));
+    };
+    btn.addEventListener('click', () => set(panel.hidden));
+    panel.addEventListener('click', (ev) => { if (ev.target.closest('.btn')) set(false); });
+    document.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Escape' && !panel.hidden) { set(false); btn.focus(); }
+    });
+    set(false);
   }
 
   function bindDisclosure() {
@@ -1306,13 +1360,9 @@ import { rescore, summarize, isEmpty, bandKey, EMPTY as EMPTY_OVERRIDES } from '
     // out now: the summary itself, a Done button at the foot of the panel, and
     // Esc. The bar also stops being sticky while the panel is open, so the page
     // behind it is not pinned under a control surface.
-    const close = () => { more.open = false; more.querySelector('summary')?.focus(); };
-    document.getElementById('filters-done')?.addEventListener('click', close);
-    document.addEventListener('keydown', (ev) => {
-      if (ev.key === 'Escape' && more.open) { close(); ev.stopPropagation(); }
-    });
     more.addEventListener('toggle', () => {
       document.querySelector('.controls')?.classList.toggle('is-open', more.open);
+      syncTools();
     });
   }
 
@@ -1468,7 +1518,8 @@ import { rescore, summarize, isEmpty, bandKey, EMPTY as EMPTY_OVERRIDES } from '
     bindControls();
     bindDisclosure();
     bindTopbar();
-    bindSearchToggle();
+    bindTools();
+    bindMenu();
     setView(['saved', 'taste', 'profile'].includes(state.view) ? state.view : 'feed');
   }
 

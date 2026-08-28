@@ -31,52 +31,53 @@
 <div class="topbar" id="topbar">
 <header class="masthead">
   <div class="wrap masthead-row">
-    <div class="brand">
-      <div>
-        <h1 class="wordmark"><span class="sr-only">Ruskin</span><span aria-hidden="true"><svg class="wordmark-r" viewBox="0 0 16 16" aria-hidden="true"><rect width="16" height="16" rx="1.6" fill="#7a2b24"/><g fill="#f2ede4"><path d="M3.5 3.1h1.9v9.8H3.5z"/><path d="M5.4 3.1h3.9a2.75 2.75 0 0 1 0 5.5H5.4V6.9h3.7a1.15 1.15 0 0 0 0-2.3H5.4z"/><path d="M7.5 8.6h2.2l2.7 4.3h-2.3z"/></g><rect x="3.5" y="13.6" width="8.9" height="0.75" fill="#c9a24a"/></svg>uskin</span></h1>
-        <p class="sub" id="masthead-sub">Everything the literary press reviewed, scored out of ten.</p>
-      </div>
-    </div>
-    <div class="masthead-tools">
-      <span class="built" id="built"></span>
-      <nav class="views" aria-label="Sections">
-        <button class="btn" id="view-feed" aria-current="page">Feed</button>
-        <button class="btn" id="view-saved">Saved books <span class="n" id="savedCount">0</span></button>
-        <button class="btn" id="view-taste">Taste</button>
-        <button class="btn" id="view-profile">Profile <span class="nav-mark" id="profile-mark" hidden aria-hidden="true">•</span></button>
-      </nav>
-      <button class="btn" id="theme" aria-label="Switch between light and dark">Theme</button>
-    </div>
+    <h1 class="wordmark"><span class="sr-only">Ruskin</span><span aria-hidden="true"><svg class="wordmark-r" viewBox="0 0 16 16" aria-hidden="true"><rect width="16" height="16" rx="1.6" fill="#7a2b24"/><g fill="#f2ede4"><path d="M3.5 3.1h1.9v9.8H3.5z"/><path d="M5.4 3.1h3.9a2.75 2.75 0 0 1 0 5.5H5.4V6.9h3.7a1.15 1.15 0 0 0 0-2.3H5.4z"/><path d="M7.5 8.6h2.2l2.7 4.3h-2.3z"/></g><rect x="3.5" y="13.6" width="8.9" height="0.75" fill="#c9a24a"/></svg>uskin</span></h1>
+    <button class="btn tool" id="menu-toggle" aria-label="Menu" aria-expanded="false" aria-controls="menu-panel"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 4h12M2 8h12M2 12h12" stroke-linecap="round"/></svg><span class="tool-dot" hidden aria-hidden="true"></span></button>
   </div>
 </header>
 
+<div class="menu-panel" id="menu-panel" hidden>
+  <div class="wrap">
+    <nav class="views" aria-label="Sections">
+      <button class="btn" id="view-feed" aria-current="page">Feed</button>
+      <button class="btn" id="view-saved">Saved books <span class="n" id="savedCount">0</span></button>
+      <button class="btn" id="view-taste">Taste</button>
+      <button class="btn" id="view-profile">Profile <span class="nav-mark" id="profile-mark" hidden aria-hidden="true">•</span></button>
+      <button class="btn" id="theme" aria-label="Switch between light and dark">Theme</button>
+    </nav>
+    <p class="built" id="built"></p>
+    <p class="sub" id="masthead-sub"></p>
+  </div>
+</div>
+
 <nav class="controls" aria-label="Sorting and filtering">
   <div class="wrap">
-    <button class="btn search-toggle" id="search-toggle" aria-label="Search" aria-expanded="false" aria-controls="q">
-      <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6">
-        <circle cx="7" cy="7" r="4.4"/><path d="M10.4 10.4 14 14" stroke-linecap="round"/>
-      </svg>
-      <span class="search-toggle-n" id="search-toggle-n" hidden aria-hidden="true">1</span>
-    </button>
-    <div class="controls-grid">
-      <div class="field field-search">
-        <label for="q">Search</label>
-        <input type="search" id="q" placeholder="title, author, publisher, critic" autocomplete="off">
-      </div>
-      <div class="field">
-        <label for="order">Order</label>
-        <select id="order">
-          <option value="latest">Newest reviews</option>
-          <option value="fit">Best fit for me</option>
-          <option value="published">Newest books</option>
-          <option value="reviewed">Most reviewed</option>
-          <option value="title">Title A–Z</option>
-        </select>
-      </div>
+    <div class="toolrow">
+      <button class="btn tool" id="search-toggle" aria-label="Search" aria-expanded="false" aria-controls="panel-search"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="4.4"/><path d="M10.4 10.4 14 14" stroke-linecap="round"/></svg><span class="tool-dot" hidden aria-hidden="true"></span></button>
+      <button class="btn tool" id="order-toggle" aria-label="Order" aria-expanded="false" aria-controls="panel-order"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 4.5h9M2 8h6M2 11.5h3" stroke-linecap="round"/><path d="M12.5 5.5v7M10.5 10.5l2 2 2-2" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="tool-dot" hidden aria-hidden="true"></span></button>
+      <button class="btn tool" id="filters-toggle" aria-label="Filters" aria-expanded="false" aria-controls="more"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 4h12M4.5 8h7M6.5 12h3" stroke-linecap="round"/></svg><span class="tool-dot" hidden aria-hidden="true"></span></button>
+      <button class="btn tool tool-rec" id="recToggle" aria-pressed="false" aria-label="Show only recommended">
+        <span class="rec-star" aria-hidden="true">★</span><span class="tool-n" id="recCount">0</span>
+      </button>
+    </div>
+
+    <div class="field field-search toolpanel" id="panel-search" hidden>
+      <label class="sr-only" for="q">Search</label>
+      <input type="search" id="q" placeholder="title, author, publisher, critic" autocomplete="off">
+    </div>
+    <div class="field toolpanel" id="panel-order" hidden>
+      <label class="sr-only" for="order">Order</label>
+      <select id="order">
+        <option value="latest">Newest reviews</option>
+        <option value="fit">Best fit for me</option>
+        <option value="published">Newest books</option>
+        <option value="reviewed">Most reviewed</option>
+        <option value="title">Title A–Z</option>
+      </select>
     </div>
 
     <details id="more">
-    <summary class="more-toggle">Filters <span class="more-count" id="more-count"></span></summary>
+    <summary class="more-toggle sr-only">Filters <span class="more-count" id="more-count"></span></summary>
     <div class="controls-grid" style="margin-top:var(--s3)">
       <div class="field">
         <label for="minScore">Min score</label>
@@ -119,10 +120,6 @@
   <div class="tag-bar" id="tag-bar" hidden></div>
   <div class="tally">
     <p class="status" id="status" role="status" aria-live="polite"></p>
-    <button class="rec-toggle" id="recToggle" aria-pressed="false">
-      <span class="rec-star" aria-hidden="true">★</span>
-      <span id="recCount">0</span>&nbsp;recommended
-    </button>
   </div>
 
   <section class="section" id="feed-section">

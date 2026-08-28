@@ -132,10 +132,6 @@ a:hover { text-decoration-thickness: 2px; }
   font-size: 2.75rem; line-height: 1.05; margin: 0;
   font-weight: 700; letter-spacing: -.01em;
 }
-.masthead .sub {
-  font-family: var(--mono); font-size: .75rem; color: var(--ink-muted);
-  margin: var(--s2) 0 0; max-width: 60ch; line-height: 1.5;
-}
 .masthead .built { font-family: var(--mono); font-size: .6875rem; color: var(--ink-faint); }
 
 /* ------------------------------------------------------------ controls */
@@ -850,17 +846,6 @@ details[open] > .more-toggle::after { content: " ▴"; }
   .mark svg { width: 24px; height: 24px; }
 }
 
-/* At phone width the masthead's right-hand group was a flex row holding the
-   build line, four section buttons and the theme toggle, so the build line got
-   squeezed into a seven-line column and the last button ran off the edge. The
-   group stacks instead: the line above, the buttons wrapping under it. */
-@media (max-width: 760px) {
-  .masthead-row { flex-direction: column; align-items: stretch; gap: var(--s3); }
-  .masthead-row > div:last-child { flex-direction: column !important; align-items: stretch !important; }
-  .masthead .built { order: -1; }
-  .views { display: flex; flex-wrap: wrap; gap: var(--s2); }
-  .views .btn { flex: 1 1 auto; }
-}
 
 /* ---------------------------------------------------------- the wordmark, again
 
@@ -898,7 +883,6 @@ details[open] > .more-toggle::after { content: " ▴"; }
   transition: box-shadow var(--normal) var(--ease);
 }
 
-.masthead-tools { display: flex; align-items: center; gap: var(--s3); }
 
 /* The controls sit inside the sticky region now, so they no longer pin
    themselves and no longer need their own background or bottom rule. */
@@ -940,63 +924,85 @@ details[open] > .more-toggle::after { content: " ▴"; }
 }
 
 @media (max-width: 760px) {
-  /* At rest the masthead stacks, which is right. Compact it must not: stacked,
-     the bar came to 496px of an 812px screen, so more than half the phone was
-     chrome. Two rows instead. The name and the sections share the first, the
-     search and the filter toggle share the second.
-
-     The section buttons scroll sideways rather than wrapping. Four buttons and a
-     theme toggle will not fit 375px at a legible size, and shortening their
-     labels to fit would cost more than a swipe does. */
-  .topbar.is-compact .masthead { padding: var(--s2) 0 0; }
-  .topbar.is-compact .masthead-row { flex-direction: row; align-items: center; gap: var(--s3); }
-  .topbar.is-compact .masthead-tools { flex-direction: row !important; align-items: center !important; min-width: 0; }
+  /* The two rows hold at 375px: the name and the menu, then four icons. Nothing
+     wraps and nothing scrolls sideways, because there are four things. */
+  .masthead h1 { font-size: 1.5rem; }
   .topbar.is-compact .masthead h1 { font-size: 1.125rem; }
-  .topbar.is-compact .brand { flex: 0 0 auto; }
-
-  .topbar.is-compact .views {
-    flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
-    -webkit-overflow-scrolling: touch; padding-bottom: 2px;
-  }
-  .topbar.is-compact .views::-webkit-scrollbar { display: none; }
-  .topbar.is-compact .views .btn,
-  .topbar.is-compact #theme {
-    flex: 0 0 auto; min-height: 38px; padding: 2px var(--s2); font-size: .6875rem;
-  }
-
-  .topbar.is-compact .controls > .wrap { flex-wrap: nowrap; gap: var(--s2); align-items: stretch; }
-  .topbar.is-compact .controls > .wrap > .controls-grid { flex: 1 1 auto; min-width: 0; }
-  .topbar.is-compact .controls .field { flex: 1 1 auto; min-width: 0; }
-  .topbar.is-compact #more { flex: 0 0 auto; }
-  .topbar.is-compact #more > .more-toggle { min-height: 36px; white-space: nowrap; }
-  .topbar.is-compact .controls .field select,
-  .topbar.is-compact .controls .field input { min-height: 36px; }
-
-  /* Opened, the panel still needs the full width under the row. */
-  .topbar.is-compact .controls > .wrap:has(#more[open]) { flex-wrap: wrap; }
+  .toolrow { gap: var(--s1); }
+  .btn.tool { min-height: 40px; min-width: 40px; }
+  .topbar.is-compact .btn.tool { min-height: 36px; min-width: 36px; }
 }
 
-/* ---------------------------------------------------------- search, collapsed
+/* ---------------------------------------------------------- two lines, then feed
 
-   In the bar the search field is the widest thing there and the least often
-   used: most of the time you are scrolling, not looking for a title you already
-   know. So it collapses to its icon and opens on a click.
+   Everything above the feed is two rows and stays two rows. The name and a way
+   into what is rarely touched; then four icons. Sections, the theme, the build
+   line and the standing description all moved behind the menu, because none of
+   them is read twice. The feed gets the rest of the screen.
 
-   It never hides a query. A search still in force with the field put away is
-   invisible state, which is the same failure the filter count exists to avoid,
-   so an active query keeps the field open and marks the icon. */
+   This supersedes the collapsing bar's job of hiding things on scroll: there is
+   nothing left to hide. Scrolling now only tightens what is already there. */
 
-.search-toggle { display: none; align-items: center; gap: var(--s1); position: relative; }
-.search-toggle svg { display: block; }
-
-.topbar.is-compact .search-toggle { display: inline-flex; flex: 0 0 auto; }
-.topbar.is-compact .field-search { display: none; }
-.topbar.is-compact.is-searching .field-search { display: block; }
-.topbar.is-compact.is-searching .search-toggle { color: var(--accent); border-color: var(--accent); }
-
-/* A dot rather than a number: what matters is that something is filtering the
-   feed, and the field beside it says what. */
-.search-toggle-n {
-  width: 5px; height: 5px; border-radius: 50%;
-  background: var(--accent); font-size: 0; color: transparent;
+.masthead {
+  padding: var(--s3) 0;
+  border-bottom: 0;
+  box-shadow: none;
+  margin-bottom: 0;
 }
+.masthead-row { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); }
+.masthead h1 { font-size: 1.75rem; }
+
+/* One row of icons, and it must stay one row at 320px. */
+.toolrow { display: flex; align-items: center; gap: var(--s2); }
+.btn.tool {
+  position: relative;
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--s1);
+  min-height: 38px; min-width: 38px; padding: 0 var(--s2); flex: 0 0 auto;
+}
+.btn.tool svg { display: block; }
+.btn.tool[aria-expanded="true"],
+.btn.tool[aria-pressed="true"] {
+  background: var(--ink); color: var(--bg); border-color: var(--ink);
+}
+.tool-rec[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.tool-rec .rec-star { font-size: .8125rem; line-height: 1; }
+.tool-n { font-family: var(--mono); font-size: .6875rem; }
+
+/* A control holding a value the reader cannot see says so with a dot, the same
+   way the filter count and the search dot already do. */
+.tool-dot {
+  position: absolute; top: 4px; right: 4px;
+  width: 5px; height: 5px; border-radius: 50%; background: var(--accent);
+}
+.btn.tool[aria-expanded="true"] .tool-dot { background: var(--bg); }
+
+.toolpanel { padding-top: var(--s2); }
+.toolpanel input, .toolpanel select { width: 100%; }
+
+.controls { padding: 0 0 var(--s2); }
+.topbar { border-bottom: 1px solid var(--rule-strong); margin-bottom: var(--s4); }
+
+/* The menu drops under the bar rather than covering the feed. It is a short list
+   and a sheet would be more ceremony than four buttons deserve. */
+.menu-panel {
+  border-top: 1px solid var(--rule);
+  background: var(--surface);
+  padding: var(--s3) 0;
+}
+.menu-panel .views { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.menu-panel .views .btn { min-height: 44px; }
+.menu-panel .built,
+.menu-panel .sub {
+  font-family: var(--mono); font-size: .6875rem; color: var(--ink-faint);
+  margin: var(--s3) 0 0; max-width: 68ch;
+}
+.menu-panel .sub { margin-top: var(--s1); }
+
+/* Scrolled, the name shrinks and the rows tighten. Nothing is removed, because
+   nothing up here is spare any more. */
+.topbar.is-compact .masthead { padding: var(--s2) 0 0; }
+.topbar.is-compact .masthead h1 { font-size: 1.25rem; }
+.topbar.is-compact .controls { padding-bottom: var(--s1); }
+.topbar.is-compact .btn.tool { min-height: 34px; min-width: 34px; }
+
+.tally { border-bottom: 0; padding: 0 0 var(--s2); margin-bottom: 0; }
