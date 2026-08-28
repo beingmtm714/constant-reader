@@ -861,3 +861,118 @@ details[open] > .more-toggle::after { content: " ▴"; }
   .views { display: flex; flex-wrap: wrap; gap: var(--s2); }
   .views .btn { flex: 1 1 auto; }
 }
+
+/* ---------------------------------------------------------- the wordmark, again
+
+   The R is the name's own first letter now rather than a mark standing beside
+   it. That is the whole idea: the stamped board reads as a dropped initial, the
+   way a bound spine carries one, and the word finishes in the same Bodoni the
+   scores are set in.
+
+   Sized in em so it tracks the heading at every breakpoint. The board is a
+   fraction under cap height and sits on the baseline, which is where a capital
+   sits; nudging it below reads as a mistake rather than as a letter. */
+
+.wordmark { display: block; }
+.wordmark-r {
+  width: 0.82em; height: 0.82em;
+  vertical-align: -0.075em;
+  margin-right: 0.03em;
+  border-radius: 2px;
+}
+
+/* ---------------------------------------------------------- the top bar
+
+   Masthead and controls are one sticky region, so scrolling collapses them
+   together into a bar rather than pinning the controls under a header that has
+   already gone. Everything that is orientation rather than control drops out:
+   the subhead, the build line, the field labels. What stays is what gets used.
+
+   Height is not animated. A sticky element that transitions its own height
+   fights the scroll it is reacting to, so only the parts that leave are faded
+   and the bar simply is the size it is. */
+
+.topbar {
+  position: sticky; top: 0; z-index: 20;
+  background: var(--bg);
+  transition: box-shadow var(--normal) var(--ease);
+}
+.scroll-sentinel { position: absolute; top: 0; height: 1px; width: 1px; }
+
+.masthead-tools { display: flex; align-items: center; gap: var(--s3); }
+
+/* The controls sit inside the sticky region now, so they no longer pin
+   themselves and no longer need their own background or bottom rule. */
+.topbar .controls { position: static; border-bottom: 0; margin-bottom: 0; }
+.topbar { border-bottom: 1px solid var(--rule); margin-bottom: var(--s5); }
+
+.topbar.is-compact {
+  box-shadow: 0 1px 0 var(--rule-strong);
+}
+.topbar.is-compact .masthead {
+  padding: var(--s2) 0;
+  border-bottom: 0;
+  box-shadow: none;
+  margin-bottom: 0;
+}
+.topbar.is-compact .masthead h1 { font-size: 1.375rem; }
+.topbar.is-compact .sub,
+.topbar.is-compact .built { display: none; }
+.topbar.is-compact .controls { padding: 0 0 var(--s2); }
+.topbar.is-compact .controls .field label { display: none; }
+.topbar.is-compact .controls-grid { gap: var(--s2); }
+
+/* Search, order and the filter toggle share one row when compact, so the bar is
+   a bar. Hiding the toggle instead would put the filters out of reach exactly
+   when a reader is deep enough in the feed to want them. */
+.topbar.is-compact .controls > .wrap {
+  display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap;
+}
+.topbar.is-compact .controls > .wrap > .controls-grid { flex: 1 1 22rem; margin: 0; }
+.topbar.is-compact #more { flex: 0 1 12rem; margin: 0; }
+.topbar.is-compact #more > .more-toggle { margin: 0; min-height: 38px; }
+
+/* Opened, the panel needs the whole width and drops under the row rather than
+   trying to sit inside it. */
+.topbar.is-compact #more[open] { flex: 1 0 100%; }
+
+@media (prefers-reduced-motion: reduce) {
+  .topbar { transition: none; }
+}
+
+@media (max-width: 760px) {
+  /* At rest the masthead stacks, which is right. Compact it must not: stacked,
+     the bar came to 496px of an 812px screen, so more than half the phone was
+     chrome. Two rows instead. The name and the sections share the first, the
+     search and the filter toggle share the second.
+
+     The section buttons scroll sideways rather than wrapping. Four buttons and a
+     theme toggle will not fit 375px at a legible size, and shortening their
+     labels to fit would cost more than a swipe does. */
+  .topbar.is-compact .masthead { padding: var(--s2) 0 0; }
+  .topbar.is-compact .masthead-row { flex-direction: row; align-items: center; gap: var(--s3); }
+  .topbar.is-compact .masthead-tools { flex-direction: row !important; align-items: center !important; min-width: 0; }
+  .topbar.is-compact .masthead h1 { font-size: 1.125rem; }
+  .topbar.is-compact .brand { flex: 0 0 auto; }
+
+  .topbar.is-compact .views {
+    flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
+    -webkit-overflow-scrolling: touch; padding-bottom: 2px;
+  }
+  .topbar.is-compact .views::-webkit-scrollbar { display: none; }
+  .topbar.is-compact .views .btn,
+  .topbar.is-compact #theme {
+    flex: 0 0 auto; min-height: 38px; padding: 2px var(--s2); font-size: .6875rem;
+  }
+
+  .topbar.is-compact .controls > .wrap { flex-wrap: nowrap; gap: var(--s2); align-items: stretch; }
+  .topbar.is-compact .controls > .wrap > .controls-grid { flex: 1 1 auto; min-width: 0; }
+  .topbar.is-compact .controls .field { flex: 1 1 auto; min-width: 0; }
+  .topbar.is-compact #more { flex: 0 0 auto; }
+  .topbar.is-compact #more > .more-toggle { min-height: 36px; white-space: nowrap; }
+  .topbar.is-compact .controls .field select,
+  .topbar.is-compact .controls .field input { min-height: 36px; }
+
+  /* Opened, the panel still needs the full width under the row. */
+  .topbar.is-compact .controls > .wrap:has(#more[open]) { flex-wrap: wrap; }
+}

@@ -28,16 +28,17 @@
 <body>
 <a class="skip" href="#feed">Skip to the feed</a>
 
+<div class="scroll-sentinel" aria-hidden="true"></div>
+<div class="topbar" id="topbar">
 <header class="masthead">
   <div class="wrap masthead-row">
     <div class="brand">
-      <span class="mark" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" rx="1.6" fill="#7a2b24"/><g fill="#f2ede4"><path d="M3.5 3.1h1.9v9.8H3.5z"/><path d="M5.4 3.1h3.9a2.75 2.75 0 0 1 0 5.5H5.4V6.9h3.7a1.15 1.15 0 0 0 0-2.3H5.4z"/><path d="M7.5 8.6h2.2l2.7 4.3h-2.3z"/></g><rect x="3.5" y="13.6" width="8.9" height="0.75" fill="#c9a24a"/></svg></span>
       <div>
-        <h1>Ruskin</h1>
+        <h1 class="wordmark"><span class="sr-only">Ruskin</span><span aria-hidden="true"><svg class="wordmark-r" viewBox="0 0 16 16" aria-hidden="true"><rect width="16" height="16" rx="1.6" fill="#7a2b24"/><g fill="#f2ede4"><path d="M3.5 3.1h1.9v9.8H3.5z"/><path d="M5.4 3.1h3.9a2.75 2.75 0 0 1 0 5.5H5.4V6.9h3.7a1.15 1.15 0 0 0 0-2.3H5.4z"/><path d="M7.5 8.6h2.2l2.7 4.3h-2.3z"/></g><rect x="3.5" y="13.6" width="8.9" height="0.75" fill="#c9a24a"/></svg>uskin</span></h1>
         <p class="sub" id="masthead-sub">Everything the literary press reviewed, scored out of ten.</p>
       </div>
     </div>
-    <div style="display:flex;align-items:center;gap:var(--s3)">
+    <div class="masthead-tools">
       <span class="built" id="built"></span>
       <nav class="views" aria-label="Sections">
         <button class="btn" id="view-feed" aria-current="page">Feed</button>
@@ -107,6 +108,7 @@
     </details>
   </div>
 </nav>
+</div>
 
 <main class="wrap" id="main">
   <div class="tag-bar" id="tag-bar" hidden></div>

@@ -1214,6 +1214,19 @@ import { rescore, summarize, isEmpty, bandKey, EMPTY as EMPTY_OVERRIDES } from '
   // start closed everywhere now; the bar keeps the search and the sort, which is
   // what actually gets touched. The count in the summary says what is hiding, so
   // a filter left on is never invisible.
+  // The bar knows it has been scrolled past by watching a one-pixel sentinel at
+  // the very top of the document, rather than by listening to every scroll event
+  // and asking the layout where it is. One observer, no work per frame.
+  function bindTopbar() {
+    const bar = document.getElementById('topbar');
+    const sentinel = document.querySelector('.scroll-sentinel');
+    if (!bar || !sentinel || !('IntersectionObserver' in window)) return;
+    new IntersectionObserver(
+      ([entry]) => bar.classList.toggle('is-compact', !entry.isIntersecting),
+      { threshold: 0 },
+    ).observe(sentinel);
+  }
+
   function bindDisclosure() {
     const more = document.getElementById('more');
     more.open = false;
@@ -1384,6 +1397,7 @@ import { rescore, summarize, isEmpty, bandKey, EMPTY as EMPTY_OVERRIDES } from '
     buildTagDirectory();
     bindControls();
     bindDisclosure();
+    bindTopbar();
     setView(['saved', 'taste', 'profile'].includes(state.view) ? state.view : 'feed');
   }
 
