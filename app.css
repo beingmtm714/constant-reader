@@ -1,42 +1,49 @@
-/* Ruskin — see DESIGN.md. Tokens only below this block.
+/* Constant Reader — see DESIGN.md. Tokens only below this block.
 
-   Antiquarian bookstore on a foggy morning in Inverness. The ground is haar:
-   pale, cool, faintly green, and light rather than gloomy, because fog is bright.
-   The warmth comes from what is on the shelves — oxblood morocco on the spines,
-   gilt on the lettering — so the page is cool and the marks on it are warm.
+   A New York magazine office at two in the morning, 1929. Bond paper and carbon
+   under a desk lamp, brass fittings, black lacquer, one lipstick red. Warm where
+   the fog build was cool and hard-edged where it was soft: paper instead of
+   haar, and every rounded corner square.
 
-   Every text pair here clears WCAG AA at 4.5:1 and every border clears 3:1.
-   Checked, not eyeballed: --ink-faint carries the 0.6875rem metadata that runs
-   through the whole app, so it is the tier most likely to fail and it is set at
-   the darkest value the fog will take. */
+   The discipline is the one that governed the fog. Nothing is dark for
+   atmosphere. Every text pair clears WCAG AA at 4.5:1 and every border clears
+   3:1, measured rather than judged by eye. */
 
 :root {
-  --bg: #e9ece8;
-  --surface: #f7f8f5;
-  --surface-2: #dde2dc;
-  --ink: #191e1c;
-  --ink-muted: #4d5653;
-  --ink-faint: #5c6663;
-  --rule: #c8cfc9;
-  --rule-strong: #7e8883;
-  --accent: #7a2b24;
-  --accent-soft: #eddfdb;
-  --gilt: #6b5320;
+  --bg: #f0e9dc;
+  --surface: #f8f4ea;
+  --surface-2: #e3daca;
+  --ink: #1a1613;
+  --ink-muted: #554c42;
+  --ink-faint: #63594e;
+  --rule: #cfc4b2;
+  /* #8b8071 came out of the spec at a claimed 3.2:1 against every ground; it is
+     2.79:1 against --surface-2, which is what the control bar and the chips are.
+     This is the lightest value that clears 3:1 on all three, because a border
+     should stay a hairline rather than become a second text colour. */
+  --rule-strong: #847a6b;
+  --accent: #9a2a24;
+  --accent-soft: #eddcd6;
+  --brass: #7a6224;
   --warn: #7a5410;
-  --ok: #245c43;
+  --ok: #2a5d46;
 
-  --serif: "EB Garamond", Charter, "Iowan Old Style", Georgia, serif;
-  --display: "Bodoni Moda", "EB Garamond", Charter, Georgia, serif;
-  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --serif: "Libre Caslon Text", Charter, "Iowan Old Style", Georgia, serif;
+  --display: "Bodoni Moda", "Libre Caslon Text", Charter, Georgia, serif;
+  --mono: "Courier Prime", ui-monospace, "SF Mono", Menlo, monospace;
 
   --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px;
   --s6: 32px; --s7: 48px; --s8: 64px; --s9: 96px;
 
-  --r-sm: 2px; --r-md: 4px; --r-lg: 8px;
+  /* The Deco corner is a chamfer or a step, never an arc, and the only chamfer
+     in the system is on the mark. Everything else is square. */
+  --r-sm: 0; --r-md: 0; --r-lg: 0;
   --shadow-sm: 0 1px 2px rgb(0 0 0 / .06);
 
+  /* Machine-age motion: linear or ease-out, never ease-in-out. No elastic, no
+     bounce, no spring, now with a reason attached rather than only a rule. */
   --fast: 120ms; --normal: 200ms; --slow: 320ms;
-  --ease: cubic-bezier(.2, .6, .3, 1);
+  --ease: cubic-bezier(0, 0, .25, 1);
 }
 
 :root[data-theme="dark"],
@@ -46,22 +53,22 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #171b1a; --surface: #1f2523; --surface-2: #2a312e;
-    --ink: #e6eae5; --ink-muted: #a3aca7; --ink-faint: #9ba49f;
-    --rule: #333b38; --rule-strong: #606b66;
-    --accent: #e3948a; --accent-soft: #33211f;
-    --gilt: #cbab68;
-    --warn: #d9a441; --ok: #7fc9a2;
-    color-scheme: dark;
+    --bg: #16130f; --surface: #1e1a15; --surface-2: #29241d;
+  --ink: #ede5d8; --ink-muted: #a99e8e; --ink-faint: #9e9484;
+  --rule: #352f26; --rule-strong: #7a7062;
+  --accent: #e59a8e; --accent-soft: #2e1d19;
+  --brass: #c9a55e;
+  --warn: #d9a441; --ok: #7fc9a2;
+  color-scheme: dark;
   }
 }
 
 :root[data-theme="dark"] {
-  --bg: #171b1a; --surface: #1f2523; --surface-2: #2a312e;
-  --ink: #e6eae5; --ink-muted: #a3aca7; --ink-faint: #9ba49f;
-  --rule: #333b38; --rule-strong: #606b66;
-  --accent: #e3948a; --accent-soft: #33211f;
-  --gilt: #cbab68;
+  --bg: #16130f; --surface: #1e1a15; --surface-2: #29241d;
+  --ink: #ede5d8; --ink-muted: #a99e8e; --ink-faint: #9e9484;
+  --rule: #352f26; --rule-strong: #7a7062;
+  --accent: #e59a8e; --accent-soft: #2e1d19;
+  --brass: #c9a55e;
   --warn: #d9a441; --ok: #7fc9a2;
   color-scheme: dark;
 }
@@ -83,10 +90,11 @@ body {
   background: var(--bg);
   color: var(--ink);
   font-family: var(--serif);
-  /* EB Garamond sets small for its point size and its strokes are lighter than
-     Source Serif's, so the base goes up a step and the leading opens with it.
-     Below this the metadata tier stops being comfortable on fog. */
-  font-size: 1.0625rem;
+  /* Libre Caslon Text sets larger than Garamond on the same point size, so the
+     step Garamond needed comes back off. The New Yorker set its body in Caslon
+     for decades, which makes it the period's reading face by descent rather
+     than by association. */
+  font-size: 1rem;
   line-height: 1.5;
   font-synthesis-weight: none;
 }
@@ -112,27 +120,18 @@ a:hover { text-decoration-thickness: 2px; }
 /* ------------------------------------------------------------ masthead */
 
 .masthead {
-  /* A gilt hairline under the heavy rule, the way a stamped board carries a thin
+  /* A brass hairline under the heavy rule, the way a stamped board carries a thin
      line of gold under the title. Gilt does one job in this app and this is it,
      plus the rule above the recommendation counter. It never sets type: at
      6.1:1 it would pass, but a gold that is dark enough to read stops reading
      as gold, and a lighter one fails. So it stays a line. */
   border-bottom: 2px solid var(--ink);
-  box-shadow: 0 3px 0 -2px var(--gilt);
+  box-shadow: 0 3px 0 -2px var(--brass);
   padding: var(--s6) 0 var(--s4);
   margin-bottom: var(--s5);
 }
 .masthead-row { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--s4); flex-wrap: wrap; }
-.masthead h1 {
-  /* Bodoni for the masthead alone. The Scotch Romans came out of Edinburgh
-     foundries and sat on the title pages this feed is pastiching, so the
-     reference is regional rather than decorative. Weight 700 because Didone
-     hairlines disappear against a pale ground at any lighter setting. */
-  font-family: var(--display);
-  font-size: 2.75rem; line-height: 1.05; margin: 0;
-  font-weight: 700; letter-spacing: -.01em;
-}
-.masthead .built { font-family: var(--mono); font-size: .6875rem; color: var(--ink-faint); }
+.masthead .built { font-family: var(--mono); font-size: .75rem; color: var(--ink-faint); }
 
 /* ------------------------------------------------------------ controls */
 
@@ -148,12 +147,12 @@ a:hover { text-decoration-thickness: 2px; }
 .field { display: flex; flex-direction: column; gap: var(--s1); }
 .field > label,
 .group > .legend {
-  font-family: var(--mono); font-size: .625rem; text-transform: uppercase;
+  font-family: var(--mono); font-size: .6875rem; text-transform: uppercase;
   letter-spacing: .09em; color: var(--ink-faint);
 }
 
 input[type="search"], select, input[type="number"] {
-  font-family: var(--mono); font-size: .8125rem;
+  font-family: var(--mono); font-size: .875rem;
   color: var(--ink); background: var(--surface);
   border: 1px solid var(--rule-strong); border-radius: var(--r-md);
   padding: var(--s2) var(--s3); min-height: 36px;
@@ -166,7 +165,7 @@ input[type="number"] { width: 6rem; }
 .chips { display: flex; flex-wrap: wrap; gap: var(--s1); }
 
 .chip {
-  font-family: var(--mono); font-size: .6875rem;
+  font-family: var(--mono); font-size: .75rem;
   background: transparent; color: var(--ink-muted);
   border: 1px solid var(--rule-strong); border-radius: var(--r-md);
   padding: var(--s1) var(--s2); min-height: 26px; cursor: pointer;
@@ -177,11 +176,11 @@ input[type="number"] { width: 6rem; }
 .chip .n { opacity: .6; margin-left: var(--s1); }
 
 .toggle-row { display: flex; flex-wrap: wrap; gap: var(--s4); align-items: center; }
-.switch { display: inline-flex; align-items: center; gap: var(--s2); font-family: var(--mono); font-size: .75rem; color: var(--ink-muted); cursor: pointer; min-height: 32px; }
+.switch { display: inline-flex; align-items: center; gap: var(--s2); font-family: var(--mono); font-size: .8125rem; color: var(--ink-muted); cursor: pointer; min-height: 32px; }
 .switch input { accent-color: var(--accent); width: 15px; height: 15px; }
 
 .btn {
-  font-family: var(--mono); font-size: .6875rem;
+  font-family: var(--mono); font-size: .75rem;
   background: var(--surface); color: var(--ink);
   border: 1px solid var(--rule-strong); border-radius: var(--r-md);
   padding: var(--s2) var(--s3); min-height: 32px; cursor: pointer;
@@ -200,15 +199,15 @@ input[type="number"] { width: 6rem; }
   padding-bottom: var(--s2); margin-bottom: var(--s2);
 }
 .section-head h2 { font-size: 1.25rem; margin: 0; font-weight: 600; letter-spacing: -.01em; }
-.section-head .note { font-family: var(--mono); font-size: .6875rem; color: var(--ink-faint); text-align: right; max-width: 42ch; }
+.section-head .note { font-family: var(--mono); font-size: .75rem; color: var(--ink-faint); text-align: right; max-width: 42ch; }
 
 .group-head {
-  font-family: var(--mono); font-size: .6875rem; text-transform: uppercase;
+  font-family: var(--mono); font-size: .75rem; text-transform: uppercase;
   letter-spacing: .09em; color: var(--ink-faint);
   border-bottom: 1px solid var(--rule); padding: var(--s5) 0 var(--s2);
 }
 
-.status { font-family: var(--mono); font-size: .6875rem; color: var(--ink-faint); padding: var(--s2) 0; }
+.status { font-family: var(--mono); font-size: .75rem; color: var(--ink-faint); padding: var(--s2) 0; }
 
 /* ------------------------------------------------------------ rows */
 
@@ -237,7 +236,7 @@ input[type="number"] { width: 6rem; }
   font-variant-numeric: tabular-nums lining;
 }
 .score .band {
-  display: block; font-family: var(--mono); font-size: .625rem;
+  display: block; font-family: var(--mono); font-size: .6875rem;
   text-transform: uppercase; letter-spacing: .1em; color: var(--ink-faint);
   margin-top: var(--s1);
 }
@@ -250,7 +249,7 @@ input[type="number"] { width: 6rem; }
 .title .author::before { content: " · "; color: var(--ink-faint); }
 
 .meta {
-  font-family: var(--mono); font-size: .6875rem; color: var(--ink-muted);
+  font-family: var(--mono); font-size: .75rem; color: var(--ink-muted);
   margin: 0 0 var(--s2); display: flex; flex-wrap: wrap; gap: var(--s1) var(--s3);
 }
 .meta .sep { color: var(--ink-faint); }
@@ -262,12 +261,12 @@ input[type="number"] { width: 6rem; }
    that used to sit above a tag row already carrying the same words. No border and
    no fill: it is a note, and giving it a box made it compete with the tags. */
 .caveat-line {
-  font-family: var(--mono); font-size: .6875rem; color: var(--ink-faint);
+  font-family: var(--mono); font-size: .75rem; color: var(--ink-faint);
   margin: var(--s2) 0 0; max-width: 68ch; line-height: 1.5;
 }
 
 .risk {
-  font-family: var(--mono); font-size: .6875rem; color: var(--warn);
+  font-family: var(--mono); font-size: .75rem; color: var(--warn);
   margin: var(--s2) 0 0; max-width: 68ch; line-height: 1.5;
 }
 .risk::before { content: "▲ "; }
@@ -291,27 +290,27 @@ input[type="number"] { width: 6rem; }
 
 .dims { display: grid; gap: var(--s2); margin: 0 0 var(--s4); }
 .dim { display: grid; grid-template-columns: 2.5rem 1fr 2.25rem; gap: var(--s3); align-items: baseline; }
-.dim-id { font-family: var(--mono); font-size: .6875rem; color: var(--ink-faint); }
+.dim-id { font-family: var(--mono); font-size: .75rem; color: var(--ink-faint); }
 .dim-label { font-size: .875rem; }
-.dim-label .why { display: block; font-family: var(--mono); font-size: .6875rem; color: var(--ink-muted); margin-top: 2px; }
-.dim-label .ev { display: block; font-family: var(--mono); font-size: .625rem; color: var(--ink-faint); margin-top: 2px; word-break: break-word; }
+.dim-label .why { display: block; font-family: var(--mono); font-size: .75rem; color: var(--ink-muted); margin-top: 2px; }
+.dim-label .ev { display: block; font-family: var(--mono); font-size: .6875rem; color: var(--ink-faint); margin-top: 2px; word-break: break-word; }
 .dim-score { font-family: var(--mono); font-size: .875rem; text-align: right; }
 .dim-track { height: 2px; background: var(--rule); margin-top: var(--s1); }
 .dim-fill { height: 2px; background: var(--ink-muted); }
 .dim.is-default .dim-score, .dim.is-default .dim-label { color: var(--ink-faint); }
 
 .detail h3 {
-  font-family: var(--mono); font-size: .625rem; text-transform: uppercase;
+  font-family: var(--mono); font-size: .6875rem; text-transform: uppercase;
   letter-spacing: .09em; color: var(--ink-faint); margin: var(--s4) 0 var(--s2);
   border-top: 1px solid var(--rule); padding-top: var(--s3);
 }
 .detail h3:first-child { margin-top: 0; border-top: 0; padding-top: 0; }
 
-.kv { display: grid; grid-template-columns: max-content 1fr; gap: var(--s1) var(--s4); font-family: var(--mono); font-size: .75rem; margin: 0; }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: var(--s1) var(--s4); font-family: var(--mono); font-size: .8125rem; margin: 0; }
 .kv dt { color: var(--ink-faint); }
 .kv dd { margin: 0; color: var(--ink); word-break: break-word; }
 
-.adjust { font-family: var(--mono); font-size: .75rem; margin: 0; padding: 0; list-style: none; }
+.adjust { font-family: var(--mono); font-size: .8125rem; margin: 0; padding: 0; list-style: none; }
 .adjust li { padding: 2px 0; }
 .adjust .pts { color: var(--accent); }
 .adjust .pts.plus { color: var(--ok); }
@@ -325,7 +324,7 @@ input[type="number"] { width: 6rem; }
 .panel h2 { margin: 0 0 var(--s2); font-size: 1.25rem; }
 .panel p { margin: 0 auto var(--s4); color: var(--ink-muted); max-width: 56ch; font-size: .9375rem; }
 .panel code {
-  font-family: var(--mono); font-size: .8125rem; background: var(--surface-2);
+  font-family: var(--mono); font-size: .875rem; background: var(--surface-2);
   padding: 2px var(--s1); border-radius: var(--r-sm);
 }
 
@@ -341,7 +340,7 @@ input[type="number"] { width: 6rem; }
 .foot {
   border-top: 1px solid var(--rule-strong); margin-top: var(--s8);
   padding: var(--s5) 0 var(--s9);
-  font-family: var(--mono); font-size: .6875rem; color: var(--ink-faint);
+  font-family: var(--mono); font-size: .75rem; color: var(--ink-faint);
   display: flex; flex-wrap: wrap; gap: var(--s4); justify-content: space-between; align-items: center;
 }
 .foot p { margin: 0; max-width: 70ch; line-height: 1.6; }
@@ -367,7 +366,7 @@ input[type="number"] { width: 6rem; }
 /* The filter block is taller than a phone screen; it collapses there. */
 .more-toggle {
   display: none;
-  font-family: var(--mono); font-size: .75rem; color: var(--ink);
+  font-family: var(--mono); font-size: .8125rem; color: var(--ink);
   background: var(--surface); border: 1px solid var(--rule-strong);
   border-radius: var(--r-md); padding: var(--s2) var(--s3);
   margin-top: var(--s3); min-height: 44px; cursor: pointer;
@@ -384,13 +383,13 @@ details[open] > .more-toggle::after { content: " ▴"; }
 /* ---------------------------------------------------------- score out of ten */
 
 .score .num { font-size: 1.75rem; }
-.score .outof { font-family: var(--mono); font-size: .6875rem; color: var(--ink-faint); }
+.score .outof { font-family: var(--mono); font-size: .75rem; color: var(--ink-faint); }
 .row[data-rec="true"] .score .num { color: var(--accent); }
 
 /* The recommended tag is a claim, so it reads as one and it is a control. */
 .rec-tag {
   display: inline-flex; align-items: center; gap: var(--s1);
-  font-family: var(--mono); font-size: .625rem; letter-spacing: .08em; text-transform: uppercase;
+  font-family: var(--mono); font-size: .6875rem; letter-spacing: .08em; text-transform: uppercase;
   color: var(--accent); background: var(--accent-soft);
   border: 1px solid var(--accent); border-radius: var(--r-sm);
   padding: 2px var(--s2); min-height: 24px; cursor: pointer;
@@ -400,7 +399,7 @@ details[open] > .more-toggle::after { content: " ▴"; }
 .tally { display: flex; align-items: center; gap: var(--s4); flex-wrap: wrap; padding: var(--s2) 0 0; }
 .rec-toggle {
   display: inline-flex; align-items: center; gap: var(--s2);
-  font-family: var(--mono); font-size: .75rem;
+  font-family: var(--mono); font-size: .8125rem;
   color: var(--accent); background: transparent;
   border: 1px solid var(--accent); border-radius: var(--r-md);
   padding: var(--s2) var(--s3); min-height: 36px; cursor: pointer;
@@ -416,7 +415,7 @@ details[open] > .more-toggle::after { content: " ▴"; }
   max-width: 68ch; line-height: 1.5;
 }
 .reading-caveat {
-  font-family: var(--mono); font-size: .6875rem; color: var(--ink-faint);
+  font-family: var(--mono); font-size: .75rem; color: var(--ink-faint);
   margin: var(--s1) 0 0; max-width: 68ch; line-height: 1.5;
 }
 
@@ -430,7 +429,7 @@ details[open] > .more-toggle::after { content: " ▴"; }
 .tags { display: flex; flex-wrap: wrap; gap: var(--s1); margin-top: var(--s3); }
 
 .tag-chip {
-  font-family: var(--mono); font-size: .625rem; letter-spacing: .04em;
+  font-family: var(--mono); font-size: .6875rem; letter-spacing: .04em;
   color: var(--ink-muted); background: transparent;
   border: 1px solid var(--rule-strong); border-radius: var(--r-sm);
   padding: 2px var(--s2); min-height: 22px; cursor: pointer;
@@ -453,7 +452,7 @@ details[open] > .more-toggle::after { content: " ▴"; }
 .tag-bar[hidden] { display: none; }
 .tag-bar strong { font-size: 1rem; }
 .lab-sm {
-  font-family: var(--mono); font-size: .625rem; text-transform: uppercase;
+  font-family: var(--mono); font-size: .6875rem; text-transform: uppercase;
   letter-spacing: .09em; color: var(--ink-faint);
 }
 
@@ -484,7 +483,7 @@ details[open] > .more-toggle::after { content: " ▴"; }
   position: fixed; left: 50%; bottom: var(--s5); transform: translateX(-50%);
   z-index: 20; display: flex; align-items: center; gap: var(--s3);
   background: var(--ink); color: var(--bg);
-  font-family: var(--mono); font-size: .75rem;
+  font-family: var(--mono); font-size: .8125rem;
   padding: var(--s3) var(--s4); border-radius: var(--r-md);
   box-shadow: var(--shadow-sm); max-width: min(92vw, 44ch);
 }
@@ -496,7 +495,7 @@ details[open] > .more-toggle::after { content: " ▴"; }
 .chooser { grid-column: 1 / -1; margin-top: var(--s3); }
 .chooser[hidden] { display: none; }
 .chooser-inner { background: var(--surface); border: 1px solid var(--rule-strong); border-radius: var(--r-md); padding: var(--s3); }
-.chooser-note { font-family: var(--mono); font-size: .6875rem; color: var(--ink-faint); margin: 0 0 var(--s3); max-width: 60ch; }
+.chooser-note { font-family: var(--mono); font-size: .75rem; color: var(--ink-faint); margin: 0 0 var(--s3); max-width: 60ch; }
 .retailers { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; background: var(--rule); }
 /* Two columns, two rows, every child placed explicitly — auto-placement puts
    the external-link arrow ahead of the name and reads back-to-front. */
@@ -510,10 +509,10 @@ details[open] > .more-toggle::after { content: " ▴"; }
 .retailer:hover { background: var(--surface-2); }
 .retailer:hover .retailer-name { text-decoration: underline; text-underline-offset: 2px; }
 .retailer-name { grid-area: name; font-weight: 600; align-self: end; }
-.retailer-blurb { grid-area: blurb; font-family: var(--mono); font-size: .6875rem; color: var(--ink-muted); align-self: start; }
+.retailer-blurb { grid-area: blurb; font-family: var(--mono); font-size: .75rem; color: var(--ink-muted); align-self: start; }
 .retailer-ext { grid-area: ext; color: var(--ink-faint); font-size: .875rem; }
 
-.no-find { font-family: var(--mono); font-size: .6875rem; color: var(--warn); max-width: 52ch; align-self: center; }
+.no-find { font-family: var(--mono); font-size: .75rem; color: var(--warn); max-width: 52ch; align-self: center; }
 
 .saved-row {
   display: grid; grid-template-columns: 44px 1fr auto;
@@ -555,14 +554,14 @@ details[open] > .more-toggle::after { content: " ▴"; }
 /* The delta beside the numeral. The arrow and the sign both carry the direction,
    so the colour is confirmation and never the signal. */
 .tune-mark {
-  display: block; font-family: var(--mono); font-size: .625rem;
+  display: block; font-family: var(--mono); font-size: .6875rem;
   letter-spacing: .02em; margin-top: 2px; white-space: nowrap;
 }
 .tune-mark.up { color: var(--ok); }
 .tune-mark.down { color: var(--ink-faint); }
 
 .tune-line {
-  margin: 0 0 var(--s2); font-family: var(--mono); font-size: .6875rem;
+  margin: 0 0 var(--s2); font-family: var(--mono); font-size: .75rem;
   color: var(--ink-muted); line-height: 1.5; max-width: 68ch;
 }
 .tune-from {
@@ -575,10 +574,10 @@ details[open] > .more-toggle::after { content: " ▴"; }
 
 .taste-head { border-bottom: 1px solid var(--rule); padding-bottom: var(--s4); margin-bottom: var(--s5); }
 .taste-lede { margin: 0 0 var(--s3); font-size: 1.125rem; line-height: 1.5; max-width: 60ch; }
-.taste-sub { margin: 0; font-family: var(--mono); font-size: .75rem; color: var(--ink-muted); line-height: 1.6; max-width: 68ch; }
+.taste-sub { margin: 0; font-family: var(--mono); font-size: .8125rem; color: var(--ink-muted); line-height: 1.6; max-width: 68ch; }
 
 .taste-h {
-  font-family: var(--mono); font-size: .6875rem; text-transform: uppercase;
+  font-family: var(--mono); font-size: .75rem; text-transform: uppercase;
   letter-spacing: .08em; color: var(--ink-faint);
   margin: var(--s6) 0 var(--s3); padding-top: var(--s3); border-top: 1px solid var(--rule);
 }
@@ -594,7 +593,7 @@ details[open] > .more-toggle::after { content: " ▴"; }
   padding: var(--s3) 0; border-bottom: 1px solid var(--rule);
 }
 .taste-list li:first-child { padding-top: 0; }
-.taste-count { font-family: var(--mono); font-size: .6875rem; color: var(--ink-faint); }
+.taste-count { font-family: var(--mono); font-size: .75rem; color: var(--ink-faint); }
 .taste-bar { grid-column: 1 / -1; height: 2px; background: var(--rule); margin-top: calc(var(--s1) * -1); }
 .taste-fill { display: block; height: 2px; }
 .taste-fill.up { background: var(--ok); }
@@ -603,13 +602,13 @@ details[open] > .more-toggle::after { content: " ▴"; }
 .dim-fill.down { background: var(--warn); }
 
 .taste-none, .taste-note, .taste-foot {
-  font-family: var(--mono); font-size: .75rem; color: var(--ink-muted);
+  font-family: var(--mono); font-size: .8125rem; color: var(--ink-muted);
   line-height: 1.6; max-width: 68ch; margin: 0 0 var(--s3);
 }
 .taste-foot { margin-top: var(--s6); padding-top: var(--s3); border-top: 1px solid var(--rule); color: var(--ink-faint); }
 .taste-note code { background: var(--surface-2); padding: 1px 4px; border-radius: var(--r-sm); }
 
-.taste-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: .75rem; }
+.taste-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: .8125rem; }
 .taste-table th {
   text-align: left; font-weight: 400; color: var(--ink-faint);
   text-transform: uppercase; letter-spacing: .06em; font-size: .625rem;
@@ -690,7 +689,7 @@ details[open] > .more-toggle::after { content: " ▴"; }
 
 /* The section heading repeated the masthead, so it is read out to screen readers
    and drawn for nobody. */
-.section > .note { font-family: var(--mono); font-size: .6875rem; color: var(--ink-faint); margin: var(--s2) 0 0; }
+.section > .note { font-family: var(--mono); font-size: .75rem; color: var(--ink-faint); margin: var(--s2) 0 0; }
 
 /* Recommended sits with the score, because it is a fact about the score. A star
    in the margin, not a bordered tag in the middle of the reading column. */
@@ -723,10 +722,10 @@ details[open] > .more-toggle::after { content: " ▴"; }
 
 .ov-lede { max-width: 68ch; margin: 0 0 var(--s3); }
 .ov-sub { max-width: 68ch; margin: 0 0 var(--s5); color: var(--ink-muted); font-size: .9375rem; }
-.ov-help { font-family: var(--mono); font-size: .6875rem; color: var(--ink-faint); max-width: 72ch; margin: 0 0 var(--s3); line-height: 1.5; }
+.ov-help { font-family: var(--mono); font-size: .75rem; color: var(--ink-faint); max-width: 72ch; margin: 0 0 var(--s3); line-height: 1.5; }
 
 .ov-h {
-  font-family: var(--mono); font-size: .6875rem; text-transform: uppercase;
+  font-family: var(--mono); font-size: .75rem; text-transform: uppercase;
   letter-spacing: .09em; color: var(--ink-faint); font-weight: 400;
   border-bottom: 1px solid var(--rule); padding-bottom: var(--s2);
   margin: var(--s7) 0 var(--s3);
@@ -756,10 +755,10 @@ details[open] > .more-toggle::after { content: " ▴"; }
 }
 .ov-weight { border-top: 0; padding-top: 0; }
 .ov-band-label { font-size: .9375rem; }
-.ov-note { font-family: var(--mono); font-size: .625rem; color: var(--ink-faint); margin-left: var(--s2); }
-.ov-was { font-family: var(--mono); font-size: .6875rem; color: var(--accent); }
+.ov-note { font-family: var(--mono); font-size: .6875rem; color: var(--ink-faint); margin-left: var(--s2); }
+.ov-was { font-family: var(--mono); font-size: .75rem; color: var(--accent); }
 .ov-num {
-  font-family: var(--mono); font-size: .8125rem; text-align: right;
+  font-family: var(--mono); font-size: .875rem; text-align: right;
   padding: var(--s2); min-height: 36px;
   border: 1px solid var(--rule-strong); border-radius: var(--r-md);
   background: var(--surface); color: var(--ink);
@@ -803,7 +802,7 @@ details[open] > .more-toggle::after { content: " ▴"; }
 /* "read on" earns its place only where the sentence was cut. It is the one thing
    on the row telling you there is more behind the click. */
 .reading-more {
-  font-family: var(--mono); font-size: .625rem; letter-spacing: .06em;
+  font-family: var(--mono); font-size: .6875rem; letter-spacing: .06em;
   text-transform: uppercase; color: var(--accent); white-space: nowrap;
 }
 .js-open-soft:hover .reading-more { text-decoration: underline; text-underline-offset: 3px; }
@@ -812,7 +811,7 @@ details[open] > .more-toggle::after { content: " ▴"; }
    is credited: three reviews of one book is three sentences, not one merged. */
 .detail .reading + .reading { margin-top: var(--s3); }
 .reading-src {
-  font-family: var(--mono); font-size: .625rem; letter-spacing: .06em;
+  font-family: var(--mono); font-size: .6875rem; letter-spacing: .06em;
   color: var(--ink-faint); margin-left: var(--s2); white-space: nowrap;
 }
 .detail-actions {
@@ -821,20 +820,6 @@ details[open] > .more-toggle::after { content: " ▴"; }
   padding-bottom: var(--s4); border-bottom: 1px solid var(--rule);
 }
 
-/* ---------------------------------------------------------- the wordmark
-
-   Ruskin. He spent forty years telling England what was good and why, in prose
-   about buildings, painting, gilding and the binding of books, which is the
-   world this app is dressed in and roughly the job it does.
-
-   The mark is a stamped board: oxblood, a cream R, a gilt rule along the foot
-   echoing the hairline under the masthead. It is drawn in paths rather than set
-   in type, so the favicon does not depend on a font that a browser tab will
-   never load, and the same file serves the tab at 16px and the masthead at 30. */
-
-.brand { display: flex; align-items: center; gap: var(--s3); }
-.mark { display: block; flex: 0 0 auto; line-height: 0; }
-.mark svg { width: 30px; height: 30px; display: block; border-radius: 2px; }
 
 .masthead .sub {
   /* One line, so it sits under the wordmark rather than stacking beside it. */
@@ -842,9 +827,6 @@ details[open] > .more-toggle::after { content: " ▴"; }
   margin: var(--s1) 0 0;
 }
 
-@media (max-width: 760px) {
-  .mark svg { width: 24px; height: 24px; }
-}
 
 
 /* ---------------------------------------------------------- the wordmark, again
@@ -859,12 +841,6 @@ details[open] > .more-toggle::after { content: " ▴"; }
    sits; nudging it below reads as a mistake rather than as a letter. */
 
 .wordmark { display: block; }
-.wordmark-r {
-  width: 0.82em; height: 0.82em;
-  vertical-align: -0.075em;
-  margin-right: 0.03em;
-  border-radius: 2px;
-}
 
 /* ---------------------------------------------------------- the top bar
 
@@ -966,7 +942,7 @@ details[open] > .more-toggle::after { content: " ▴"; }
 }
 .tool-rec[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); }
 .tool-rec .rec-star { font-size: .8125rem; line-height: 1; }
-.tool-n { font-family: var(--mono); font-size: .6875rem; }
+.tool-n { font-family: var(--mono); font-size: .75rem; }
 
 /* A control holding a value the reader cannot see says so with a dot, the same
    way the filter count and the search dot already do. */
@@ -1081,7 +1057,7 @@ body { overflow-x: clip; }
 .menu-panel .views .btn { min-height: 44px; justify-content: flex-start; width: 100%; }
 .menu-panel .built,
 .menu-panel .sub {
-  font-family: var(--mono); font-size: .6875rem; color: var(--ink-faint);
+  font-family: var(--mono); font-size: .75rem; color: var(--ink-faint);
   margin: var(--s3) 0 0; line-height: 1.5;
 }
 .menu-panel .sub { margin-top: var(--s1); }
@@ -1129,4 +1105,57 @@ body { overflow-x: clip; }
   max-width: 62ch; line-height: 1.6;
 }
 .start-steps li { margin-bottom: var(--s2); }
-.start-steps li::marker { font-family: var(--mono); font-size: .8125rem; color: var(--ink-faint); }
+.start-steps li::marker { font-family: var(--mono); font-size: .875rem; color: var(--ink-faint); }
+
+/* ---------------------------------------------------------- the masthead
+
+   Constant Reader. Dorothy Parker's byline for the New Yorker book column,
+   1927 to 1933, under which she reviewed weekly and took most of them apart. A
+   phrase rather than a person, so it makes no claim on an estate, and it names
+   the reader rather than the critic, which is what this is. That "constant"
+   also describes a cron job at 06:20 is the other half of it.
+
+   The title in letterspaced Didone caps between a thick-thin brass rule pair.
+   That doubled rule is the period's most characteristic device and it costs two
+   borders. It marks the masthead and nothing else: a device used everywhere is
+   not a device. */
+
+.masthead h1 {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 1.125rem;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  line-height: 1.1;
+  margin: 0;
+  display: flex; align-items: center; gap: .55em;
+  min-width: 0;
+  border-top: 3px solid var(--brass);
+  border-bottom: 1px solid var(--brass);
+  padding: 5px 0 3px;
+}
+.wordmark-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Sized in em so it tracks the heading rather than being set against it. */
+.mark { display: block; flex: 0 0 auto; line-height: 0; color: var(--ink); }
+.mark svg { width: 1.6em; height: 1.6em; display: block; }
+
+.topbar.is-compact .masthead h1 { font-size: .9375rem; letter-spacing: .14em; border-top-width: 2px; }
+
+@media (max-width: 760px) {
+  /* Fifteen letterspaced caps, a mark and four touch targets on 375px. The
+     tracking gives way before the name does: truncating a masthead to
+     "CONSTANT RE..." is worse than setting it tight. */
+  .masthead h1 { font-size: .6875rem; letter-spacing: .07em; gap: .4em; }
+  .mark svg { width: 1.5em; height: 1.5em; }
+  .topbar.is-compact .masthead h1 { font-size: .625rem; letter-spacing: .05em; }
+}
+
+@media (max-width: 359px) {
+  .masthead h1 { font-size: .625rem; letter-spacing: .03em; }
+}
+
+/* The copy register the name earns: a column deck. Dry, short, declarative,
+   willing to be unkind. "Thin evidence, one review" is right; "this book may not
+   be a strong match for your preferences" is not. */
+.caveat-line { font-style: normal; }

@@ -1,4 +1,4 @@
-/* Ruskin — reads data/feed.json, sorts, filters, explains. See DESIGN.md. */
+/* Constant Reader — reads data/feed.json, sorts, filters, explains. See DESIGN.md. */
 import * as saved from './lib/saved-books.mjs';
 import { RETAILERS, linkFor, canFindCopy } from './lib/retailers.mjs';
 import { createAnalytics } from './lib/analytics.mjs';
@@ -934,6 +934,7 @@ import { CHIPS, buildProfile } from './lib/onboard.mjs';
         <li>Tap <strong>Build it</strong>. The feed re-ranks straight away.</li>
       </ol>
       <p class="ov-sub">Skip anything you have no opinion about. Nothing here leaves this browser, and every part of it stays editable on the Profile screen afterwards.</p>
+      <p class="ov-help">Built for a phone for now. It will open on a laptop, but a profile lives in the browser that made it, so building one here and opening the site there gets you somebody else's scores rather than your own.</p>
 
       <h3 class="ov-h">What do you read for?</h3>
       <p class="ov-help">Pick anything that makes you want to open a book.</p>
