@@ -5,6 +5,7 @@ import { createAnalytics } from './lib/analytics.mjs';
 import { buildTasteModel, tunedTotal, weightProposal, MIN_SIGNAL, MAX_ADJUSTMENT } from './lib/taste.mjs';
 import { outOfTen, RECOMMEND_AT } from './lib/recommend.mjs';
 import { rescore, summarize, isEmpty, bandKey, EMPTY as EMPTY_OVERRIDES } from './lib/overrides.mjs';
+import { CHIPS, buildProfile } from './lib/onboard.mjs';
 
 (() => {
   'use strict';
@@ -910,6 +911,67 @@ import { rescore, summarize, isEmpty, bandKey, EMPTY as EMPTY_OVERRIDES } from '
     }
   }
 
+  // ------------------------------------------------------------ build a profile
+
+  // Six questions, one screen. A wizard would be more ceremony than six questions
+  // deserve, and seeing all of them at once is what makes it feel short.
+  let startAnswers = { liked: [], disliked: [], nonfiction: false, satire: false };
+
+  function renderStart() {
+    const chips = (which) => CHIPS.map((c) => {
+      const key = `${c.dim}:${c.band}`;
+      const on = startAnswers[which].includes(key);
+      return `<button class="chip start-chip" data-which="${which}" data-key="${esc(key)}" aria-pressed="${on}">${esc(c.label)}</button>`;
+    }).join('');
+
+    const n = startAnswers.liked.length + startAnswers.disliked.length;
+    $('start-body').innerHTML = `
+      <p class="ov-lede">This feed is scored against one reader's taste. These questions build yours instead, and it stays in this browser: nothing is sent anywhere and nobody else's copy changes.</p>
+      <p class="ov-sub">Answer what you have an opinion about and skip the rest. Six answers is enough to feel the difference; you can change any of it afterwards on the Profile screen.</p>
+
+      <h3 class="ov-h">What do you read for?</h3>
+      <p class="ov-help">Pick anything that makes you want to open a book.</p>
+      <div class="start-chips">${chips('liked')}</div>
+
+      <h3 class="ov-h">What puts you off?</h3>
+      <p class="ov-help">This matters as much as the first list. A model with nothing to push against ranks everything alike.</p>
+      <div class="start-chips">${chips('disliked')}</div>
+
+      <h3 class="ov-h">Two things worth saying outright</h3>
+      <div class="toggle-row ov-rules">
+        <label class="switch ov-switch"><input type="checkbox" id="start-nonfiction" ${startAnswers.nonfiction ? 'checked' : ''}><span>I read nonfiction</span></label>
+        <label class="switch ov-switch"><input type="checkbox" id="start-satire" ${startAnswers.satire ? 'checked' : ''}><span>I like satire and comic novels</span></label>
+      </div>
+
+      <div class="ov-status">
+        <p class="status">${n ? `${n} answer${n === 1 ? '' : 's'}` : 'Nothing picked yet'}</p>
+        <button class="btn btn-done" id="start-apply">Build it</button>
+      </div>`;
+
+    for (const chip of $('start-body').querySelectorAll('.start-chip')) {
+      chip.addEventListener('click', () => {
+        const { which, key } = chip.dataset;
+        const list = startAnswers[which];
+        const i = list.indexOf(key);
+        if (i >= 0) list.splice(i, 1); else list.push(key);
+        // A band cannot be both liked and disliked, so picking one side drops
+        // the other rather than letting the two overrides fight.
+        const other = which === 'liked' ? 'disliked' : 'liked';
+        startAnswers[other] = startAnswers[other].filter((k) => k !== key);
+        renderStart();
+      });
+    }
+    $('start-nonfiction').addEventListener('change', (ev) => { startAnswers.nonfiction = ev.target.checked; });
+    $('start-satire').addEventListener('change', (ev) => { startAnswers.satire = ev.target.checked; });
+    $('start-apply').addEventListener('click', () => {
+      overrides = buildProfile(profileForOverrides(), startAnswers);
+      saveOverrides();
+      setView('feed');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      toast('Your profile is in. The feed is ranked by it now, and the Profile screen has every part of it.');
+    });
+  }
+
   function setView(view) {
     state.view = view;
     savePrefs();
@@ -917,13 +979,14 @@ import { rescore, summarize, isEmpty, bandKey, EMPTY as EMPTY_OVERRIDES } from '
     $('saved-section').hidden = view !== 'saved';
     $('taste-section').hidden = view !== 'taste';
     $('profile-section').hidden = view !== 'profile';
+    $('start-section').hidden = view !== 'start';
     // The control bar sorts and filters the feed and means nothing on the saved
     // list, so it goes away rather than sitting there inert. Same for the
     // recommended tally and any tag filter still applied to the feed.
     document.querySelector('.controls').hidden = view !== 'feed';
     document.querySelector('.tally').hidden = view !== 'feed';
     if (view !== 'feed') $('tag-bar').hidden = true;
-    for (const [id, name] of [['view-feed', 'feed'], ['view-saved', 'saved'], ['view-taste', 'taste'], ['view-profile', 'profile']]) {
+    for (const [id, name] of [['view-feed', 'feed'], ['view-saved', 'saved'], ['view-taste', 'taste'], ['view-profile', 'profile'], ['view-start', 'start']]) {
       if (view === name) $(id).setAttribute('aria-current', 'page');
       else $(id).removeAttribute('aria-current');
     }
@@ -974,6 +1037,7 @@ import { rescore, summarize, isEmpty, bandKey, EMPTY as EMPTY_OVERRIDES } from '
     if (state.view === 'saved') { renderSaved(); return; }
     if (state.view === 'taste') { renderTaste(); return; }
     if (state.view === 'profile') { renderProfile(); return; }
+    if (state.view === 'start') { renderStart(); return; }
 
     const all = FEED.books;
     const shown = all.filter(visible).sort(compare);
@@ -1472,6 +1536,7 @@ import { rescore, summarize, isEmpty, bandKey, EMPTY as EMPTY_OVERRIDES } from '
     $('view-saved').addEventListener('click', () => setView('saved'));
     $('view-taste').addEventListener('click', () => setView('taste'));
     $('view-profile').addEventListener('click', () => setView('profile'));
+    $('view-start').addEventListener('click', () => setView('start'));
     $('fTune').addEventListener('change', (ev) => { state.tune = ev.target.checked; rerender(); });
     $('savedSort').addEventListener('change', (ev) => {
       state.savedSort = ev.target.value;
@@ -1548,7 +1613,7 @@ import { rescore, summarize, isEmpty, bandKey, EMPTY as EMPTY_OVERRIDES } from '
     bindTopbar();
     bindTools();
     bindMenu();
-    setView(['saved', 'taste', 'profile'].includes(state.view) ? state.view : 'feed');
+    setView(['saved', 'taste', 'profile', 'start'].includes(state.view) ? state.view : 'feed');
   }
 
   boot();

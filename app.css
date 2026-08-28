@@ -1112,3 +1112,14 @@ body { overflow-x: clip; }
 /* At 320px the name is the only thing that can give: four icons and their touch
    targets cannot, so the wordmark truncates rather than shoving them off. */
 .masthead h1 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------------------------------------------------------- build a profile
+
+   Six questions on one screen. A wizard would be more ceremony than six
+   questions deserve, and seeing all of them at once is what makes it read as
+   short rather than as a form. */
+
+.start-chips { display: flex; flex-wrap: wrap; gap: var(--s2); margin-bottom: var(--s2); }
+.start-chip { font-family: var(--serif); font-size: .9375rem; min-height: 40px; }
+.start-chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.start-chips + .ov-h { margin-top: var(--s6); }
