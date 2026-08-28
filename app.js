@@ -926,8 +926,14 @@ import { CHIPS, buildProfile } from './lib/onboard.mjs';
 
     const n = startAnswers.liked.length + startAnswers.disliked.length;
     $('start-body').innerHTML = `
-      <p class="ov-lede">This feed is scored against one reader's taste. These questions build yours instead, and it stays in this browser: nothing is sent anywhere and nobody else's copy changes.</p>
-      <p class="ov-sub">Answer what you have an opinion about and skip the rest. Six answers is enough to feel the difference; you can change any of it afterwards on the Profile screen.</p>
+      <p class="ov-lede">Every score in this feed is one reader's taste, not yours. Four steps, about two minutes, and it ranks against you instead.</p>
+      <ol class="start-steps">
+        <li>Pick what you read for. Anything that makes you want to open a book.</li>
+        <li>Pick what puts you off. This one matters as much: with nothing to push against, the feed ranks everything alike.</li>
+        <li>Answer the two questions at the bottom.</li>
+        <li>Tap <strong>Build it</strong>. The feed re-ranks straight away.</li>
+      </ol>
+      <p class="ov-sub">Skip anything you have no opinion about. Nothing here leaves this browser, and every part of it stays editable on the Profile screen afterwards.</p>
 
       <h3 class="ov-h">What do you read for?</h3>
       <p class="ov-help">Pick anything that makes you want to open a book.</p>

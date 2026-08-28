@@ -1123,3 +1123,10 @@ body { overflow-x: clip; }
 .start-chip { font-family: var(--serif); font-size: .9375rem; min-height: 40px; }
 .start-chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 .start-chips + .ov-h { margin-top: var(--s6); }
+
+.start-steps {
+  margin: 0 0 var(--s4); padding-left: var(--s5);
+  max-width: 62ch; line-height: 1.6;
+}
+.start-steps li { margin-bottom: var(--s2); }
+.start-steps li::marker { font-family: var(--mono); font-size: .8125rem; color: var(--ink-faint); }
