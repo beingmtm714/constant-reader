@@ -102,6 +102,31 @@
 </nav>
 </div>
 
+<div class="dock">
+  <div class="menu-panel" id="menu-panel" hidden>
+    <nav class="views" aria-label="Sections">
+      <button class="btn" id="view-feed" aria-current="page">Feed</button>
+      <button class="btn" id="view-saved">Saved books <span class="n" id="savedCount">0</span></button>
+      <button class="btn" id="view-taste">Taste</button>
+      <button class="btn" id="view-profile">Profile <span class="nav-mark" id="profile-mark" hidden aria-hidden="true">•</span></button>
+      <button class="btn" id="view-start">Build your profile</button>
+      <button class="btn" id="theme" aria-label="Switch between light and dark">Theme</button>
+    </nav>
+    <p class="built" id="built"></p>
+    <p class="sub" id="masthead-sub"></p>
+  </div>
+  <button class="to-top" id="to-top" hidden aria-label="Back to the top of the feed">
+  <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8">
+    <path d="M8 13V4M4 7.5 8 3.5l4 4" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+  </button>
+  <button class="dock-btn" id="menu-toggle" aria-label="Sections and settings" aria-expanded="false" aria-controls="menu-panel">
+    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7">
+      <path d="M2 4h12M2 8h12M2 12h12" stroke-linecap="round"/>
+    </svg>
+  </button>
+</div>
+
 <main class="wrap" id="main">
   <div class="tag-bar" id="tag-bar" hidden></div>
   <div class="tally">
@@ -163,30 +188,6 @@
 </footer>
 
 <script type="module" src="app.js"></script>
-<div class="dock">
-  <div class="menu-panel" id="menu-panel" hidden>
-    <nav class="views" aria-label="Sections">
-      <button class="btn" id="view-feed" aria-current="page">Feed</button>
-      <button class="btn" id="view-saved">Saved books <span class="n" id="savedCount">0</span></button>
-      <button class="btn" id="view-taste">Taste</button>
-      <button class="btn" id="view-profile">Profile <span class="nav-mark" id="profile-mark" hidden aria-hidden="true">•</span></button>
-      <button class="btn" id="view-start">Build your profile</button>
-      <button class="btn" id="theme" aria-label="Switch between light and dark">Theme</button>
-    </nav>
-    <p class="built" id="built"></p>
-    <p class="sub" id="masthead-sub"></p>
-  </div>
-  <button class="to-top" id="to-top" hidden aria-label="Back to the top of the feed">
-  <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8">
-    <path d="M8 13V4M4 7.5 8 3.5l4 4" stroke-linecap="round" stroke-linejoin="round"/>
-  </svg>
-  </button>
-  <button class="dock-btn" id="menu-toggle" aria-label="Sections and settings" aria-expanded="false" aria-controls="menu-panel">
-    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7">
-      <path d="M2 4h12M2 8h12M2 12h12" stroke-linecap="round"/>
-    </svg>
-  </button>
-</div>
 
 </body>
 </html>

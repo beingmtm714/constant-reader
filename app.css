@@ -905,8 +905,11 @@ details[open] > .more-toggle::after { content: " ▴"; }
   .masthead h1 { font-size: 1.5rem; }
   .topbar.is-compact .masthead h1 { font-size: 1.125rem; }
   .toolrow { gap: var(--s1); }
-  .btn.tool { min-height: 40px; min-width: 40px; }
-  .topbar.is-compact .btn.tool { min-height: 36px; min-width: 36px; }
+  /* DESIGN.md asks for 44px at phone width and these were measuring 38, which is
+     the one rule in it that is about hands rather than taste. The compact bar
+     keeps them: a control does not stop being tapped because the page scrolled. */
+  .btn.tool { min-height: 44px; min-width: 44px; }
+  .topbar.is-compact .btn.tool { min-height: 44px; min-width: 44px; }
 }
 
 /* ---------------------------------------------------------- two lines, then feed
@@ -1167,10 +1170,37 @@ body { overflow-x: clip; }
 }
 
 @media (max-width: 359px) {
-  .masthead h1 { font-size: .625rem; letter-spacing: .03em; }
+  /* Four 44px targets and their gaps take 188 of 320px, and the name will not
+     fit what is left at any tracking worth setting. So the name steps back to
+     the mark rather than truncating: the mark is the identity, and the h1 still
+     reads "Constant Reader" to a screen reader. Truncating a masthead is worse
+     than showing only its mark. */
+  .wordmark-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .masthead h1 { border: 0; padding: 0; gap: 0; }
+  .mark { width: 1.9em; height: 1.9em; }
 }
 
 /* The copy register the name earns: a column deck. Dry, short, declarative,
    willing to be unkind. "Thin evidence, one review" is right; "this book may not
    be a strong match for your preferences" is not. */
 .caveat-line { font-style: normal; }
+
+/* A control is tapped with a thumb at any scroll position, so the compact bar
+   does not get to shrink the targets below the floor. It shrinks the type and
+   the padding instead. */
+@media (pointer: coarse) {
+  .btn.tool, .dock-btn, .to-top { min-height: 44px; min-width: 44px; }
+  .switch { min-height: 44px; }
+}
+
+/* A closed <details> was still handing its contents to the keyboard.
+
+   Chrome hides a closed details' children with content-visibility rather than
+   display:none, and an explicit display on a child escapes it. The filters panel
+   sets display:flex on its grid, so while the panel measured 0px tall its
+   contents were laid out at 634px and every one of the 158 controls inside was a
+   tab stop. A keyboard user tabbed through 34 publication chips and seven
+   switches that were not on the screen.
+
+   Stated explicitly, for every details in the app rather than only that one. */
+details:not([open]) > *:not(summary) { display: none; }
