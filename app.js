@@ -1544,6 +1544,10 @@ import { CHIPS, buildProfile } from './lib/onboard.mjs';
     $('view-taste').addEventListener('click', () => setView('taste'));
     $('view-profile').addEventListener('click', () => setView('profile'));
     $('view-start').addEventListener('click', () => setView('start'));
+    $('go-home').addEventListener('click', () => {
+      setView('feed');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
     $('fTune').addEventListener('change', (ev) => { state.tune = ev.target.checked; rerender(); });
     $('savedSort').addEventListener('change', (ev) => {
       state.savedSort = ev.target.value;
@@ -1620,7 +1624,7 @@ import { CHIPS, buildProfile } from './lib/onboard.mjs';
     bindTopbar();
     bindTools();
     bindMenu();
-    setView(['saved', 'taste', 'profile', 'start'].includes(state.view) ? state.view : 'feed');
+    setView('feed');
   }
 
   boot();

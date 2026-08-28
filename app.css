@@ -1164,7 +1164,8 @@ body { overflow-x: clip; }
      tracking gives way before the name does: truncating a masthead to
      "CONSTANT RE..." is worse than setting it tight. The drawn mark is wider
      than the diagram it replaced, so it gives a little here too. */
-  .masthead h1 { font-size: .6875rem; letter-spacing: .045em; gap: .32em; }
+  .masthead h1 { font-size: .6875rem; letter-spacing: .045em; }
+  .wordmark button.js-home { gap: .32em; }
   .mark { width: 1.45em; height: 1.45em; }
   .topbar.is-compact .masthead h1 { font-size: .625rem; letter-spacing: .03em; }
 }
@@ -1176,7 +1177,8 @@ body { overflow-x: clip; }
      reads "Constant Reader" to a screen reader. Truncating a masthead is worse
      than showing only its mark. */
   .wordmark-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-  .masthead h1 { border: 0; padding: 0; gap: 0; }
+  .masthead h1 { border: 0; padding: 0; }
+  .wordmark button.js-home { gap: 0; }
   .mark { width: 1.9em; height: 1.9em; }
 }
 
@@ -1204,3 +1206,28 @@ body { overflow-x: clip; }
 
    Stated explicitly, for every details in the app rather than only that one. */
 details:not([open]) > *:not(summary) { display: none; }
+
+/* The masthead is the way home, which is what a masthead is for. It keeps its
+   own type: a button reset is all that changes. */
+.wordmark button.js-home {
+  font: inherit; color: inherit; letter-spacing: inherit; text-transform: inherit;
+  background: none; border: 0; padding: 0; margin: 0;
+  display: flex; align-items: center; gap: .55em;
+  cursor: pointer; min-width: 0; text-align: left;
+}
+.wordmark button.js-home:hover .wordmark-text { color: var(--accent); }
+.wordmark button.js-home:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+/* The weight sits in its own column so the numbers line up down the list rather
+   than starting wherever each dimension's name happens to end. */
+.ov-dim > .more-toggle {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 7rem 1.2em;
+  align-items: center;
+  gap: var(--s3);
+}
+/* Left, so the word "weight" lines up down the column and only the figure
+   varies. Right-aligning them lined up the digits and left the word ragged,
+   which is the wrong half to align when the word is the same every time. */
+.ov-dim > .more-toggle .more-count { margin-left: 0; text-align: left; font-variant-numeric: tabular-nums; }
+.ov-dim > .more-toggle::after { justify-self: end; }
