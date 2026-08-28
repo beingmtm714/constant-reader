@@ -1018,14 +1018,11 @@ body { overflow-x: clip; }
 .controls .field, .controls .group, .controls .chips { min-width: 0; max-width: 100%; }
 .controls .controls-grid { max-width: 100%; }
 
-/* At rest the icons take their own line; scrolled, they join the title. Order
-   does it, so the markup never changes and nothing is re-rendered on scroll. */
-.masthead-row { flex-wrap: wrap; row-gap: var(--s2); }
-.masthead-row h1 { order: 1; }
-.masthead-row .toolrow { order: 3; flex: 1 0 100%; }
-
-.topbar.is-compact .masthead-row { flex-wrap: nowrap; }
-.topbar.is-compact .masthead-row .toolrow { order: 2; flex: 0 1 auto; margin-left: auto; }
+/* The name on the left, the icons hard right, on one line at every width and
+   every scroll position. Scrolling only shrinks what is already there. */
+.masthead-row { flex-wrap: nowrap; }
+.masthead-row h1 { order: 1; min-width: 0; }
+.masthead-row .toolrow { order: 2; flex: 0 0 auto; margin-left: auto; }
 .topbar.is-compact .controls { padding-top: 0; }
 
 /* Back to the top of a feed that is 300 books long. It appears with the compact
@@ -1100,10 +1097,6 @@ body { overflow-x: clip; }
    every scroll position and the bar never has a second row to collapse. The
    panels take the width they need and sit under the icons that opened them. */
 @media (min-width: 761px) {
-  .masthead-row { flex-wrap: nowrap; }
-  .masthead-row .toolrow { order: 2; flex: 0 0 auto; margin-left: auto; }
-
-  /* Nothing left to collapse, so scrolling only trims the padding. */
   .topbar.is-compact .masthead { padding: var(--s2) 0; }
   .topbar.is-compact .masthead h1 { font-size: 1.375rem; }
 
@@ -1115,3 +1108,7 @@ body { overflow-x: clip; }
   .controls .wrap > .toolpanel input[type="search"] { width: 26rem; }
   .controls .wrap > .toolpanel select { width: 16rem; }
 }
+
+/* At 320px the name is the only thing that can give: four icons and their touch
+   targets cannot, so the wordmark truncates rather than shoving them off. */
+.masthead h1 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

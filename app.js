@@ -1226,6 +1226,18 @@ import { rescore, summarize, isEmpty, bandKey, EMPTY as EMPTY_OVERRIDES } from '
   //
   // The threshold is a band rather than a point, so a bar sitting exactly on the
   // line cannot flip back and forth on a one-pixel scroll.
+  // Opening the app should put you at the top of the feed. Browsers restore the
+  // last scroll position on a reload and on a back navigation, which on a
+  // home-screen app means reopening it halfway down yesterday's books with the
+  // bar already collapsed. There are no in-page anchors here for this to fight.
+  function startAtTop() {
+    if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+    window.scrollTo(0, 0);
+    // Safari restores the position after load rather than before it, so once
+    // more on the next frame.
+    requestAnimationFrame(() => window.scrollTo(0, 0));
+  }
+
   function bindTopbar() {
     const bar = document.getElementById('topbar');
     if (!bar) return;
@@ -1524,6 +1536,7 @@ import { rescore, summarize, isEmpty, bandKey, EMPTY as EMPTY_OVERRIDES } from '
     $('masthead-sub').textContent = `${FEED.sources.filter((s) => s.enabled).length} publications, the last ${FEED.windowYears} years, scored out of ten.`;
     $('foot-note').innerHTML = `Everything the literary press reviewed in the last ${FEED.windowYears} years, scored against revision ${FEED.profileRevision} of the reading taste profile. ${FEED.recommendAt} and above is tagged recommended. Scores are a keyword reading of review prose, so treat one as triage rather than as a reading of the book; every dimension shows the terms it fired on, which is what makes a wrong score visible as a wrong score. Saving and passing writes to this browser only. Export it to feed the next revision of the profile.`;
 
+    startAtTop();
     loadPrefs();
     loadOverrides();
     retune();
