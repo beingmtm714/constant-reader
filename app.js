@@ -1214,17 +1214,87 @@ import { rescore, summarize, isEmpty, bandKey, EMPTY as EMPTY_OVERRIDES } from '
   // start closed everywhere now; the bar keeps the search and the sort, which is
   // what actually gets touched. The count in the summary says what is hiding, so
   // a filter left on is never invisible.
-  // The bar knows it has been scrolled past by watching a one-pixel sentinel at
-  // the very top of the document, rather than by listening to every scroll event
-  // and asking the layout where it is. One observer, no work per frame.
+  // A scroll listener rather than an IntersectionObserver on a sentinel, which is
+  // what this was. The observer is the tidier idea and it silently delivered no
+  // callbacks at all in an embedded webview, not even the initial one every
+  // observer is supposed to fire. A collapsing bar that quietly stops collapsing
+  // is worse than a listener, and rAF throttling makes this cost a class toggle
+  // per frame at most.
+  //
+  // The threshold is a band rather than a point, so a bar sitting exactly on the
+  // line cannot flip back and forth on a one-pixel scroll.
   function bindTopbar() {
     const bar = document.getElementById('topbar');
-    const sentinel = document.querySelector('.scroll-sentinel');
-    if (!bar || !sentinel || !('IntersectionObserver' in window)) return;
-    new IntersectionObserver(
-      ([entry]) => bar.classList.toggle('is-compact', !entry.isIntersecting),
-      { threshold: 0 },
-    ).observe(sentinel);
+    if (!bar) return;
+    const ON = 90;
+    const OFF = 60;
+    let ticking = false;
+
+    const apply = () => {
+      ticking = false;
+      const y = window.scrollY;
+      const compact = bar.classList.contains('is-compact');
+      if (!compact && y > ON) bar.classList.add('is-compact');
+      else if (compact && y < OFF) bar.classList.remove('is-compact');
+    };
+
+    const schedule = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(apply);
+    };
+
+    window.addEventListener('scroll', schedule, { passive: true });
+
+    // Belt and braces, because each of these has been seen doing nothing. In one
+    // embedded webview the scroll event never fired at all while window.scrollY
+    // moved from 0 to 1768; in the same view an IntersectionObserver delivered no
+    // callback either, not even the initial one every observer owes you. Either
+    // mechanism alone is a bar that silently stops collapsing, and they both just
+    // call apply(), which is idempotent.
+    if ('IntersectionObserver' in window) {
+      const probe = document.createElement('div');
+      probe.setAttribute('aria-hidden', 'true');
+      probe.style.cssText = 'position:absolute;top:0;left:0;width:1px;height:80px;pointer-events:none;visibility:hidden';
+      document.body.prepend(probe);
+      new IntersectionObserver(schedule, { threshold: [0, 1] }).observe(probe);
+    }
+
+    apply();
+  }
+
+  // The search field puts itself away in the collapsed bar and comes back on a
+  // click. Three ways out, matching the filter panel: the icon again, Escape, and
+  // leaving an empty field. A field with something in it never closes, because a
+  // query still filtering the feed with its box hidden is state you cannot see.
+  function bindSearchToggle() {
+    const bar = document.getElementById('topbar');
+    const btn = document.getElementById('search-toggle');
+    const input = $('q');
+    if (!bar || !btn) return;
+
+    const sync = () => {
+      const on = bar.classList.contains('is-searching');
+      btn.setAttribute('aria-expanded', String(on));
+      $('search-toggle-n').hidden = !input.value;
+    };
+    const open = () => { bar.classList.add('is-searching'); sync(); input.focus(); input.select(); };
+    const close = () => { if (input.value) return; bar.classList.remove('is-searching'); sync(); };
+
+    btn.addEventListener('click', () => (bar.classList.contains('is-searching') ? close() : open()));
+    input.addEventListener('blur', close);
+    input.addEventListener('keydown', (ev) => {
+      if (ev.key !== 'Escape') return;
+      if (input.value) { input.value = ''; input.dispatchEvent(new Event('input')); }
+      bar.classList.remove('is-searching');
+      sync();
+      btn.focus();
+    });
+    // A query typed before the bar collapsed, or restored from a saved
+    // preference, has to arrive with the field already open.
+    input.addEventListener('input', () => { if (input.value) bar.classList.add('is-searching'); sync(); });
+    if (input.value) bar.classList.add('is-searching');
+    sync();
   }
 
   function bindDisclosure() {
@@ -1398,6 +1468,7 @@ import { rescore, summarize, isEmpty, bandKey, EMPTY as EMPTY_OVERRIDES } from '
     bindControls();
     bindDisclosure();
     bindTopbar();
+    bindSearchToggle();
     setView(['saved', 'taste', 'profile'].includes(state.view) ? state.view : 'feed');
   }
 

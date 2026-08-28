@@ -28,7 +28,6 @@
 <body>
 <a class="skip" href="#feed">Skip to the feed</a>
 
-<div class="scroll-sentinel" aria-hidden="true"></div>
 <div class="topbar" id="topbar">
 <header class="masthead">
   <div class="wrap masthead-row">
@@ -53,8 +52,14 @@
 
 <nav class="controls" aria-label="Sorting and filtering">
   <div class="wrap">
+    <button class="btn search-toggle" id="search-toggle" aria-label="Search" aria-expanded="false" aria-controls="q">
+      <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6">
+        <circle cx="7" cy="7" r="4.4"/><path d="M10.4 10.4 14 14" stroke-linecap="round"/>
+      </svg>
+      <span class="search-toggle-n" id="search-toggle-n" hidden aria-hidden="true">1</span>
+    </button>
     <div class="controls-grid">
-      <div class="field">
+      <div class="field field-search">
         <label for="q">Search</label>
         <input type="search" id="q" placeholder="title, author, publisher, critic" autocomplete="off">
       </div>
