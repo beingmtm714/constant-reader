@@ -1353,8 +1353,13 @@ import { rescore, summarize, isEmpty, bandKey, EMPTY as EMPTY_OVERRIDES } from '
       panel.hidden = !open;
       btn.setAttribute('aria-expanded', String(open));
     };
-    btn.addEventListener('click', () => set(panel.hidden));
+    btn.addEventListener('click', (ev) => { ev.stopPropagation(); set(panel.hidden); });
     panel.addEventListener('click', (ev) => { if (ev.target.closest('.btn')) set(false); });
+    document.addEventListener('click', (ev) => {
+      if (panel.hidden) return;
+      if (ev.target.closest('.dock')) return;
+      set(false);
+    });
     document.addEventListener('keydown', (ev) => {
       if (ev.key === 'Escape' && !panel.hidden) { set(false); btn.focus(); }
     });
