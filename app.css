@@ -1006,3 +1006,63 @@ details[open] > .more-toggle::after { content: " ▴"; }
 .topbar.is-compact .btn.tool { min-height: 34px; min-width: 34px; }
 
 .tally { border-bottom: 0; padding: 0 0 var(--s2); margin-bottom: 0; }
+
+/* ---------------------------------------------------------- one line on scroll
+
+   iOS Safari zooms into any form control whose text is under 16px and never
+   zooms back out, which widens the page past the viewport and leaves it
+   scrollable sideways. That is what "opening a menu makes the page bigger" was:
+   not a layout overflow, which measured clean at 375px, but the browser zooming
+   to meet a 13px input. So controls are 16px wherever the pointer is coarse.
+
+   16px is the threshold, not a preference, and applying it only on a coarse
+   pointer keeps the dense mono controls on a desktop where they belong. */
+@media (pointer: coarse) {
+  input[type="search"], select, input[type="number"], .ov-num {
+    font-size: 16px;
+  }
+}
+
+/* And a guard, because a page that scrolls sideways is never right and the
+   causes are many. `clip` rather than `hidden`: hidden makes body a scroll
+   container, which breaks the sticky bar above. */
+body { overflow-x: clip; }
+
+/* Nothing in a panel may set a width the viewport cannot meet. */
+.controls input[type="search"], .controls select { min-width: 0; max-width: 100%; }
+.controls .field, .controls .group, .controls .chips { min-width: 0; max-width: 100%; }
+.controls .controls-grid { max-width: 100%; }
+
+/* At rest the icons take their own line; scrolled, they join the title. Order
+   does it, so the markup never changes and nothing is re-rendered on scroll. */
+.masthead-row { flex-wrap: wrap; row-gap: var(--s2); }
+.masthead-row h1 { order: 1; }
+.masthead-row .toolrow { order: 3; flex: 1 0 100%; }
+.masthead-row #menu-toggle { order: 2; margin-left: auto; }
+
+.topbar.is-compact .masthead-row { flex-wrap: nowrap; }
+.topbar.is-compact .masthead-row .toolrow { order: 2; flex: 0 1 auto; margin-left: auto; }
+.topbar.is-compact .masthead-row #menu-toggle { order: 3; margin-left: var(--s2); }
+.topbar.is-compact .controls { padding-top: 0; }
+
+/* Back to the top of a feed that is 300 books long. It appears with the compact
+   bar, which is the same moment the top stops being one flick away. */
+.to-top {
+  position: fixed; right: var(--s4); bottom: var(--s4); z-index: 20;
+  width: 44px; height: 44px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--ink); color: var(--bg);
+  border: 1px solid var(--ink); box-shadow: var(--shadow-sm);
+  cursor: pointer;
+}
+.to-top[hidden] { display: none; }
+.to-top:hover { background: var(--accent); border-color: var(--accent); }
+.to-top:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+@media (max-width: 760px) {
+  /* The title gives up size first, because four icons and a menu cannot. */
+  .topbar.is-compact .masthead h1 { font-size: 1rem; }
+  .topbar.is-compact .toolrow { gap: 2px; }
+  .topbar.is-compact .btn.tool { min-width: 34px; padding: 0 var(--s1); }
+  .to-top { right: var(--s3); bottom: var(--s3); }
+}

@@ -1233,13 +1233,23 @@ import { rescore, summarize, isEmpty, bandKey, EMPTY as EMPTY_OVERRIDES } from '
     const OFF = 60;
     let ticking = false;
 
+    const top = document.getElementById('to-top');
+
     const apply = () => {
       ticking = false;
       const y = window.scrollY;
       const compact = bar.classList.contains('is-compact');
       if (!compact && y > ON) bar.classList.add('is-compact');
       else if (compact && y < OFF) bar.classList.remove('is-compact');
+      // The way back appears at the same moment the top stops being one flick
+      // away, which is the same threshold the bar collapses on.
+      if (top) top.hidden = y <= ON;
     };
+
+    top?.addEventListener('click', () => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      document.querySelector('h1')?.focus?.();
+    });
 
     const schedule = () => {
       if (ticking) return;

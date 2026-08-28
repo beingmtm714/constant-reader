@@ -32,6 +32,15 @@
 <header class="masthead">
   <div class="wrap masthead-row">
     <h1 class="wordmark"><span class="sr-only">Ruskin</span><span aria-hidden="true"><svg class="wordmark-r" viewBox="0 0 16 16" aria-hidden="true"><rect width="16" height="16" rx="1.6" fill="#7a2b24"/><g fill="#f2ede4"><path d="M3.5 3.1h1.9v9.8H3.5z"/><path d="M5.4 3.1h3.9a2.75 2.75 0 0 1 0 5.5H5.4V6.9h3.7a1.15 1.15 0 0 0 0-2.3H5.4z"/><path d="M7.5 8.6h2.2l2.7 4.3h-2.3z"/></g><rect x="3.5" y="13.6" width="8.9" height="0.75" fill="#c9a24a"/></svg>uskin</span></h1>
+    <div class="toolrow">
+      <button class="btn tool" id="search-toggle" aria-label="Search" aria-expanded="false" aria-controls="panel-search"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="4.4"/><path d="M10.4 10.4 14 14" stroke-linecap="round"/></svg><span class="tool-dot" hidden aria-hidden="true"></span></button>
+      <button class="btn tool" id="order-toggle" aria-label="Order" aria-expanded="false" aria-controls="panel-order"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 4.5h9M2 8h6M2 11.5h3" stroke-linecap="round"/><path d="M12.5 5.5v7M10.5 10.5l2 2 2-2" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="tool-dot" hidden aria-hidden="true"></span></button>
+      <button class="btn tool" id="filters-toggle" aria-label="Filters" aria-expanded="false" aria-controls="more"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 4h12M4.5 8h7M6.5 12h3" stroke-linecap="round"/></svg><span class="tool-dot" hidden aria-hidden="true"></span></button>
+      <button class="btn tool tool-rec" id="recToggle" aria-pressed="false" aria-label="Show only recommended">
+        <span class="rec-star" aria-hidden="true">★</span><span class="tool-n" id="recCount">0</span>
+      </button>
+    </div>
+
     <button class="btn tool" id="menu-toggle" aria-label="Menu" aria-expanded="false" aria-controls="menu-panel"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 4h12M2 8h12M2 12h12" stroke-linecap="round"/></svg><span class="tool-dot" hidden aria-hidden="true"></span></button>
   </div>
 </header>
@@ -52,15 +61,6 @@
 
 <nav class="controls" aria-label="Sorting and filtering">
   <div class="wrap">
-    <div class="toolrow">
-      <button class="btn tool" id="search-toggle" aria-label="Search" aria-expanded="false" aria-controls="panel-search"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="4.4"/><path d="M10.4 10.4 14 14" stroke-linecap="round"/></svg><span class="tool-dot" hidden aria-hidden="true"></span></button>
-      <button class="btn tool" id="order-toggle" aria-label="Order" aria-expanded="false" aria-controls="panel-order"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 4.5h9M2 8h6M2 11.5h3" stroke-linecap="round"/><path d="M12.5 5.5v7M10.5 10.5l2 2 2-2" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="tool-dot" hidden aria-hidden="true"></span></button>
-      <button class="btn tool" id="filters-toggle" aria-label="Filters" aria-expanded="false" aria-controls="more"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 4h12M4.5 8h7M6.5 12h3" stroke-linecap="round"/></svg><span class="tool-dot" hidden aria-hidden="true"></span></button>
-      <button class="btn tool tool-rec" id="recToggle" aria-pressed="false" aria-label="Show only recommended">
-        <span class="rec-star" aria-hidden="true">★</span><span class="tool-n" id="recCount">0</span>
-      </button>
-    </div>
-
     <div class="field field-search toolpanel" id="panel-search" hidden>
       <label class="sr-only" for="q">Search</label>
       <input type="search" id="q" placeholder="title, author, publisher, critic" autocomplete="off">
@@ -170,5 +170,11 @@
 </footer>
 
 <script type="module" src="app.js"></script>
+<button class="to-top" id="to-top" hidden aria-label="Back to the top of the feed">
+  <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8">
+    <path d="M8 13V4M4 7.5 8 3.5l4 4" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+</button>
+
 </body>
 </html>
