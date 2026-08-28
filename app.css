@@ -1137,8 +1137,15 @@ body { overflow-x: clip; }
 .wordmark-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Sized in em so it tracks the heading rather than being set against it. */
-.mark { display: block; flex: 0 0 auto; line-height: 0; color: var(--ink); }
+.mark { display: block; flex: 0 0 auto; line-height: 0; }
 .mark svg { width: 1.6em; height: 1.6em; display: block; }
+
+/* Three tokens, each doing the job it does everywhere else. The circle is a
+   rule, and rules are brass. The book is ink. The ruffled page edges take the
+   single red note, which is the only ornament the system allows itself. */
+.m-rule { stroke: var(--brass); }
+.m-ink { stroke: var(--ink); }
+.m-edge { stroke: var(--accent); }
 
 .topbar.is-compact .masthead h1 { font-size: .9375rem; letter-spacing: .14em; border-top-width: 2px; }
 
