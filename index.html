@@ -165,9 +165,19 @@
 
   <section class="section" id="all-section" hidden>
     <h2 id="all" class="sr-only">Every book</h2>
-    <div class="viewswitch" role="group" aria-label="How to show every book">
-      <button class="btn" id="all-as-shelves" aria-pressed="true">Collections</button>
-      <button class="btn" id="all-as-list" aria-pressed="false">List</button>
+    <div class="allbar">
+      <div class="viewswitch" role="group" aria-label="How to show these books">
+        <button class="btn" id="all-as-shelves" aria-pressed="true">Collections</button>
+        <button class="btn" id="all-as-list" aria-pressed="false">List</button>
+      </div>
+      <!-- Which books, as distinct from how they are shown. A reader who wants the
+           ones the profile has not read needs somewhere to click, not a filter to
+           construct. -->
+      <div class="viewswitch" role="group" aria-label="Which books">
+        <button class="btn" id="all-any" data-scope="any" aria-pressed="true">Everything <span class="n" id="n-any"></span></button>
+        <button class="btn" id="all-reviewed" data-scope="reviewed" aria-pressed="false">Reviewed <span class="n" id="n-reviewed"></span></button>
+        <button class="btn" id="all-awaiting" data-scope="awaiting" aria-pressed="false">Awaiting a review <span class="n" id="n-awaiting"></span></button>
+      </div>
     </div>
     <p class="note" id="all-note"></p>
     <div id="all-shelves"></div>

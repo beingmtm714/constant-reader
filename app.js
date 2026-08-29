@@ -70,7 +70,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
     minPages: null, minScore: null, sources: new Set(), tag: null,
     window: true, nonfiction: false, identity: false, penalised: false,
     recommendedOnly: false, group: false, unseen: false,
-    view: 'shelves', allMode: 'shelves', savedSort: 'recent', tune: true,
+    view: 'shelves', allMode: 'shelves', allScope: 'any', savedSort: 'recent', tune: true,
   };
 
   // Rebuilt whenever the verdicts change, which is what makes a save feel like
@@ -449,8 +449,13 @@ import { cleanBlurb } from './lib/blurb.mjs';
     // about does not belong in it - it was 474 rows of "nothing to score" pushing
     // scored books down the page. Those books are not thrown away: All books
     // carries every one of them, described rather than judged.
-    if (state.view !== 'all'
-        && (e.listedOnly || e.score.band === 'unscored' || e.score.band === 'unresolved')) return false;
+    const unscored = e.listedOnly || e.score.band === 'unscored' || e.score.band === 'unresolved';
+    // My feed and Collections are the profile's opinion, so a book it cannot score
+    // is not in either. Seeing those rows in a feed of recommendations is what made
+    // the recommender look like it was not working: 474 of 770 rows saying nothing.
+    if (state.view !== 'all' && unscored) return false;
+    if (state.view === 'all' && state.allScope === 'reviewed' && unscored) return false;
+    if (state.view === 'all' && state.allScope === 'awaiting' && !unscored) return false;
     if (state.recommendedOnly && !recommendedNow(e, scoreOf(e))) return false;
     if (state.identity && !identified(e)) return false;
     if (state.nonfiction && e.fiction === 'nonfiction') return false;
@@ -1306,8 +1311,12 @@ import { cleanBlurb } from './lib/blurb.mjs';
   function cardHtml(entry) {
     const s = scoreOf(entry);
     const b = entry.book;
-    const num = entry.listedOnly ? '' : `<span class="card-score">${outOfTen(s.total).toFixed(1)}</span>`;
-    const note = entry.listedOnly ? `<span class="card-unscored">listed</span>` : '';
+    // The same test the lists use. `listedOnly` alone missed the books that do have
+    // a review behind them but scored nothing from it, so a handful of cards on
+    // "Awaiting a review" were showing a number for a book with no score.
+    const noScore = entry.listedOnly || entry.score?.band === 'unscored' || entry.score?.band === 'unresolved';
+    const num = noScore ? '' : `<span class="card-score">${outOfTen(s.total).toFixed(1)}</span>`;
+    const note = noScore ? `<span class="card-unscored">not scored</span>` : '';
     return `<div class="card" data-band="${esc(entry.score?.band || '')}">
       <button class="card-btn" data-card="${esc(entry.id)}" aria-label="${esc(b.title)}${b.author ? `, ${b.author}` : ''} — open in the feed">
         ${jacketHtml(entry)}
@@ -1324,8 +1333,16 @@ import { cleanBlurb } from './lib/blurb.mjs';
   function renderAllShelves() {
     const weights = {};
     for (const d of FEED.dimensions || []) weights[d.id] = overrides.weights?.[d.id] ?? d.weight;
-    const shelves = buildShelves(FEED.books, { weights }, { only: 'all' });
-    $('all-note').textContent = `Every book the crawl found, ${FEED.books.length} of them, grouped by what they are rather than by what your profile makes of them.`;
+    const isUnscored = (e) => e.listedOnly || e.score.band === 'unscored' || e.score.band === 'unresolved';
+    const scope = state.allScope || 'any';
+    const pool = FEED.books.filter((e) => (scope === 'reviewed' ? !isUnscored(e)
+      : scope === 'awaiting' ? isUnscored(e) : true));
+    const shelves = buildShelves(pool, { weights }, { only: 'all' });
+    $('all-note').textContent = scope === 'awaiting'
+      ? `${pool.length} books the catalogue and the interview feeds know about, that no critic here has reviewed yet. Nothing is scored, because there is nothing to read. Grouped by what they are.`
+      : scope === 'reviewed'
+        ? `${pool.length} books with a review behind them, grouped by what they are rather than by what your profile makes of them.`
+        : `Every book the crawl found, ${pool.length} of them, grouped by what they are rather than by what your profile makes of them.`;
     drawShelves($('all-shelves'), shelves);
   }
 
@@ -1465,11 +1482,26 @@ import { cleanBlurb } from './lib/blurb.mjs';
       document.querySelector('.controls').hidden = asShelves;
       $('all-as-shelves').setAttribute('aria-pressed', String(asShelves));
       $('all-as-list').setAttribute('aria-pressed', String(!asShelves));
+
+      const isUnscored = (e) => e.listedOnly || e.score.band === 'unscored' || e.score.band === 'unresolved';
+      const awaiting = FEED.books.filter(isUnscored).length;
+      $('n-any').textContent = FEED.books.length;
+      $('n-reviewed').textContent = FEED.books.length - awaiting;
+      $('n-awaiting').textContent = awaiting;
+      for (const b of document.querySelectorAll('.allbar [data-scope]')) {
+        b.setAttribute('aria-pressed', String(b.dataset.scope === (state.allScope || 'any')));
+      }
       if (asShelves) { renderAllShelves(); return; }
     }
     const body = inAll ? $('all-body') : $('feed-body');
     if (inAll) {
-      $('all-note').textContent = `Every book the crawl found, described rather than scored. ${FEED.books.filter((e) => e.listedOnly).length} of these have no review behind them yet, so your profile has nothing to read on. Tap any tag to see the rest of its kind.`;
+      const scope = state.allScope || 'any';
+      const nAwaiting = FEED.books.filter((e) => e.listedOnly || e.score.band === 'unscored' || e.score.band === 'unresolved').length;
+      $('all-note').textContent = scope === 'awaiting'
+        ? `${nAwaiting} books nobody here has reviewed yet. They are described rather than scored, because your profile has nothing to read on. Tap any tag to see the rest of its kind.`
+        : scope === 'reviewed'
+          ? `${FEED.books.length - nAwaiting} books with a review behind them. Tap any tag to see the rest of its kind.`
+          : `Every book the crawl found. ${nAwaiting} of the ${FEED.books.length} have no review behind them yet, so your profile has nothing to read on. Tap any tag to see the rest of its kind.`;
     }
     if (!shown.length) {
       body.innerHTML = `<div class="panel">
@@ -2016,9 +2048,12 @@ import { cleanBlurb } from './lib/blurb.mjs';
     }
     $('view-shelves').addEventListener('click', () => setView('shelves'));
     $('view-all').addEventListener('click', () => setView('all'));
-    $('to-all')?.addEventListener('click', () => { state.allMode = 'shelves'; setView('all'); });
+    $('to-all')?.addEventListener('click', () => { state.allMode = 'shelves'; state.allScope = 'any'; setView('all'); });
     $('all-as-shelves')?.addEventListener('click', () => { state.allMode = 'shelves'; savePrefs(); render(); });
     $('all-as-list')?.addEventListener('click', () => { state.allMode = 'list'; savePrefs(); render(); });
+    for (const b of document.querySelectorAll('.allbar [data-scope]')) {
+      b.addEventListener('click', () => { state.allScope = b.dataset.scope; savePrefs(); render(); });
+    }
     $('view-saved').addEventListener('click', () => setView('saved'));
     $('view-taste').addEventListener('click', () => setView('taste'));
     $('view-profile').addEventListener('click', () => setView('profile'));
