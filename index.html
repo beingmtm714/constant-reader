@@ -34,7 +34,8 @@
     <h1 class="wordmark"><button class="js-home" id="go-home" aria-label="Constant Reader — back to the feed"><span class="mark" aria-hidden="true"></span><span class="wordmark-text">Constant Reader</span></button></h1>
     <nav class="desknav" id="desknav" aria-label="Sections">
       <button class="btn" data-view="shelves">Collections</button>
-      <button class="btn" data-view="feed">Feed</button>
+      <button class="btn" data-view="feed">My feed</button>
+      <button class="btn" data-view="all">All books</button>
       <button class="btn" data-view="saved">Saved <span class="n" id="deskSaved">0</span></button>
       <button class="btn" data-view="taste">Taste</button>
       <button class="btn" data-view="profile">Profile <span class="nav-mark" id="deskProfileMark" hidden aria-hidden="true">•</span></button>
@@ -122,7 +123,8 @@
   <div class="menu-panel" id="menu-panel" hidden>
     <nav class="views" aria-label="Sections">
       <button class="btn" id="view-shelves">Collections</button>
-      <button class="btn" id="view-feed" aria-current="page">Feed</button>
+      <button class="btn" id="view-feed" aria-current="page">My feed</button>
+      <button class="btn" id="view-all">All books</button>
       <button class="btn" id="view-saved">Saved books <span class="n" id="savedCount">0</span></button>
       <button class="btn" id="view-taste">Taste</button>
       <button class="btn" id="view-profile">Profile <span class="nav-mark" id="profile-mark" hidden aria-hidden="true">•</span></button>
@@ -155,6 +157,21 @@
     <h2 id="shelves" class="sr-only">Collections drawn from your profile</h2>
     <p class="note" id="shelves-note"></p>
     <div id="shelves-body"></div>
+    <div class="shelf-cta">
+      <p>These are drawn from books your profile can read. The archive is larger.</p>
+      <button class="btn btn-lead" id="to-all">See all <span id="to-all-n"></span> books</button>
+    </div>
+  </section>
+
+  <section class="section" id="all-section" hidden>
+    <h2 id="all" class="sr-only">Every book</h2>
+    <div class="viewswitch" role="group" aria-label="How to show every book">
+      <button class="btn" id="all-as-shelves" aria-pressed="true">Collections</button>
+      <button class="btn" id="all-as-list" aria-pressed="false">List</button>
+    </div>
+    <p class="note" id="all-note"></p>
+    <div id="all-shelves"></div>
+    <div id="all-body"></div>
   </section>
 
   <section class="section" id="feed-section">

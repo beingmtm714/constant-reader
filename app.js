@@ -9,6 +9,7 @@ import { CHIPS, READS, chipsFor, buildProfile } from './lib/onboard.mjs';
 import * as sync from './lib/sync.mjs';
 import { buildShelves } from './lib/shelves.mjs';
 import { jacketFor } from './lib/jacket.mjs';
+import { cleanBlurb } from './lib/blurb.mjs';
 
 (() => {
   'use strict';
@@ -69,7 +70,7 @@ import { jacketFor } from './lib/jacket.mjs';
     minPages: null, minScore: null, sources: new Set(), tag: null,
     window: true, nonfiction: false, identity: false, penalised: false,
     recommendedOnly: false, group: false, unseen: false,
-    view: 'shelves', savedSort: 'recent', tune: true,
+    view: 'shelves', allMode: 'shelves', savedSort: 'recent', tune: true,
   };
 
   // Rebuilt whenever the verdicts change, which is what makes a save feel like
@@ -444,6 +445,12 @@ import { jacketFor } from './lib/jacket.mjs';
     // books the catalogue calls nonfiction.
     if (!e.book.title) return false;
     if (state.penalised && !e.score.filters.length) return false;
+    // The feed is the profile's opinion, so a book the profile has no opinion
+    // about does not belong in it - it was 474 rows of "nothing to score" pushing
+    // scored books down the page. Those books are not thrown away: All books
+    // carries every one of them, described rather than judged.
+    if (state.view !== 'all'
+        && (e.listedOnly || e.score.band === 'unscored' || e.score.band === 'unresolved')) return false;
     if (state.recommendedOnly && !recommendedNow(e, scoreOf(e))) return false;
     if (state.identity && !identified(e)) return false;
     if (state.nonfiction && e.fiction === 'nonfiction') return false;
@@ -502,6 +509,40 @@ import { jacketFor } from './lib/jacket.mjs';
   // the profile's amendment on warm endings turns on the note being visible —
   // three points, flagged on the row rather than buried, is the whole point of
   // that tier. Burying it here would reverse a decision the profile records.
+  // What an unscored book says about itself.
+  //
+  // It used to say "Nothing in this review spoke to any dimension of the profile,
+  // so it carries no score" - which frames a book as having failed an examination
+  // it was never entered for. Most of these are catalogue and interview entries
+  // with no review behind them: there is nothing to read, so there is nothing to
+  // score, and that is a fact about our evidence rather than about the book.
+  //
+  // So the row says what the book is instead. The describing tags are the same
+  // vocabulary the profile uses, which is the point - a reader can see where a
+  // book sits without a number being invented to rank it.
+  const DESCRIBING = new Set(['period', 'subject', 'form', 'prose', 'tone', 'scale', 'genre']);
+
+  function unscoredLine(e) {
+    if (e.score.band === 'unresolved') {
+      return `<p class="risk">${esc('No book identified in this review.')}</p>`;
+    }
+    // Scale on its own is not a character. "A mid-length book" is a page count
+    // wearing a sentence, and it was the only thing 100-odd of these rows had to
+    // say - so the clause appears only when something describes the book rather
+    // than measures it, and scale joins in when it has company.
+    const describing = (e.tags || []).filter((t) => DESCRIBING.has(t.kind));
+    const words = describing.some((t) => t.kind !== 'scale')
+      ? describing.map((t) => t.label)
+      : [];
+    const why = e.listedOnly
+      ? 'Listed, not reviewed — no critic has written about it yet, so there is nothing to score.'
+      : 'Not scored: the reviews say nothing your profile reads on.';
+    // "A migration & exile, short book." is a list wearing a sentence. The tags are
+    // a set, so they are named as one.
+    return `<p class="unscored">${esc(why)}${words.length
+      ? ` <span class="unscored-is">${esc(`Tagged ${words.join(' · ')}.`)}</span>` : ''}</p>`;
+  }
+
   function caveatLine(e) {
     const out = [];
     if (!identified(e)) out.push('book unverified');
@@ -532,7 +573,11 @@ import { jacketFor } from './lib/jacket.mjs';
   // model exactly as the README says it is.
   function describeBook(e) {
     const m = e.mentions.find((x) => (x.standfirst || '').trim()) || e.mentions.find((x) => (x.excerpt || '').trim());
-    const text = (m?.standfirst || m?.excerpt || '').trim();
+    // Cleaned rather than rewritten: the sentence is still the publication's, with
+    // the parts about the podcast rather than about the book taken off. See
+    // lib/blurb.mjs - a third of this archive comes from a podcast feed whose notes
+    // open by restating the citation the row has already printed.
+    const text = cleanBlurb(m?.standfirst || m?.excerpt || '', { title: e.book.title, author: e.book.author });
     if (!text) return '';
     let cut = text.length > 320 ? `${text.slice(0, 320).replace(/\s+\S*$/, '')}…` : text;
     // Several feeds publish a teaser cut mid-word - PW's stop dead at 128
@@ -573,6 +618,19 @@ import { jacketFor } from './lib/jacket.mjs';
   const chipTags = (e) => (e.tags || []).filter((t) => CHIP_KINDS.has(t.kind));
   const restTags = (e) => (e.tags || []).filter((t) => !CHIP_KINDS.has(t.kind));
 
+  // The tags the row shows, and every one of them is a way into the rest of the
+  // archive. DESIGN.md always said a row carries the tags that describe the book;
+  // they were only ever drawn inside the expanded detail, so finding another
+  // gothic novel meant opening a book you had already decided against. The seven
+  // dimension kinds plus genre describe the book; imprint, caveat and our own
+  // bookkeeping do not, and stay in the detail under "Also tagged".
+  function rowTags(e) {
+    const tags = (e.tags || []).filter((t) => DESCRIBING.has(t.kind)).slice(0, 6);
+    if (!tags.length) return '';
+    return `<div class="tags row-tags">${tags.map((t) =>
+      `<button class="tag-chip k-${esc(t.kind)}" data-tag="${esc(t.id)}"${t.id === state.tag ? ' aria-pressed="true"' : ''} title="Show every book tagged ${esc(t.label)}">${esc(t.label)}</button>`).join('')}</div>`;
+  }
+
   function row(e) {
     const b = e.book;
     const v = saved.verdictOf(verdicts, e.id);
@@ -596,9 +654,8 @@ import { jacketFor } from './lib/jacket.mjs';
         ${s.tuned && !isUnresolved ? tuneLine(s) : ''}
         ${describeBook(e)}
 
-        ${isUnresolved ? `<p class="risk">${e.score.band === 'unresolved'
-          ? 'No book identified in this review, so it carries no score.'
-          : 'Nothing in this review spoke to any dimension of the profile, so it carries no score.'}</p>` : ''}
+        ${isUnresolved ? unscoredLine(e) : ''}
+        ${rowTags(e)}
         ${caveatLine(e)}
         <div class="row-links">
           <button class="btn js-why" aria-expanded="false" aria-controls="d-${cssId(e.id)}">Why this score</button>
@@ -1168,6 +1225,7 @@ import { jacketFor } from './lib/jacket.mjs';
     savePrefs();
     $('shelves-section').hidden = view !== 'shelves';
     $('feed-section').hidden = view !== 'feed';
+    $('all-section').hidden = view !== 'all';
     $('saved-section').hidden = view !== 'saved';
     $('taste-section').hidden = view !== 'taste';
     $('profile-section').hidden = view !== 'profile';
@@ -1175,10 +1233,14 @@ import { jacketFor } from './lib/jacket.mjs';
     // The control bar sorts and filters the feed and means nothing on the saved
     // list, so it goes away rather than sitting there inert. Same for the
     // recommended tally and any tag filter still applied to the feed.
-    document.querySelector('.controls').hidden = view !== 'feed';
+    // The control bar sorts and filters a list of books, and All books is one,
+    // so it belongs to both. Only the recommended tally is feed-only: nothing on
+    // All books is recommended, because nothing on it is scored.
+    const listView = view === 'feed' || view === 'all';
+    document.querySelector('.controls').hidden = !listView;
     document.querySelector('.tally').hidden = view !== 'feed';
-    if (view !== 'feed') $('tag-bar').hidden = true;
-    for (const [id, name] of [['view-shelves', 'shelves'], ['view-feed', 'feed'], ['view-saved', 'saved'], ['view-taste', 'taste'], ['view-profile', 'profile'], ['view-start', 'start']]) {
+    if (!listView) $('tag-bar').hidden = true;
+    for (const [id, name] of [['view-shelves', 'shelves'], ['view-feed', 'feed'], ['view-all', 'all'], ['view-saved', 'saved'], ['view-taste', 'taste'], ['view-profile', 'profile'], ['view-start', 'start']]) {
       if (view === name) $(id).setAttribute('aria-current', 'page');
       else $(id).removeAttribute('aria-current');
     }
@@ -1256,6 +1318,17 @@ import { jacketFor } from './lib/jacket.mjs';
     </div>`;
   }
 
+  // The same shelves over the whole archive rather than over the reader's own
+  // slice of it. Every book here is described and none is scored, so the shelves
+  // are a way to browse past a profile rather than only inside one.
+  function renderAllShelves() {
+    const weights = {};
+    for (const d of FEED.dimensions || []) weights[d.id] = overrides.weights?.[d.id] ?? d.weight;
+    const shelves = buildShelves(FEED.books, { weights }, { only: 'all' });
+    $('all-note').textContent = `Every book the crawl found, ${FEED.books.length} of them, grouped by what they are rather than by what your profile makes of them.`;
+    drawShelves($('all-shelves'), shelves);
+  }
+
   function renderShelves() {
     const body = $('shelves-body');
     // The build's weights with this reader's re-weightings applied, which is what
@@ -1263,6 +1336,8 @@ import { jacketFor } from './lib/jacket.mjs';
     const weights = {};
     for (const d of FEED.dimensions || []) weights[d.id] = overrides.weights?.[d.id] ?? d.weight;
     const shelves = buildShelves(FEED.books, { weights });
+    const n = FEED.books.length;
+    if ($('to-all-n')) $('to-all-n').textContent = String(n);
     $('shelves-note').textContent = shelves.length
       ? `Drawn from the dimensions your profile weights most heavily. Tap a book to open it in the feed.`
       : '';
@@ -1271,6 +1346,12 @@ import { jacketFor } from './lib/jacket.mjs';
       $('shelves-to-feed')?.addEventListener('click', () => setView('feed'));
       return;
     }
+    drawShelves(body, shelves);
+  }
+
+  // Drawing a set of shelves, wherever they came from. Collections and All books
+  // are the same component over two different archives.
+  function drawShelves(body, shelves) {
     body.innerHTML = shelves.map((sh) => `<section class="shelf" aria-labelledby="sh-${esc(sh.id)}">
       <div class="shelf-head">
         <div>
@@ -1282,9 +1363,10 @@ import { jacketFor } from './lib/jacket.mjs';
       <div class="shelf-track">${sh.books.map(cardHtml).join('')}</div>
     </section>`).join('');
 
-    // A card is a way into the feed, not a second detail view. Tapping one goes
-    // to the row it stands for and opens it, so there is exactly one place a book
-    // is read and the shelf is only ever an index.
+    // A card is a way into a list, not a second detail view. Tapping one goes to
+    // the row it stands for and opens it, so there is exactly one place a book is
+    // read and the shelf is only ever an index. A book the profile cannot score
+    // has no row in My feed, so it opens in All books instead.
     bindJacketFallback(body, new Map(FEED.books.map((e) => [e.id, e])));
 
     for (const btn of body.querySelectorAll('[data-card]')) {
@@ -1297,7 +1379,11 @@ import { jacketFor } from './lib/jacket.mjs';
         // rows with nothing open. The card opens the working as well as scrolling
         // to it, because a reader who tapped a jacket wants the reason it was on
         // that shelf. `openRow` is left alone: it holds a button element, never an id.
-        setView('feed');
+        const entry = FEED.books.find((e) => e.id === id);
+        const scorable = entry && !entry.listedOnly
+          && entry.score?.band !== 'unscored' && entry.score?.band !== 'unresolved';
+        if (!scorable) state.allMode = 'list';
+        setView(scorable ? 'feed' : 'all');
         const row = document.querySelector(`.row[data-id="${CSS.escape(id)}"]`);
         if (!row) return;
         row.scrollIntoView({ block: 'center', behavior: 'auto' });
@@ -1367,7 +1453,24 @@ import { jacketFor } from './lib/jacket.mjs';
     $('recCount').textContent = recCount;
     $('recToggle').setAttribute('aria-pressed', String(state.recommendedOnly));
 
-    const body = $('feed-body');
+    // Feed and All books are one list drawn twice. The only differences are which
+    // books are in it - the filter above - and which container it lands in, so the
+    // renderer is shared rather than copied. A second copy would be a second place
+    // for a row to go wrong.
+    const inAll = state.view === 'all';
+    if (inAll) {
+      const asShelves = state.allMode !== 'list';
+      $('all-shelves').hidden = !asShelves;
+      $('all-body').hidden = asShelves;
+      document.querySelector('.controls').hidden = asShelves;
+      $('all-as-shelves').setAttribute('aria-pressed', String(asShelves));
+      $('all-as-list').setAttribute('aria-pressed', String(!asShelves));
+      if (asShelves) { renderAllShelves(); return; }
+    }
+    const body = inAll ? $('all-body') : $('feed-body');
+    if (inAll) {
+      $('all-note').textContent = `Every book the crawl found, described rather than scored. ${FEED.books.filter((e) => e.listedOnly).length} of these have no review behind them yet, so your profile has nothing to read on. Tap any tag to see the rest of its kind.`;
+    }
     if (!shown.length) {
       body.innerHTML = `<div class="panel">
         <h2>${state.recommendedOnly ? 'Nothing is recommended right now' : 'Nothing matches'}</h2>
@@ -1420,7 +1523,7 @@ import { jacketFor } from './lib/jacket.mjs';
 
     // How fresh it is, and that it grows, which is the other half of "236 of
     // what". Kept apart from the count so the count stays scannable.
-    const note = $('feed-note');
+    const note = inAll ? null : $('feed-note');
     if (note) {
       const built = FEED.builtAt ? relative(FEED.builtAt) : null;
       const standing = `Every book the literary press reviewed, published in the last ${FEED.windowYears} years, that the catalogue can confirm is a book. Rebuilt every morning${built ? `, last ${built}` : ''}.`;
@@ -1500,7 +1603,7 @@ import { jacketFor } from './lib/jacket.mjs';
         setVerdict(btn.closest('.row').dataset.id, btn.dataset.verdict);
       });
     }
-    bindSaveAndFind($('feed-body'));
+    bindSaveAndFind(state.view === 'all' ? $('all-body') : $('feed-body'));
   }
 
   // Shared by both screens: the same save control and the same chooser appear on
@@ -1912,6 +2015,10 @@ import { jacketFor } from './lib/jacket.mjs';
       b.addEventListener('click', () => setView(b.dataset.view));
     }
     $('view-shelves').addEventListener('click', () => setView('shelves'));
+    $('view-all').addEventListener('click', () => setView('all'));
+    $('to-all')?.addEventListener('click', () => { state.allMode = 'shelves'; setView('all'); });
+    $('all-as-shelves')?.addEventListener('click', () => { state.allMode = 'shelves'; savePrefs(); render(); });
+    $('all-as-list')?.addEventListener('click', () => { state.allMode = 'list'; savePrefs(); render(); });
     $('view-saved').addEventListener('click', () => setView('saved'));
     $('view-taste').addEventListener('click', () => setView('taste'));
     $('view-profile').addEventListener('click', () => setView('profile'));

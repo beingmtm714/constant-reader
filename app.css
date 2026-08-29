@@ -1508,3 +1508,33 @@ details:not([open]) > *:not(summary) { display: none; }
   /* Done belongs to the phone sheet; on a desktop the panel is just open. */
   #more .more-done { display: none; }
 }
+
+/* An unscored book is not a warning. It used to share `.risk` with genuine
+   problems, in the same amber, which said "something is wrong here" about a book
+   whose only fault is that nobody has reviewed it yet. It is muted metadata, and
+   the clause naming what the book is carries the accent instead — that is the
+   useful half of the line. */
+.unscored { font-family: var(--mono); font-size: .8125rem; color: var(--ink-faint); margin: var(--s2) 0 0; line-height: 1.5; }
+.unscored-is { color: var(--accent); }
+
+/* Tags on the row. They were only ever in the expanded detail, so finding another
+   gothic novel meant opening a book you had already decided against. Every one is
+   a way into the rest of the archive, in the feed and in All books alike. */
+.row-tags { margin: var(--s2) 0 0; gap: var(--s2); }
+.row-tags .tag-chip { font-size: .6875rem; padding: 3px var(--s2); }
+.row-tags .tag-chip[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+
+/* The way out of your own collections and into the archive. It sits at the end of
+   the shelves rather than in the navigation, because it answers a question a
+   reader only has once they have scrolled the shelves and want more. */
+.shelf-cta { border-top: 3px solid var(--brass); border-bottom: 1px solid var(--brass); padding: var(--s5) 0; margin-top: var(--s6); text-align: center; }
+.shelf-cta p { font-family: var(--mono); font-size: .8125rem; color: var(--ink-faint); margin: 0 0 var(--s3); }
+.btn-lead { background: var(--ink); color: var(--surface); border-color: var(--ink); font-size: .8125rem; padding: var(--s3) var(--s5); }
+.btn-lead:hover { background: var(--accent); border-color: var(--accent); }
+
+/* Collections or list, for All books. Two states of one thing, so they sit in one
+   group rather than being two separate controls. */
+.viewswitch { display: flex; gap: 0; margin: 0 0 var(--s4); }
+.viewswitch .btn { border-radius: 0; }
+.viewswitch .btn + .btn { border-left: 0; }
+.viewswitch .btn[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
