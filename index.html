@@ -32,12 +32,28 @@
 <header class="masthead">
   <div class="wrap masthead-row">
     <h1 class="wordmark"><button class="js-home" id="go-home" aria-label="Constant Reader — back to the feed"><span class="mark" aria-hidden="true"></span><span class="wordmark-text">Constant Reader</span></button></h1>
+    <nav class="desknav" id="desknav" aria-label="Sections">
+      <button class="btn" data-view="shelves">Collections</button>
+      <button class="btn" data-view="feed">Feed</button>
+      <button class="btn" data-view="saved">Saved <span class="n" id="deskSaved">0</span></button>
+      <button class="btn" data-view="taste">Taste</button>
+      <button class="btn" data-view="profile">Profile <span class="nav-mark" id="deskProfileMark" hidden aria-hidden="true">•</span></button>
+    </nav>
     <div class="toolrow">
       <button class="btn tool" id="search-toggle" aria-label="Search" aria-expanded="false" aria-controls="panel-search"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="4.4"/><path d="M10.4 10.4 14 14" stroke-linecap="round"/></svg><span class="tool-dot" hidden aria-hidden="true"></span></button>
       <button class="btn tool" id="order-toggle" aria-label="Order" aria-expanded="false" aria-controls="panel-order"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 4.5h9M2 8h6M2 11.5h3" stroke-linecap="round"/><path d="M12.5 5.5v7M10.5 10.5l2 2 2-2" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="tool-dot" hidden aria-hidden="true"></span></button>
       <button class="btn tool" id="filters-toggle" aria-label="Filters" aria-expanded="false" aria-controls="more"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 4h12M4.5 8h7M6.5 12h3" stroke-linecap="round"/></svg><span class="tool-dot" hidden aria-hidden="true"></span></button>
       <button class="btn tool tool-rec" id="recToggle" aria-pressed="false" aria-label="Show only recommended">
         <span class="rec-star" aria-hidden="true">★</span><span class="tool-n" id="recCount">0</span>
+      </button>
+      <!-- The account. Signed out it says so and signs you in; signed in it is your
+           monogram and opens the menu, where your name and Sign out are. It is in
+           the bar rather than only in the menu because whether your books are
+           syncing is state you should be able to see without opening anything. -->
+      <button class="btn tool tool-account" id="account" aria-label="Sign in">
+        <span class="account-mono" id="account-mono" aria-hidden="true"></span>
+        <span class="account-word" id="account-word">Sign in</span>
+        <span class="account-warn" id="account-warn" hidden aria-hidden="true"></span>
       </button>
     </div>
 
@@ -116,7 +132,6 @@
     </nav>
     <p class="sub" id="auth-note" hidden></p>
     <p class="built" id="built"></p>
-    <p class="sub" id="masthead-sub"></p>
   </div>
   <button class="to-top" id="to-top" hidden aria-label="Back to the top of the feed">
   <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8">

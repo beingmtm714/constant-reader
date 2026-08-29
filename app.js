@@ -155,17 +155,57 @@ import { jacketFor } from './lib/jacket.mjs';
     overrides = { ...EMPTY_OVERRIDES, ...merged.overrides };
     write(VERDICT_KEY, verdicts);
     write(OVERRIDES_KEY, overrides);
-    $('profile-mark').hidden = !overridesDirty();
+    markProfile();
     retune();
     render();
   }
 
-  function showAuth() {
-    const btn = $('auth');
+  // Who is signed in, kept locally so the bar can say so on the very first paint.
+  // Firebase takes a network round trip to answer, and a control that reads "Sign
+  // in" for a second and then becomes your monogram tells a reader they were
+  // signed out when they never were.
+  const ACCOUNT_KEY = 'litfeed:account';
+
+  // A drawn monogram rather than the Google photo. photoURL is an external fetch
+  // on every load, it 404s when Google rotates the id, and it drops a full-colour
+  // photograph into a palette that allows one red. A letter in Bodoni on a token
+  // ground is on-brand and can never be a broken image.
+  const monogramOf = (u) => {
+    const name = u?.displayName || u?.email || '';
+    const letter = name.trim().charAt(0).toUpperCase();
+    return /[A-Z0-9]/.test(letter) ? letter : '@';
+  };
+
+  function rememberAccount(u) {
+    if (!u) { write(ACCOUNT_KEY, null); return; }
+    write(ACCOUNT_KEY, { name: u.displayName || u.email || 'your account', mono: monogramOf(u) });
+  }
+
+  function showAuth({ failing = false } = {}) {
+    const account = read(ACCOUNT_KEY, null);
+    // `user` is the truth once Firebase has answered; before that, the remembered
+    // account is, and only for a reader who was signed in when they left.
+    const signedIn = Boolean(user) || (account && read(sync.RETURNING_KEY, false) === true);
+    const name = user ? (user.displayName || user.email || 'your account') : account?.name;
+    const mono = user ? monogramOf(user) : account?.mono;
+
+    const btn = $('account');
+    $('account-mono').textContent = signedIn ? (mono || '@') : '';
+    $('account-word').hidden = Boolean(signedIn);
+    $('account-mono').hidden = !signedIn;
+    $('account-warn').hidden = !(signedIn && failing);
+    btn.classList.toggle('is-in', Boolean(signedIn));
+    btn.setAttribute('aria-label', signedIn
+      ? (failing ? `Signed in as ${name}, but syncing is failing. Open the menu.` : `Signed in as ${name}. Open the menu.`)
+      : 'Sign in with Google to sync your books');
+
+    const menuBtn = $('auth');
+    menuBtn.textContent = signedIn ? 'Sign out' : 'Sign in';
     const note = $('auth-note');
-    btn.textContent = user ? 'Sign out' : 'Sign in';
-    note.hidden = !user;
-    if (user) note.textContent = `Syncing as ${user.email || user.displayName || 'you'}.`;
+    note.hidden = !signedIn;
+    note.textContent = !signedIn ? ''
+      : failing ? `Signed in as ${name}. Not syncing right now — your books are safe on this device.`
+      : `Signed in as ${name}. Your books sync across your devices.`;
   }
 
   // Called after every local write while signed in. It is deliberately not
@@ -177,7 +217,13 @@ import { jacketFor } from './lib/jacket.mjs';
     syncing = true;
     try {
       adoptProfile(await sync.reconcile(user.uid, localProfile()));
+      showAuth();
     } catch (err) {
+      // A toast clears itself, and a reader who missed it is left believing their
+      // books are syncing when they are not. The account control keeps the state
+      // until a sync succeeds - the same rule DESIGN.md applies to a filter left
+      // on and an ordering in force.
+      showAuth({ failing: true });
       toast(sync.explain(err), { error: true });
     } finally {
       syncing = false;
@@ -189,6 +235,7 @@ import { jacketFor } from './lib/jacket.mjs';
       if (user) {
         try { await sync.signOut(); } catch { /* already gone */ }
         write(sync.RETURNING_KEY, false);
+        rememberAccount(null);
         user = null;
         showAuth();
         toast('Signed out. Your books stay on this device.');
@@ -197,11 +244,14 @@ import { jacketFor } from './lib/jacket.mjs';
       try {
         user = await sync.signIn();
         write(sync.RETURNING_KEY, true);
+        rememberAccount(user);
         showAuth();
         await syncNow();
         toast('Signed in. Your books are synced.');
       } catch (err) {
         user = null;
+        write(sync.RETURNING_KEY, false);
+        rememberAccount(null);
         showAuth();
         toast(sync.explain(err), { error: true });
       }
@@ -209,11 +259,25 @@ import { jacketFor } from './lib/jacket.mjs';
 
     // A reader who signed in before gets their session back and one reconcile.
     // A reader who never did loads nothing: watch() returns immediately.
-    sync.watch((u) => {
+    sync.watch((u, { authoritative } = {}) => {
       user = u;
-      showAuth();
+      // Only Firebase itself gets to say a reader is signed out. A null user it
+      // actually returned means the session is gone - revoked, or signed out on
+      // another device - and keeping the monogram up would claim a sync that is
+      // not happening. A null user because the SDK never loaded means we could not
+      // ask, and the remembered account stands: being offline is not a sign-out.
+      if (!u && authoritative) { write(sync.RETURNING_KEY, false); rememberAccount(null); }
+      else if (u) rememberAccount(u);
+      showAuth({ failing: !u && !authoritative });
       if (u) syncNow();
     }, { returning: read(sync.RETURNING_KEY, false) === true });
+
+    // The bar control: signs a stranger in, and opens the menu for someone who
+    // already is, because that is where their name and Sign out live.
+    $('account').addEventListener('click', () => {
+      if (read(sync.RETURNING_KEY, false) === true) { openMenu(); return; }
+      $('auth').click();
+    });
 
     showAuth();
   }
@@ -881,13 +945,22 @@ import { jacketFor } from './lib/jacket.mjs';
 
   const overridesDirty = () => !isEmpty(overrides);
 
+  // The dot that says an ordering of the reader's own is in force. It is in two
+  // places now - the dock menu and the desktop nav - and DESIGN.md's rule is that
+  // an ordering in force is never invisible, so both have to be set together.
+  function markProfile() {
+    const dirty = overridesDirty();
+    const a = $('profile-mark'); if (a) a.hidden = !dirty;
+    const b = $('deskProfileMark'); if (b) b.hidden = !dirty;
+  }
+
   function saveOverrides() {
     // Stamped on every write, because the merge resolves two orderings by which
     // one the reader touched last. An unstamped copy is one written before sync
     // existed and loses to any stamped one — see lib/merge-profile.mjs.
     overrides = sync.stamp(overrides);
     write(OVERRIDES_KEY, overrides);
-    $('profile-mark').hidden = !overridesDirty();
+    markProfile();
     render();
     syncNow();
   }
@@ -1109,6 +1182,12 @@ import { jacketFor } from './lib/jacket.mjs';
       if (view === name) $(id).setAttribute('aria-current', 'page');
       else $(id).removeAttribute('aria-current');
     }
+    // The desktop nav is the same set of views in a second place, so it carries
+    // the same current-page mark rather than a class of its own.
+    for (const b of document.querySelectorAll('#desknav [data-view]')) {
+      if (b.dataset.view === view) b.setAttribute('aria-current', 'page');
+      else b.removeAttribute('aria-current');
+    }
     render();
     if (view === 'saved') {
       analytics.track('saved_books_viewed',
@@ -1123,6 +1202,20 @@ import { jacketFor } from './lib/jacket.mjs';
   // of their profile gets prose shelves; the same feed gives someone else period
   // shelves. lib/shelves.mjs decides what they are; this only draws them.
 
+  function drawnHtml(entry) {
+    const b = entry.book;
+    const j = jacketFor({ id: entry.id, title: b.title, author: b.author });
+    return `<div class="jacket-drawn" data-size="${esc(j.size)}" data-rule="${esc(j.rule)}"
+        style="background:${j.ground.bg};color:${j.ground.ink}">
+      <div class="j-rule j-rule-above" aria-hidden="true"></div>
+      <div class="j-title">${esc(j.title)}</div>
+      <div>
+        <div class="j-rule j-rule-below" aria-hidden="true"></div>
+        <div class="j-author">${esc(j.author)}</div>
+      </div>
+    </div>`;
+  }
+
   function jacketHtml(entry) {
     const b = entry.book;
     if (b.coverUrl) {
@@ -1131,16 +1224,21 @@ import { jacketFor } from './lib/jacket.mjs';
       // reading the title twice is worse than not describing the picture.
       return `<div class="jacket"><img src="${esc(b.coverUrl)}" alt="" loading="lazy" decoding="async"></div>`;
     }
-    const j = jacketFor({ id: entry.id, title: b.title, author: b.author });
-    return `<div class="jacket"><div class="jacket-drawn" data-size="${esc(j.size)}" data-rule="${esc(j.rule)}"
-        style="background:${j.ground.bg};color:${j.ground.ink}">
-      <div class="j-rule j-rule-above" aria-hidden="true"></div>
-      <div class="j-title">${esc(j.title)}</div>
-      <div>
-        <div class="j-rule j-rule-below" aria-hidden="true"></div>
-        <div class="j-author">${esc(j.author)}</div>
-      </div>
-    </div></div>`;
+    return `<div class="jacket">${drawnHtml(entry)}</div>`;
+  }
+
+  // A cover URL can rot between builds - Google rotates volume ids, and this feed
+  // is rebuilt and republished every morning against whatever it finds. A dead
+  // image would leave an empty chamfered box on the shelf, so it falls back to the
+  // jacket the book would have had if it had never had a cover at all.
+  function bindJacketFallback(root, byId) {
+    for (const img of root.querySelectorAll('.jacket img')) {
+      img.addEventListener('error', () => {
+        const card = img.closest('[data-card]') || img.closest('.card')?.querySelector('[data-card]');
+        const entry = byId.get(card?.getAttribute('data-card'));
+        if (entry) img.closest('.jacket').innerHTML = drawnHtml(entry);
+      }, { once: true });
+    }
   }
 
   function cardHtml(entry) {
@@ -1187,6 +1285,8 @@ import { jacketFor } from './lib/jacket.mjs';
     // A card is a way into the feed, not a second detail view. Tapping one goes
     // to the row it stands for and opens it, so there is exactly one place a book
     // is read and the shelf is only ever an index.
+    bindJacketFallback(body, new Map(FEED.books.map((e) => [e.id, e])));
+
     for (const btn of body.querySelectorAll('[data-card]')) {
       btn.addEventListener('click', () => {
         const id = btn.getAttribute('data-card');
@@ -1236,7 +1336,9 @@ import { jacketFor } from './lib/jacket.mjs';
 
   function render() {
     closeChooser();
-    $('savedCount').textContent = saved.savedCount(verdicts);
+    const nSaved = saved.savedCount(verdicts);
+    $('savedCount').textContent = nSaved;
+    if ($('deskSaved')) $('deskSaved').textContent = nSaved;
     const mc = $('more-count');
     if (mc) { const n = hiddenFilterCount(); mc.textContent = n ? `${n} set` : ''; }
     // The icons carry whether a control is holding something, so they have to be
@@ -1473,7 +1575,7 @@ import { jacketFor } from './lib/jacket.mjs';
   function loadOverrides() {
     const stored = read(OVERRIDES_KEY, null);
     if (stored) overrides = { ...EMPTY_OVERRIDES, ...stored };
-    $('profile-mark').hidden = !overridesDirty();
+    markProfile();
   }
 
   function loadPrefs() {
@@ -1655,6 +1757,10 @@ import { jacketFor } from './lib/jacket.mjs';
 
   // Sections, the theme and the build line: read once, then never again. Behind
   // the menu they cost one row instead of three.
+  // Exposed so the account control in the top bar can open the same menu rather
+  // than growing a second panel of its own. One place holds the account actions.
+  let openMenu = () => {};
+
   function bindMenu() {
     const btn = $('menu-toggle');
     const panel = $('menu-panel');
@@ -1663,11 +1769,15 @@ import { jacketFor } from './lib/jacket.mjs';
       panel.hidden = !open;
       btn.setAttribute('aria-expanded', String(open));
     };
+    openMenu = () => { set(true); $('auth')?.focus(); };
     btn.addEventListener('click', (ev) => { ev.stopPropagation(); set(panel.hidden); });
     panel.addEventListener('click', (ev) => { if (ev.target.closest('.btn')) set(false); });
     document.addEventListener('click', (ev) => {
       if (panel.hidden) return;
       if (ev.target.closest('.dock')) return;
+      // The account button opens this panel, so the same click must not close it
+      // again on its way back up.
+      if (ev.target.closest('#account')) return;
       set(false);
     });
     document.addEventListener('keydown', (ev) => {
@@ -1767,6 +1877,9 @@ import { jacketFor } from './lib/jacket.mjs';
     });
 
     $('view-feed').addEventListener('click', () => setView('feed'));
+    for (const b of document.querySelectorAll('#desknav [data-view]')) {
+      b.addEventListener('click', () => setView(b.dataset.view));
+    }
     $('view-shelves').addEventListener('click', () => setView('shelves'));
     $('view-saved').addEventListener('click', () => setView('saved'));
     $('view-taste').addEventListener('click', () => setView('taste'));
@@ -1834,10 +1947,9 @@ import { jacketFor } from './lib/jacket.mjs';
     }
 
     $('built').textContent = `built ${relative(FEED.builtAt)} · ${FEED.books.length} books from ${FEED.books.reduce((n, b) => n + b.reviewCount, 0)} reviews`;
-    // One line beside the wordmark. Everything the old subhead said about the
-    // window, the revision and the threshold is true and none of it belongs in a
-    // masthead: it was four lines of body copy crowding the navigation.
-    $('masthead-sub').textContent = `${FEED.sources.filter((s) => s.enabled).length} publications, the last ${FEED.windowYears} years, scored out of ten.`;
+    // The dock used to carry "54 publications, the last 10 years, scored out of
+    // ten" here, which is the same standing sentence the note above the feed
+    // carries. That was the third copy of it and the last one left.
     // The footer is the methodology, and only that. Its first sentence used to
     // restate the standing line above the feed, which is the third copy of one
     // sentence on a single screen. A reader who has scrolled this far knows what

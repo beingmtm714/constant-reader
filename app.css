@@ -1174,12 +1174,17 @@ body { overflow-x: clip; }
   .topbar.is-compact .masthead h1 { font-size: .625rem; letter-spacing: .03em; }
 }
 
-@media (max-width: 359px) {
-  /* Four 44px targets and their gaps take 188 of 320px, and the name will not
-     fit what is left at any tracking worth setting. So the name steps back to
-     the mark rather than truncating: the mark is the identity, and the h1 still
-     reads "Constant Reader" to a screen reader. Truncating a masthead is worse
-     than showing only its mark. */
+/* Raised from 359px when the account control became the fifth thing in the bar.
+   Signed out it is the word "Sign in", which is 66px rather than 44 because a
+   stranger cannot be asked to recognise an icon for it - so the tools now take
+   about 254px of the row, and at 375 the name was rendering as "CONSTAN...".
+   DESIGN.md's rule is that truncating a masthead is worse than showing only its
+   mark, so the fallback simply starts earlier. Below 480 the mark carries the
+   identity; the h1 still reads "Constant Reader" to a screen reader. */
+@media (max-width: 479px) {
+  /* Five targets and their gaps no longer leave room for the name at any
+     tracking worth setting. So the name steps back to the mark rather than
+     truncating: the mark is the identity. */
   .wordmark-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .masthead h1 { border: 0; padding: 0; }
   .wordmark button.js-home { gap: 0; }
@@ -1371,4 +1376,87 @@ details:not([open]) > *:not(summary) { display: none; }
 @media (max-width: 480px) {
   .shelf-track { grid-auto-columns: 140px; }
   .shelf-title { font-size: 1rem; }
+}
+
+/* ------------------------------------------------------- account and desknav
+
+   Two changes to rules DESIGN.md stated absolutely, both scoped by breakpoint
+   and both recorded there: the top bar is no longer "the name and four icons",
+   and it is no longer one row of the same things at every width. A phone keeps
+   the dock; a desktop with 1032px of empty bar should not be hiding its
+   navigation behind a hamburger, which is a phone pattern stranded on a screen
+   that has room. */
+
+/* The account. Signed out it is a word, because "Sign in" has to be legible to
+   someone who has never seen this app; signed in it is a monogram, which is the
+   shape every other app puts an account in and so needs no label. */
+.tool-account { min-width: 44px; }
+.account-word { font-family: var(--mono); font-size: .75rem; letter-spacing: .02em; }
+.account-mono {
+  font-family: var(--display); font-weight: 700; font-size: .9375rem;
+  line-height: 1; display: inline-block; min-width: 1.1em; text-align: center;
+}
+.tool-account.is-in { background: var(--surface-2); border-color: var(--ink); }
+
+/* Signed in and not syncing. A toast clears itself and a reader who missed it
+   believes their books are safe on every device when they are on one. Same
+   rule as the filter count and the ordering mark: state you cannot see is the
+   failure being avoided. Never colour alone - the accessible name says it too. */
+.account-warn {
+  position: absolute; top: 3px; right: 3px; width: 7px; height: 7px;
+  background: var(--warn); border: 1px solid var(--bg);
+}
+.tool-account { position: relative; }
+
+/* Hidden on a phone, where the dock is the navigation and four icons plus the
+   name is already the whole width. */
+.desknav { display: none; }
+
+/* 1024, not 768. At 768 the five section labels plus the five tools left about
+   59px for the name and it rendered as "CONSTAN..." - the same truncation the
+   mark fallback exists to prevent, arriving from the other direction. The name,
+   the nav and the tools need roughly 984px to sit together at a tracking worth
+   setting, so the nav waits until there is room for all three. A tablet keeps the
+   dock, which is the right control for a touch screen anyway. */
+@media (min-width: 1024px) {
+  .toolrow { order: 3; }
+  .desknav {
+    display: flex; gap: var(--s1); align-items: center;
+    margin-left: var(--s5); flex: 1 1 auto;
+    /* The masthead row orders its children explicitly - the wordmark is 1 and the
+       tools are 3 - so an unset order would be 0 and put the navigation to the
+       left of the name it belongs under. The brand comes first at every width. */
+    order: 2;
+  }
+  /* Set tight on purpose. These five labels, the name and the five tools have to
+     share one row, and the name is the thing that must not give: it is the only
+     item here that cannot be shortened without becoming "CONSTAN...". */
+  .desknav .btn {
+    font-family: var(--mono); font-size: .6875rem;
+    letter-spacing: .02em; text-transform: uppercase;
+    border-color: transparent; background: none;
+    padding: var(--s2);
+    white-space: nowrap;
+  }
+  /* The name never shrinks; the navigation does. */
+  .masthead-row .wordmark { flex: 0 0 auto; }
+  .desknav { min-width: 0; overflow: hidden; }
+  .desknav .btn:hover { background: var(--surface-2); }
+  /* The current section carries the doubled rule under it rather than a fill, so
+     the device that marks a masthead and a shelf head marks a place as well. */
+  .desknav .btn[aria-current="page"] {
+    border-bottom: 3px solid var(--brass);
+    background: none; color: var(--ink);
+  }
+  .desknav .n, .desknav .nav-mark { font-family: var(--mono); font-size: .6875rem; margin-left: var(--s1); }
+  .desknav .nav-mark { color: var(--accent); }
+  /* With the sections in the bar, the dock is down to the things nobody reads
+     twice - theme, the build line, Build your profile - and the account. */
+}
+
+/* At 320 the five targets and the name do not fit together, and DESIGN.md's
+   answer already exists: the name steps back to the mark and the controls keep
+   their size. A control is tapped with a thumb at every width. */
+@media (max-width: 380px) {
+  .account-word { font-size: .6875rem; }
 }
