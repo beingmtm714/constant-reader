@@ -5,7 +5,7 @@ import { createAnalytics } from './lib/analytics.mjs';
 import { buildTasteModel, tunedTotal, weightProposal, MIN_SIGNAL, MAX_ADJUSTMENT } from './lib/taste.mjs';
 import { outOfTen, RECOMMEND_AT } from './lib/recommend.mjs';
 import { rescore, summarize, isEmpty, bandKey, EMPTY as EMPTY_OVERRIDES } from './lib/overrides.mjs';
-import { CHIPS, buildProfile } from './lib/onboard.mjs';
+import { CHIPS, READS, chipsFor, buildProfile } from './lib/onboard.mjs';
 
 (() => {
   'use strict';
@@ -915,10 +915,10 @@ import { CHIPS, buildProfile } from './lib/onboard.mjs';
 
   // Six questions, one screen. A wizard would be more ceremony than six questions
   // deserve, and seeing all of them at once is what makes it feel short.
-  let startAnswers = { liked: [], disliked: [], nonfiction: false, satire: false };
+  let startAnswers = { reads: 'both', liked: [], disliked: [], satire: false };
 
   function renderStart() {
-    const chips = (which) => CHIPS.map((c) => {
+    const chips = (which) => chipsFor(startAnswers.reads).map((c) => {
       const key = `${c.dim}:${c.band}`;
       const on = startAnswers[which].includes(key);
       return `<button class="chip start-chip" data-which="${which}" data-key="${esc(key)}" aria-pressed="${on}">${esc(c.label)}</button>`;
@@ -926,15 +926,19 @@ import { CHIPS, buildProfile } from './lib/onboard.mjs';
 
     const n = startAnswers.liked.length + startAnswers.disliked.length;
     $('start-body').innerHTML = `
-      <p class="ov-lede">Every score in this feed is one reader's taste, not yours. Four steps, about two minutes, and it ranks against you instead.</p>
+      <p class="ov-lede">Every score in this feed is one reader's taste, not yours. Three steps, about two minutes, and it ranks against you instead.</p>
       <ol class="start-steps">
+        <li>Say whether you read fiction, nonfiction or both. This one does the most.</li>
         <li>Pick what you read for. Anything that makes you want to open a book.</li>
         <li>Pick what puts you off. This one matters as much: with nothing to push against, the feed ranks everything alike.</li>
-        <li>Answer the two questions at the bottom.</li>
         <li>Tap <strong>Build it</strong>. The feed re-ranks straight away.</li>
       </ol>
       <p class="ov-sub">Skip anything you have no opinion about. Nothing here leaves this browser, and every part of it stays editable on the Profile screen afterwards.</p>
       <p class="ov-help">Built for a phone for now. It will open on a laptop, but a profile lives in the browser that made it, so building one here and opening the site there gets you somebody else's scores rather than your own.</p>
+
+      <h3 class="ov-h">What do you read?</h3>
+      <p class="ov-help">Asked first because it does the most. The published profile docks nonfiction 45 points out of 100, which is one reader's exclusion rather than a fact about books, and nothing you pick below repairs that on its own.</p>
+      <div class="start-chips">${READS.map((r) => `<button class="chip start-reads" data-reads="${esc(r.id)}" aria-pressed="${startAnswers.reads === r.id}">${esc(r.label)}<span class="reads-note">${esc(r.note)}</span></button>`).join('')}</div>
 
       <h3 class="ov-h">What do you read for?</h3>
       <p class="ov-help">Pick anything that makes you want to open a book.</p>
@@ -944,9 +948,8 @@ import { CHIPS, buildProfile } from './lib/onboard.mjs';
       <p class="ov-help">This matters as much as the first list. A model with nothing to push against ranks everything alike.</p>
       <div class="start-chips">${chips('disliked')}</div>
 
-      <h3 class="ov-h">Two things worth saying outright</h3>
+      <h3 class="ov-h">One more thing worth saying outright</h3>
       <div class="toggle-row ov-rules">
-        <label class="switch ov-switch"><input type="checkbox" id="start-nonfiction" ${startAnswers.nonfiction ? 'checked' : ''}><span>I read nonfiction</span></label>
         <label class="switch ov-switch"><input type="checkbox" id="start-satire" ${startAnswers.satire ? 'checked' : ''}><span>I like satire and comic novels</span></label>
       </div>
 
@@ -968,7 +971,17 @@ import { CHIPS, buildProfile } from './lib/onboard.mjs';
         renderStart();
       });
     }
-    $('start-nonfiction').addEventListener('change', (ev) => { startAnswers.nonfiction = ev.target.checked; });
+    for (const b of $('start-body').querySelectorAll('.start-reads')) {
+      b.addEventListener('click', () => {
+        startAnswers.reads = b.dataset.reads;
+        // Switching to fiction drops the subject chips, so any that were picked
+        // have to go with them rather than sit in the profile unseen.
+        const keep = new Set(chipsFor(startAnswers.reads).map((c) => `${c.dim}:${c.band}`));
+        startAnswers.liked = startAnswers.liked.filter((k) => keep.has(k));
+        startAnswers.disliked = startAnswers.disliked.filter((k) => keep.has(k));
+        renderStart();
+      });
+    }
     $('start-satire').addEventListener('change', (ev) => { startAnswers.satire = ev.target.checked; });
     $('start-apply').addEventListener('click', () => {
       overrides = buildProfile(profileForOverrides(), startAnswers);
@@ -1100,14 +1113,9 @@ import { CHIPS, buildProfile } from './lib/onboard.mjs';
     // move. The standing facts moved into the menu when the masthead got
     // crowded, which left the feed with no orientation at all. They belong here,
     // above the first row, where they are the answer rather than decoration.
-    const total = all.length;
-    const dates = all.flatMap((e) => e.mentions.map((m) => m.reviewDate)).filter(Boolean).sort();
-    const month = (iso) => new Date(iso).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
-    const pubs = new Set(all.flatMap((e) => e.mentions.map((m) => m.source.short))).size;
-
-    const bits = [shown.length === total ? `${total} books` : `${shown.length} of ${total} books`];
-    if (pubs) bits.push(`from ${pubs} publications`);
-    if (dates.length) bits.push(`reviewed since ${month(dates[0])}`);
+    // What this is, not how much of it there is. A count answers a question
+    // nobody arrives with, and it moves every morning, so it reads as noise.
+    const bits = [`Everything the literary press reviews, scored against your taste`];
     bits.push(`${ORDERS[state.order]?.label || 'newest reviews'} first`);
     if (state.q) bits.push(`matching “${state.q}”`);
     if (state.recommendedOnly) bits.push('recommended only');

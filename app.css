@@ -1249,3 +1249,9 @@ details:not([open]) > *:not(summary) { display: none; }
 @media (min-width: 761px) {
   .tally { flex-direction: row; align-items: baseline; justify-content: space-between; }
 }
+
+/* The reading-type answer is one of three, so it reads as a choice rather than a
+   list of things to collect: bigger targets, a line of explanation on each. */
+.start-reads { flex-direction: column; align-items: flex-start; gap: 2px; padding: var(--s3); min-height: 0; text-align: left; }
+.start-reads .reads-note { display: block; font-family: var(--mono); font-size: .6875rem; opacity: .7; }
+.start-reads[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
