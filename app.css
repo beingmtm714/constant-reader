@@ -1460,3 +1460,51 @@ details:not([open]) > *:not(summary) { display: none; }
 @media (max-width: 380px) {
   .account-word { font-size: .6875rem; }
 }
+
+/* --------------------------------------------- desktop: the controls are shown
+
+   On a phone, search, order and filters live behind three icons because the row
+   has no space for them. On a desktop they were still behind those icons, which
+   is a phone constraint enforced on a screen that does not have it: three taps to
+   reach a checkbox, on 1032px of empty bar.
+
+   At 1024 and up the controls are simply present. The icons that opened them go
+   away, because an icon and the thing it opens both on screen is two controls for
+   one job. Recommended and the account stay in the bar: one is a filter you toggle
+   constantly, the other is state. */
+@media (min-width: 1024px) {
+  #search-toggle, #order-toggle, #filters-toggle { display: none; }
+
+  /* app.css backs [hidden] with display:none !important, which is correct, so the
+     panels are un-hidden in JavaScript instead (applyControlLayout) and this only
+     lays them out. */
+  .controls .wrap > .toolpanel { display: flex; align-items: flex-end; padding-top: 0; }
+
+  .controls > .wrap {
+    display: flex; flex-wrap: wrap; align-items: flex-end;
+    gap: var(--s3) var(--s4);
+    padding-top: var(--s3); padding-bottom: var(--s3);
+  }
+  .controls .wrap > .toolpanel input[type="search"] { width: 22rem; }
+  .controls .wrap > .toolpanel select { width: 13rem; }
+
+  /* The filters disclosure gets its name back. It was sr-only because the icon in
+     the bar was the visible control; with the icon gone it has to say what it is,
+     and it carries the count of what is set behind it - the same rule that makes
+     a filter left on impossible to miss. */
+  #more > .more-toggle.sr-only {
+    position: static; width: auto; height: auto; overflow: visible;
+    clip-path: none; white-space: nowrap;
+    display: inline-flex; align-items: center; gap: var(--s2);
+    font-family: var(--mono); font-size: .75rem; letter-spacing: .04em;
+    text-transform: uppercase; cursor: pointer;
+    border: 1px solid var(--rule-strong); padding: var(--s2) var(--s3);
+    background: var(--surface); color: var(--ink);
+    min-height: 38px;
+  }
+  #more > .more-toggle.sr-only:hover { background: var(--surface-2); }
+  #more { max-height: none; }
+  #more[open] { flex-basis: 100%; }
+  /* Done belongs to the phone sheet; on a desktop the panel is just open. */
+  #more .more-done { display: none; }
+}

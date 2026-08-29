@@ -1709,9 +1709,34 @@ import { jacketFor } from './lib/jacket.mjs';
       if (!b || !p) continue;
       const open = panel === 'more' ? p.open : !p.hidden;
       b.setAttribute('aria-expanded', String(open));
+      // The icons are not on screen at desktop widths; their dots would be a
+      // claim about state nobody can see.
+      b.hidden = roomy() && ALWAYS_OPEN.includes(panel);
       const dot = b.querySelector('.tool-dot');
       if (dot) dot.hidden = !held();
     }
+  }
+
+  // On a desktop the search box and the order select are not a panel to be opened
+  // - they are simply on the bar, next to a Filters disclosure that says its own
+  // name. Behind an icon they cost three clicks to reach a checkbox on 1032px of
+  // empty row, which is a phone constraint enforced on a screen that does not
+  // have it. Only `more` still opens and closes there, because the filter grid is
+  // genuinely a lot and nobody needs it open by default.
+  const roomy = () => window.matchMedia('(min-width: 1024px)').matches;
+  const ALWAYS_OPEN = ['panel-search', 'panel-order'];
+
+  // The `hidden` attribute is how these panels are closed, and app.css backs it
+  // with `[hidden] { display: none !important }`. That rule is right - a thing
+  // marked hidden should be hidden - so the fix is to stop marking them, not to
+  // out-shout it from a media query.
+  function applyControlLayout() {
+    for (const id of ALWAYS_OPEN) {
+      const p = $(id);
+      if (p) p.hidden = roomy() ? false : p.hidden;
+    }
+    if (roomy()) document.querySelector('.controls')?.classList.remove('has-panel');
+    syncTools();
   }
 
   function openPanel(which) {
@@ -1719,7 +1744,9 @@ import { jacketFor } from './lib/jacket.mjs';
       const p = $(panel);
       if (!p) continue;
       const on = panel === which;
-      if (panel === 'more') p.open = on; else p.hidden = !on;
+      if (panel === 'more') p.open = on;
+      else if (roomy() && ALWAYS_OPEN.includes(panel)) p.hidden = false;
+      else p.hidden = !on;
       if (on) document.querySelector('.controls')?.classList.add('has-panel');
     }
     if (!which) document.querySelector('.controls')?.classList.remove('has-panel');
@@ -1752,7 +1779,11 @@ import { jacketFor } from './lib/jacket.mjs';
     });
 
     $('filters-done')?.addEventListener('click', () => { openPanel(null); $('filters-toggle').focus(); });
-    syncTools();
+
+    // A window dragged across the breakpoint has to arrive in the right state,
+    // not the state it was in on the other side of it.
+    window.matchMedia('(min-width: 1024px)').addEventListener('change', applyControlLayout);
+    applyControlLayout();
   }
 
   // Sections, the theme and the build line: read once, then never again. Behind
