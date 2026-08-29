@@ -1540,3 +1540,11 @@ details:not([open]) > *:not(summary) { display: none; }
 .viewswitch .btn { border-radius: 0; }
 .viewswitch .btn + .btn { border-left: 0; }
 .viewswitch .btn[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+
+/* An unscored book leads with what it is. The provenance carries the accent
+   because it is the useful half; the missing score is stated once, quietly, and
+   never as the first thing the eye lands on. */
+.unscored-is { color: var(--accent); }
+.unscored-tags { color: var(--ink-muted); }
+.unscored-why { color: var(--ink-faint); }
+.card-imprint { font-family: var(--mono); font-size: .6875rem; letter-spacing: .04em; color: var(--ink-muted); }

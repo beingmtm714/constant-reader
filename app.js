@@ -527,25 +527,40 @@ import { cleanBlurb } from './lib/blurb.mjs';
   // book sits without a number being invented to rank it.
   const DESCRIBING = new Set(['period', 'subject', 'form', 'prose', 'tone', 'scale', 'genre']);
 
+  // How we know this book exists. 382 of the 492 come from the New Books Network,
+  // which is the author talking about their own book at length; the rest are
+  // publisher catalogues. Every one has a publisher, and they are overwhelmingly
+  // Oxford, Cambridge, Verso, MIT and California, most published this year.
+  const viaInterview = (e) => e.mentions.some((m) => /^nbn/i.test(m.source.id));
+
+  function provenance(e) {
+    const bits = [e.book.publisher, e.book.bookYear].filter(Boolean).join(', ');
+    const how = viaInterview(e) ? 'the author\u2019s own account' : 'the publisher\u2019s catalogue';
+    return bits ? `${bits} \u2014 ${how}.` : `From ${how}.`;
+  }
+
+  // What an unscored book says about itself.
+  //
+  // It said "Nothing in this review spoke to any dimension of the profile, so it
+  // carries no score", and then "Listed, not reviewed". Both define a book by what
+  // it lacks, and these books do not lack much: they are new university-press
+  // titles whose authors have been interviewed at length, and the only thing
+  // missing is a critic, who is late rather than absent. So the line leads with
+  // what the book is and where we heard about it. The absent score still has to be
+  // said - otherwise the row looks broken - but it is the quiet half.
   function unscoredLine(e) {
     if (e.score.band === 'unresolved') {
       return `<p class="risk">${esc('No book identified in this review.')}</p>`;
     }
-    // Scale on its own is not a character. "A mid-length book" is a page count
-    // wearing a sentence, and it was the only thing 100-odd of these rows had to
-    // say - so the clause appears only when something describes the book rather
-    // than measures it, and scale joins in when it has company.
+    // Scale on its own is not a character: "mid-length" is a page count wearing a
+    // sentence, and it was the only thing 100-odd of these rows had to say.
     const describing = (e.tags || []).filter((t) => DESCRIBING.has(t.kind));
-    const words = describing.some((t) => t.kind !== 'scale')
-      ? describing.map((t) => t.label)
-      : [];
-    const why = e.listedOnly
-      ? 'Listed, not reviewed — no critic has written about it yet, so there is nothing to score.'
-      : 'Not scored: the reviews say nothing your profile reads on.';
-    // "A migration & exile, short book." is a list wearing a sentence. The tags are
-    // a set, so they are named as one.
-    return `<p class="unscored">${esc(why)}${words.length
-      ? ` <span class="unscored-is">${esc(`Tagged ${words.join(' · ')}.`)}</span>` : ''}</p>`;
+    const words = describing.some((t) => t.kind !== 'scale') ? describing.map((t) => t.label) : [];
+    return `<p class="unscored">`
+      + `<span class="unscored-is">${esc(provenance(e))}</span>`
+      + (words.length ? ` <span class="unscored-tags">${esc(words.join(' \u00b7 '))}</span>` : '')
+      + ` <span class="unscored-why">${esc('No critic has reviewed it yet, so there is nothing to score it on.')}</span>`
+      + `</p>`;
   }
 
   function caveatLine(e) {
@@ -1316,7 +1331,12 @@ import { cleanBlurb } from './lib/blurb.mjs';
     // "Awaiting a review" were showing a number for a book with no score.
     const noScore = entry.listedOnly || entry.score?.band === 'unscored' || entry.score?.band === 'unresolved';
     const num = noScore ? '' : `<span class="card-score">${outOfTen(s.total).toFixed(1)}</span>`;
-    const note = noScore ? `<span class="card-unscored">not scored</span>` : '';
+    // "not scored" on a card is a book wearing a label about our own coverage. The
+    // publisher is real information, it is the thing these books have in common,
+    // and Oxford or Verso on a card says more than a missing number does.
+    const note = noScore
+      ? `<span class="card-imprint">${esc(b.publisher || (b.bookYear ? String(b.bookYear) : 'New'))}</span>`
+      : '';
     return `<div class="card" data-band="${esc(entry.score?.band || '')}">
       <button class="card-btn" data-card="${esc(entry.id)}" aria-label="${esc(b.title)}${b.author ? `, ${b.author}` : ''} — open in the feed">
         ${jacketHtml(entry)}
@@ -1337,9 +1357,9 @@ import { cleanBlurb } from './lib/blurb.mjs';
     const scope = state.allScope || 'any';
     const pool = FEED.books.filter((e) => (scope === 'reviewed' ? !isUnscored(e)
       : scope === 'awaiting' ? isUnscored(e) : true));
-    const shelves = buildShelves(pool, { weights }, { only: 'all' });
+    const shelves = buildShelves(pool, { weights }, { only: scope === 'awaiting' ? 'unscored' : 'all' });
     $('all-note').textContent = scope === 'awaiting'
-      ? `${pool.length} books the catalogue and the interview feeds know about, that no critic here has reviewed yet. Nothing is scored, because there is nothing to read. Grouped by what they are.`
+      ? `${pool.length} new books, mostly from the university presses, whose authors have talked about them at length before any critic has. Nothing here is scored — there is no review to score it on — so they are grouped by what they are.`
       : scope === 'reviewed'
         ? `${pool.length} books with a review behind them, grouped by what they are rather than by what your profile makes of them.`
         : `Every book the crawl found, ${pool.length} of them, grouped by what they are rather than by what your profile makes of them.`;
@@ -1498,7 +1518,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
       const scope = state.allScope || 'any';
       const nAwaiting = FEED.books.filter((e) => e.listedOnly || e.score.band === 'unscored' || e.score.band === 'unresolved').length;
       $('all-note').textContent = scope === 'awaiting'
-        ? `${nAwaiting} books nobody here has reviewed yet. They are described rather than scored, because your profile has nothing to read on. Tap any tag to see the rest of its kind.`
+        ? `${nAwaiting} new books, mostly from the university presses, whose authors have talked about them before any critic has. Described rather than scored, because there is no review to score them on. Tap any tag to see the rest of its kind.`
         : scope === 'reviewed'
           ? `${FEED.books.length - nAwaiting} books with a review behind them. Tap any tag to see the rest of its kind.`
           : `Every book the crawl found. ${nAwaiting} of the ${FEED.books.length} have no review behind them yet, so your profile has nothing to read on. Tap any tag to see the rest of its kind.`;
