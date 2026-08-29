@@ -105,6 +105,7 @@
 <div class="dock">
   <div class="menu-panel" id="menu-panel" hidden>
     <nav class="views" aria-label="Sections">
+      <button class="btn" id="view-shelves">Collections</button>
       <button class="btn" id="view-feed" aria-current="page">Feed</button>
       <button class="btn" id="view-saved">Saved books <span class="n" id="savedCount">0</span></button>
       <button class="btn" id="view-taste">Taste</button>
@@ -134,6 +135,12 @@
   <div class="tally">
     <p class="status" id="status" role="status" aria-live="polite"></p>
   </div>
+
+  <section class="section" id="shelves-section" hidden>
+    <h2 id="shelves" class="sr-only">Collections drawn from your profile</h2>
+    <p class="note" id="shelves-note"></p>
+    <div id="shelves-body"></div>
+  </section>
 
   <section class="section" id="feed-section">
     <h2 id="feed" class="sr-only">Every book reviewed</h2>

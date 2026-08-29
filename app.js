@@ -7,6 +7,8 @@ import { outOfTen, RECOMMEND_AT } from './lib/recommend.mjs';
 import { rescore, summarize, isEmpty, bandKey, EMPTY as EMPTY_OVERRIDES } from './lib/overrides.mjs';
 import { CHIPS, READS, chipsFor, buildProfile } from './lib/onboard.mjs';
 import * as sync from './lib/sync.mjs';
+import { buildShelves } from './lib/shelves.mjs';
+import { jacketFor } from './lib/jacket.mjs';
 
 (() => {
   'use strict';
@@ -67,7 +69,7 @@ import * as sync from './lib/sync.mjs';
     minPages: null, minScore: null, sources: new Set(), tag: null,
     window: true, nonfiction: false, identity: false, penalised: false,
     recommendedOnly: false, group: false, unseen: false,
-    view: 'feed', savedSort: 'recent', tune: true,
+    view: 'shelves', savedSort: 'recent', tune: true,
   };
 
   // Rebuilt whenever the verdicts change, which is what makes a save feel like
@@ -1091,6 +1093,7 @@ import * as sync from './lib/sync.mjs';
   function setView(view) {
     state.view = view;
     savePrefs();
+    $('shelves-section').hidden = view !== 'shelves';
     $('feed-section').hidden = view !== 'feed';
     $('saved-section').hidden = view !== 'saved';
     $('taste-section').hidden = view !== 'taste';
@@ -1102,7 +1105,7 @@ import * as sync from './lib/sync.mjs';
     document.querySelector('.controls').hidden = view !== 'feed';
     document.querySelector('.tally').hidden = view !== 'feed';
     if (view !== 'feed') $('tag-bar').hidden = true;
-    for (const [id, name] of [['view-feed', 'feed'], ['view-saved', 'saved'], ['view-taste', 'taste'], ['view-profile', 'profile'], ['view-start', 'start']]) {
+    for (const [id, name] of [['view-shelves', 'shelves'], ['view-feed', 'feed'], ['view-saved', 'saved'], ['view-taste', 'taste'], ['view-profile', 'profile'], ['view-start', 'start']]) {
       if (view === name) $(id).setAttribute('aria-current', 'page');
       else $(id).removeAttribute('aria-current');
     }
@@ -1110,6 +1113,96 @@ import * as sync from './lib/sync.mjs';
     if (view === 'saved') {
       analytics.track('saved_books_viewed',
         { count: saved.savedCount(verdicts), sort: state.savedSort });
+    }
+  }
+
+  // ------------------------------------------------------------ shelves
+
+  // The landing view: a few collections drawn from this reader's own weights,
+  // rather than a fixed editorial list. A reader who has pushed prose to the top
+  // of their profile gets prose shelves; the same feed gives someone else period
+  // shelves. lib/shelves.mjs decides what they are; this only draws them.
+
+  function jacketHtml(entry) {
+    const b = entry.book;
+    if (b.coverUrl) {
+      // Alt is empty and the title sits beside the image in text: a jacket is
+      // decoration for a row that already names the book, and a screen reader
+      // reading the title twice is worse than not describing the picture.
+      return `<div class="jacket"><img src="${esc(b.coverUrl)}" alt="" loading="lazy" decoding="async"></div>`;
+    }
+    const j = jacketFor({ id: entry.id, title: b.title, author: b.author });
+    return `<div class="jacket"><div class="jacket-drawn" data-size="${esc(j.size)}" data-rule="${esc(j.rule)}"
+        style="background:${j.ground.bg};color:${j.ground.ink}">
+      <div class="j-rule j-rule-above" aria-hidden="true"></div>
+      <div class="j-title">${esc(j.title)}</div>
+      <div>
+        <div class="j-rule j-rule-below" aria-hidden="true"></div>
+        <div class="j-author">${esc(j.author)}</div>
+      </div>
+    </div></div>`;
+  }
+
+  function cardHtml(entry) {
+    const s = scoreOf(entry);
+    const b = entry.book;
+    const num = entry.listedOnly ? '' : `<span class="card-score">${outOfTen(s.total).toFixed(1)}</span>`;
+    const note = entry.listedOnly ? `<span class="card-unscored">listed</span>` : '';
+    return `<div class="card" data-band="${esc(entry.score?.band || '')}">
+      <button class="card-btn" data-card="${esc(entry.id)}" aria-label="${esc(b.title)}${b.author ? `, ${b.author}` : ''} — open in the feed">
+        ${jacketHtml(entry)}
+      </button>
+      <div class="card-meta">${num}${note}</div>
+      <div class="card-title">${esc(b.title)}</div>
+      <div class="card-author">${esc(b.author || '')}</div>
+    </div>`;
+  }
+
+  function renderShelves() {
+    const body = $('shelves-body');
+    // The build's weights with this reader's re-weightings applied, which is what
+    // makes the shelves theirs rather than the profile author's.
+    const weights = {};
+    for (const d of FEED.dimensions || []) weights[d.id] = overrides.weights?.[d.id] ?? d.weight;
+    const shelves = buildShelves(FEED.books, { weights });
+    $('shelves-note').textContent = shelves.length
+      ? `Drawn from the dimensions your profile weights most heavily. Tap a book to open it in the feed.`
+      : '';
+    if (!shelves.length) {
+      body.innerHTML = `<p class="empty">Nothing to collect yet. <button class="btn" id="shelves-to-feed">Go to the feed</button></p>`;
+      $('shelves-to-feed')?.addEventListener('click', () => setView('feed'));
+      return;
+    }
+    body.innerHTML = shelves.map((sh) => `<section class="shelf" aria-labelledby="sh-${esc(sh.id)}">
+      <div class="shelf-head">
+        <div>
+          <h3 class="shelf-title" id="sh-${esc(sh.id)}">${esc(sh.title)}</h3>
+          ${sh.note ? `<p class="shelf-note">${esc(sh.note)}</p>` : ''}
+        </div>
+        <span class="shelf-count">${sh.total} book${sh.total === 1 ? '' : 's'}</span>
+      </div>
+      <div class="shelf-track">${sh.books.map(cardHtml).join('')}</div>
+    </section>`).join('');
+
+    // A card is a way into the feed, not a second detail view. Tapping one goes
+    // to the row it stands for and opens it, so there is exactly one place a book
+    // is read and the shelf is only ever an index.
+    for (const btn of body.querySelectorAll('[data-card]')) {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-card');
+        // setView renders the feed synchronously, so the row exists by the time
+        // this returns and none of it needs deferring. It was written inside a
+        // requestAnimationFrame first, which never runs while the page is hidden -
+        // so a card tapped on a backgrounded tab left the reader at the top of 818
+        // rows with nothing open. The card opens the working as well as scrolling
+        // to it, because a reader who tapped a jacket wants the reason it was on
+        // that shelf. `openRow` is left alone: it holds a button element, never an id.
+        setView('feed');
+        const row = document.querySelector(`.row[data-id="${CSS.escape(id)}"]`);
+        if (!row) return;
+        row.scrollIntoView({ block: 'center', behavior: 'auto' });
+        if (!row.classList.contains('is-open')) row.querySelector('.js-why')?.click();
+      });
     }
   }
 
@@ -1150,6 +1243,7 @@ import * as sync from './lib/sync.mjs';
     // refreshed on every render rather than only when one is clicked: clearing a
     // tag from the feed changes the filter count without touching the toolbar.
     if (typeof syncTools === 'function') syncTools();
+    if (state.view === 'shelves') { renderShelves(); return; }
     if (state.view === 'saved') { renderSaved(); return; }
     if (state.view === 'taste') { renderTaste(); return; }
     if (state.view === 'profile') { renderProfile(); return; }
@@ -1209,10 +1303,14 @@ import * as sync from './lib/sync.mjs';
     // move. The standing facts moved into the menu when the masthead got
     // crowded, which left the feed with no orientation at all. They belong here,
     // above the first row, where they are the answer rather than decoration.
-    // What this is, not how much of it there is. A count answers a question
-    // nobody arrives with, and it moves every morning, so it reads as noise.
-    const bits = [`Everything the literary press reviews, scored against your taste`];
-    bits.push(`${ORDERS[state.order]?.label || 'newest reviews'} first`);
+    // State only: how this feed is ordered and what is filtering it right now.
+    // It said "Everything the literary press reviews, scored against your taste"
+    // first, which is what the standing line under it says and what the footer
+    // says again — the same sentence three times down one screen, and the one
+    // place a reader looks to find out what they just changed was the least
+    // useful of the three. What this is belongs to the standing line; what it is
+    // doing at this moment belongs here.
+    const bits = [`${ORDERS[state.order]?.label || 'newest reviews'} first`];
     if (state.q) bits.push(`matching “${state.q}”`);
     if (state.recommendedOnly) bits.push('recommended only');
     if (overridesDirty()) bits.push('your ordering');
@@ -1669,6 +1767,7 @@ import * as sync from './lib/sync.mjs';
     });
 
     $('view-feed').addEventListener('click', () => setView('feed'));
+    $('view-shelves').addEventListener('click', () => setView('shelves'));
     $('view-saved').addEventListener('click', () => setView('saved'));
     $('view-taste').addEventListener('click', () => setView('taste'));
     $('view-profile').addEventListener('click', () => setView('profile'));
@@ -1739,7 +1838,11 @@ import * as sync from './lib/sync.mjs';
     // window, the revision and the threshold is true and none of it belongs in a
     // masthead: it was four lines of body copy crowding the navigation.
     $('masthead-sub').textContent = `${FEED.sources.filter((s) => s.enabled).length} publications, the last ${FEED.windowYears} years, scored out of ten.`;
-    $('foot-note').innerHTML = `Everything the literary press reviewed in the last ${FEED.windowYears} years, scored against revision ${FEED.profileRevision} of the reading taste profile. ${FEED.recommendAt} and above is tagged recommended. Scores are a keyword reading of review prose, so treat one as triage rather than as a reading of the book; every dimension shows the terms it fired on, which is what makes a wrong score visible as a wrong score. Saving and passing writes to this browser, and to your own Google account if you sign in, which is off unless you ask for it. Export it to feed the next revision of the profile.`;
+    // The footer is the methodology, and only that. Its first sentence used to
+    // restate the standing line above the feed, which is the third copy of one
+    // sentence on a single screen. A reader who has scrolled this far knows what
+    // the app is; what they do not know is how much to trust a number.
+    $('foot-note').innerHTML = `Scored against revision ${FEED.profileRevision} of the reading taste profile; ${FEED.recommendAt} and above is tagged recommended. A score is a keyword reading of review prose, so treat it as triage rather than as a reading of the book — every dimension shows the terms it fired on, which is what makes a wrong score visible as a wrong score. Saving and passing writes to this browser, and to your own Google account if you sign in, which is off unless you ask for it. Export it to feed the next revision of the profile.`;
 
     startAtTop();
     loadPrefs();
@@ -1754,7 +1857,11 @@ import * as sync from './lib/sync.mjs';
     bindTools();
     bindMenu();
     bindAuth();
-    setView('feed');
+    // Collections is the landing view. The feed is the app and stays one tap away,
+    // but 874 rows ordered by date is not an opening screen - it is what you scroll
+    // to once you know what you are looking for. A reader who was last on some other
+    // screen is returned to it, because the view is a preference like any other.
+    setView(state.view || 'shelves');
   }
 
   boot();
