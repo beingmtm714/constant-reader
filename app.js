@@ -6,6 +6,7 @@ import { buildTasteModel, tunedTotal, weightProposal, MIN_SIGNAL, MAX_ADJUSTMENT
 import { outOfTen, RECOMMEND_AT } from './lib/recommend.mjs';
 import { rescore, summarize, isEmpty, bandKey, EMPTY as EMPTY_OVERRIDES } from './lib/overrides.mjs';
 import { CHIPS, READS, chipsFor, buildProfile } from './lib/onboard.mjs';
+import * as sync from './lib/sync.mjs';
 
 (() => {
   'use strict';
@@ -20,6 +21,12 @@ import { CHIPS, READS, chipsFor, buildProfile } from './lib/onboard.mjs';
   const THEME_KEY = 'litfeed:theme';
   const EVENTS_KEY = 'litfeed:events';
   const RETAILER_KEY = 'litfeed:last-retailer';
+
+  // Sign-in is optional and this is the only trace of it when nobody has used it:
+  // one boolean, read before anything from Firebase is fetched, so a reader who
+  // has never signed in never loads the SDK. See lib/sync.mjs.
+  let user = null;
+  let syncing = false;
 
   // No affiliate programme has been approved for this app, so nothing is
   // configured and every link goes out clean. If one ever is, the id belongs
@@ -126,6 +133,89 @@ import { CHIPS, READS, chipsFor, buildProfile } from './lib/onboard.mjs';
     localStorage.setItem(key, JSON.stringify(value));
   }
 
+  // ------------------------------------------------------------ sync
+
+  // Signed out, this whole section is dead weight and the app is what it always
+  // was: a JSON file, localStorage, and no network after the feed loads. Signed
+  // in, the same two things a reader owns — their verdicts and their ordering —
+  // are merged with whatever their other devices know and written back.
+  //
+  // localStorage stays the source of truth on this device. The server is a copy,
+  // and every path that fails here leaves the local copy exactly as it was, which
+  // is why a failed sync is a message rather than a lost book.
+
+  function localProfile() {
+    return { verdicts, overrides };
+  }
+
+  function adoptProfile(merged) {
+    verdicts = merged.verdicts;
+    overrides = { ...EMPTY_OVERRIDES, ...merged.overrides };
+    write(VERDICT_KEY, verdicts);
+    write(OVERRIDES_KEY, overrides);
+    $('profile-mark').hidden = !overridesDirty();
+    retune();
+    render();
+  }
+
+  function showAuth() {
+    const btn = $('auth');
+    const note = $('auth-note');
+    btn.textContent = user ? 'Sign out' : 'Sign in';
+    note.hidden = !user;
+    if (user) note.textContent = `Syncing as ${user.email || user.displayName || 'you'}.`;
+  }
+
+  // Called after every local write while signed in. It is deliberately not
+  // awaited by the thing that triggered it: a save has already been persisted
+  // locally and drawn on screen by the time this runs, and the reader should
+  // never wait on a network round trip to see their own tap land.
+  async function syncNow() {
+    if (!user || syncing) return;
+    syncing = true;
+    try {
+      adoptProfile(await sync.reconcile(user.uid, localProfile()));
+    } catch (err) {
+      toast(sync.explain(err), { error: true });
+    } finally {
+      syncing = false;
+    }
+  }
+
+  function bindAuth() {
+    $('auth').addEventListener('click', async () => {
+      if (user) {
+        try { await sync.signOut(); } catch { /* already gone */ }
+        write(sync.RETURNING_KEY, false);
+        user = null;
+        showAuth();
+        toast('Signed out. Your books stay on this device.');
+        return;
+      }
+      try {
+        user = await sync.signIn();
+        write(sync.RETURNING_KEY, true);
+        showAuth();
+        await syncNow();
+        toast('Signed in. Your books are synced.');
+      } catch (err) {
+        user = null;
+        showAuth();
+        toast(sync.explain(err), { error: true });
+      }
+    });
+
+    // A reader who signed in before gets their session back and one reconcile.
+    // A reader who never did loads nothing: watch() returns immediately.
+    sync.watch((u) => {
+      user = u;
+      showAuth();
+      if (u) syncNow();
+    }, { returning: read(sync.RETURNING_KEY, false) === true });
+
+    showAuth();
+  }
+
   // ------------------------------------------------------------ theme
 
   function initTheme() {
@@ -164,6 +254,7 @@ import { CHIPS, READS, chipsFor, buildProfile } from './lib/onboard.mjs';
     try {
       persist(VERDICT_KEY, next);
       onOk?.();
+      syncNow();
     } catch {
       verdicts = previous;
       retune();
@@ -789,9 +880,14 @@ import { CHIPS, READS, chipsFor, buildProfile } from './lib/onboard.mjs';
   const overridesDirty = () => !isEmpty(overrides);
 
   function saveOverrides() {
+    // Stamped on every write, because the merge resolves two orderings by which
+    // one the reader touched last. An unstamped copy is one written before sync
+    // existed and loses to any stamped one — see lib/merge-profile.mjs.
+    overrides = sync.stamp(overrides);
     write(OVERRIDES_KEY, overrides);
     $('profile-mark').hidden = !overridesDirty();
     render();
+    syncNow();
   }
 
   function setOverride(group, key, value) {
@@ -1643,7 +1739,7 @@ import { CHIPS, READS, chipsFor, buildProfile } from './lib/onboard.mjs';
     // window, the revision and the threshold is true and none of it belongs in a
     // masthead: it was four lines of body copy crowding the navigation.
     $('masthead-sub').textContent = `${FEED.sources.filter((s) => s.enabled).length} publications, the last ${FEED.windowYears} years, scored out of ten.`;
-    $('foot-note').innerHTML = `Everything the literary press reviewed in the last ${FEED.windowYears} years, scored against revision ${FEED.profileRevision} of the reading taste profile. ${FEED.recommendAt} and above is tagged recommended. Scores are a keyword reading of review prose, so treat one as triage rather than as a reading of the book; every dimension shows the terms it fired on, which is what makes a wrong score visible as a wrong score. Saving and passing writes to this browser only. Export it to feed the next revision of the profile.`;
+    $('foot-note').innerHTML = `Everything the literary press reviewed in the last ${FEED.windowYears} years, scored against revision ${FEED.profileRevision} of the reading taste profile. ${FEED.recommendAt} and above is tagged recommended. Scores are a keyword reading of review prose, so treat one as triage rather than as a reading of the book; every dimension shows the terms it fired on, which is what makes a wrong score visible as a wrong score. Saving and passing writes to this browser, and to your own Google account if you sign in, which is off unless you ask for it. Export it to feed the next revision of the profile.`;
 
     startAtTop();
     loadPrefs();
@@ -1657,6 +1753,7 @@ import { CHIPS, READS, chipsFor, buildProfile } from './lib/onboard.mjs';
     bindTopbar();
     bindTools();
     bindMenu();
+    bindAuth();
     setView('feed');
   }
 
