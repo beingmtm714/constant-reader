@@ -377,12 +377,27 @@ import { cleanBlurb } from './lib/blurb.mjs';
   }
 
   function bindJackets(root) {
+    const swap = (img) => {
+      const box = img.closest('.jacket');
+      if (!box) return;
+      const e = FEED.books.find((x) => x.id === box.dataset.jacket);
+      if (e) box.innerHTML = drawnJacket(e);
+    };
     for (const img of $$('.jacket[data-jacket] img', root)) {
-      img.addEventListener('error', () => {
-        const box = img.closest('.jacket');
-        const e = FEED.books.find((x) => x.id === box.dataset.jacket);
-        if (e) box.innerHTML = drawnJacket(e);
-      }, { once: true });
+      // A 404 already in the browser cache resolves before this handler can be
+      // attached, and that error never fires again — which is exactly the case
+      // for a cover URL that has been dead since the first visit. So the
+      // finished-and-empty state is tested as well as listened for.
+      if (img.complete && img.naturalWidth === 0) { swap(img); continue; }
+      img.addEventListener('error', () => swap(img), { once: true });
+      // A request that never resolves leaves an empty ground where a jacket
+      // should be, which reads the same as a broken one. Covers come from hosts
+      // this app does not control, so a slow or unreachable one falls back too.
+      // Ten seconds, not two: a slow connection should still get the real jacket.
+      // Past that the request is not arriving and an empty ground is the worse
+      // of the two failures.
+      const t = setTimeout(() => { if (!img.complete || !img.naturalWidth) swap(img); }, 10000);
+      img.addEventListener('load', () => clearTimeout(t), { once: true });
     }
   }
 
@@ -1043,7 +1058,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
       </div>
 
       <section class="dossier-block">
-        <p class="eyebrow">The case for it</p>
+        <p class="eyebrow">${scored ? 'The case for it' : 'What is known'}</p>
         <h3>${esc(caseFor(e, s))}</h3>
         ${blurbOf(e, 420) ? `<p>${esc(blurbOf(e, 420))}</p>` : ''}
       </section>
@@ -1061,7 +1076,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
       </section>
 
       ${m?.standfirst ? `<section class="dossier-block">
-        <p class="eyebrow">From the review</p>
+        <p class="eyebrow">${status === 'awaiting-review' ? 'From the listing' : 'From the review'}</p>
         <blockquote class="quote">${esc(m.standfirst.length > 300 ? `${m.standfirst.slice(0, 300).replace(/\s+\S*$/, '')}…` : m.standfirst)}
           <span class="quote-source">${esc(m.source.name)} · ${esc(fmtDate(m.reviewDate))}${m.byline ? ` · ${esc(m.byline)}` : ''}</span>
         </blockquote>
