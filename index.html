@@ -4,242 +4,140 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Constant Reader</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2032%2032%27%20%3E%3Crect%20width%3D%2732%27%20height%3D%2732%27%20fill%3D%27%231c302d%27%2F%3E%3Cg%20fill%3D%27none%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Ccircle%20cx%3D%2716%27%20cy%3D%2716%27%20r%3D%2713%27%20stroke%3D%27%23b99b61%27%20stroke-width%3D%271.15%27%2F%3E%3Cg%20transform%3D%27rotate%28-7%2016%2017%29%27%3E%3Cpath%20d%3D%27M16%2020.4C13%2018.2%209.6%2017.4%206.2%2017.7l0-5.1C9.6%2012.3%2013%2013.1%2016%2015.3z%27%20stroke%3D%27%23ebe9df%27%20stroke-width%3D%271.15%27%2F%3E%3Cpath%20d%3D%27M16%2020.4c3-2.2%206.4-3%209.8-2.7l0-5.1C22.4%2012.3%2019%2013.1%2016%2015.3z%27%20stroke%3D%27%23ebe9df%27%20stroke-width%3D%271.15%27%2F%3E%3Cpath%20d%3D%27M16%2015.3v5.1%27%20stroke%3D%27%23ebe9df%27%20stroke-width%3D%271.15%27%2F%3E%3Cpath%20d%3D%27M6.2%2015.2c1.1-.2%202.2-.2%203.3%200M6.2%2013.9c1.1-.2%202.2-.2%203.3%200%27%20stroke%3D%27%23d2a2ad%27%20stroke-width%3D%27.85%27%2F%3E%3Cpath%20d%3D%27M25.8%2015.2c-1.1-.2-2.2-.2-3.3%200M25.8%2013.9c-1.1-.2-2.2-.2-3.3%200%27%20stroke%3D%27%23d2a2ad%27%20stroke-width%3D%27.85%27%2F%3E%3C%2Fg%3E%3C%2Fg%3E%3C%2Fsvg%3E">
-<meta name="description" content="Everything the literary press reviewed, scored out of ten against one reader's taste.">
+<link rel="icon" href="icons/cr-mark.svg" type="image/svg+xml">
+<meta name="description" content="Independent reading intelligence. Everything the literary press reviewed, scored out of ten against one reader's taste.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,700&family=Courier+Prime:wght@400;700&family=Libre+Caslon+Text:ital,wght@0,400;0,700;1,400&display=swap">
+<!-- The handoff's stacks are local-first and Bodoni 72 ships only on macOS, so the
+     three faces are also fetched: without them a Windows or Android reader gets
+     Georgia everywhere and the display/text/interface division collapses. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..700;1,6..96,400..600&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400..600;1,8..60,400&display=swap">
 <link rel="stylesheet" href="app.css">
 
-<!-- Added to a home screen this runs without Safari's chrome, so it needs a name,
-     an opaque icon and a status-bar colour of its own. iOS ignores an SVG icon
-     here and will screenshot the page instead, which is why the touch icon is a
-     PNG. theme-color is declared per scheme so the notch area matches the page
-     in both, rather than staying light behind a dark feed. -->
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/constant-reader-180.png">
 <meta name="apple-mobile-web-app-title" content="Constant Reader">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="theme-color" id="theme-color" content="#d4ddd8">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<!-- One theme. The jewel palette is the design, not a preference, so the notch
+     matches the lacquer chrome at every system setting. -->
+<meta name="theme-color" content="#132624">
 </head>
 <body>
-<a class="skip" href="#feed">Skip to the feed</a>
 
-<div class="topbar" id="topbar">
-<header class="masthead">
-  <div class="wrap masthead-row">
-    <h1 class="wordmark"><button class="js-home" id="go-home" aria-label="Constant Reader — back to the feed"><span class="mark" aria-hidden="true"></span><span class="wordmark-text">Constant Reader</span></button></h1>
-    <nav class="desknav" id="desknav" aria-label="Sections">
-      <button class="btn" data-view="shelves">Collections</button>
-      <button class="btn" data-view="feed">My feed</button>
-      <button class="btn" data-view="all">All books</button>
-      <button class="btn" data-view="saved">Saved <span class="n" id="deskSaved">0</span></button>
-      <button class="btn" data-view="taste">Taste</button>
-      <button class="btn" data-view="profile">Profile <span class="nav-mark" id="deskProfileMark" hidden aria-hidden="true">•</span></button>
+<svg class="icon-defs" aria-hidden="true" focusable="false"><defs>
+  <g id="i-sparkles"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.14-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.14a.5.5 0 0 1 .96 0l1.58 6.14A2 2 0 0 0 15.5 9.94l6.14 1.58a.5.5 0 0 1 0 .96l-6.14 1.58a2 2 0 0 0-1.44 1.44l-1.58 6.14a.5.5 0 0 1-.96 0z"/><path d="M20 3v4M22 5h-4M4 17v2M5 18H3"/></g>
+  <g id="i-listfilter"><path d="M3 6h18M7 12h10M10 18h4"/></g>
+  <g id="i-library"><rect width="8" height="18" x="3" y="3" rx="1"/><path d="M7 3v18"/><path d="M20.4 18.9c.2.5-.1 1.1-.6 1.3l-1.9.7c-.5.2-1.1-.1-1.3-.6L11.1 5.1c-.2-.5.1-1.1.6-1.3l1.9-.7c.5-.2 1.1.1 1.3.6z"/></g>
+  <g id="i-bookmark"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></g>
+  <g id="i-compass"><circle cx="12" cy="12" r="10"/><path d="m16.24 7.76-2.12 6.36-6.36 2.12 2.12-6.36z"/></g>
+  <g id="i-sliders"><path d="M21 4h-7M10 4H3M21 12h-9M8 12H3M21 20h-5M12 20H3M14 2v4M8 10v4M16 18v4"/></g>
+  <g id="i-user"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></g>
+  <g id="i-search"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></g>
+  <g id="i-menu"><path d="M4 6h16M4 12h16M4 18h16"/></g>
+  <g id="i-close"><path d="M18 6 6 18M6 6l12 12"/></g>
+  <g id="i-arrow"><path d="M5 12h14m-7-7 7 7-7 7"/></g>
+  <g id="i-check"><path d="m5 12 5 5L20 7"/></g>
+  <g id="i-chevron"><path d="m6 9 6 6 6-6"/></g>
+  <!-- The identity mark. Beveled garnet tile, brass rule, inset frame, and the
+       two letters cut on the diagonal the way a bookplate sets them. Same
+       drawing as the favicon, so the tab and the masthead never disagree. -->
+  <symbol id="i-cr" viewBox="0 0 32 32">
+    <rect width="32" height="32" rx="3" fill="#744451"/>
+    <rect x="1.4" y="1.4" width="29.2" height="29.2" rx="2.2" fill="none" stroke="#b69a62" stroke-width="1.1"/>
+    <rect x="4.2" y="4.2" width="23.6" height="23.6" rx="1.4" fill="none" stroke="#eee9dd" stroke-width=".7" opacity=".4"/>
+    <text x="15.8" y="16.6" fill="#eee9dd" font-family="Didot, 'Bodoni MT', Georgia, serif" font-size="14" text-anchor="end">C</text>
+    <text x="16.2" y="26.4" fill="#eee9dd" font-family="Didot, 'Bodoni MT', Georgia, serif" font-size="14" text-anchor="start">R</text>
+  </symbol>
+</defs></svg>
+
+<a class="skip" href="#main">Skip to the page</a>
+
+<!-- Desktop chrome. Fixed to the left edge at full height; the main pane starts at
+     258px and never runs under it. -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-top">
+    <a class="wordmark" href="#" data-view="foryou">
+      <svg class="cr-mark" viewBox="0 0 32 32" aria-hidden="true"><use href="#i-cr"/></svg>
+      <span class="wordmark-text">
+        <span class="wordmark-name">Constant Reader</span>
+        <span class="wordmark-sub">Independent reading intelligence</span>
+      </span>
+    </a>
+    <nav class="sidenav" aria-label="Sections">
+      <button class="sidenav-item" data-view="foryou"><svg class="ico" viewBox="0 0 24 24"><use href="#i-sparkles"/></svg><span>For you</span></button>
+      <button class="sidenav-item" data-view="feed"><svg class="ico" viewBox="0 0 24 24"><use href="#i-listfilter"/></svg><span>Review feed</span></button>
+      <button class="sidenav-item" data-view="all"><svg class="ico" viewBox="0 0 24 24"><use href="#i-library"/></svg><span>All books</span></button>
+      <button class="sidenav-item" data-view="saved"><svg class="ico" viewBox="0 0 24 24"><use href="#i-bookmark"/></svg><span>Saved</span><em class="nav-count" data-saved-count>0</em></button>
+      <button class="sidenav-item" data-view="taste"><svg class="ico" viewBox="0 0 24 24"><use href="#i-compass"/></svg><span>Taste</span></button>
+      <button class="sidenav-item" data-view="profile"><svg class="ico" viewBox="0 0 24 24"><use href="#i-sliders"/></svg><span>Profile</span><em class="nav-dot" data-profile-dot hidden>&bull;</em></button>
     </nav>
-    <div class="toolrow">
-      <button class="btn tool" id="search-toggle" aria-label="Search" aria-expanded="false" aria-controls="panel-search"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="4.4"/><path d="M10.4 10.4 14 14" stroke-linecap="round"/></svg><span class="tool-dot" hidden aria-hidden="true"></span></button>
-      <button class="btn tool" id="order-toggle" aria-label="Order" aria-expanded="false" aria-controls="panel-order"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 4.5h9M2 8h6M2 11.5h3" stroke-linecap="round"/><path d="M12.5 5.5v7M10.5 10.5l2 2 2-2" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="tool-dot" hidden aria-hidden="true"></span></button>
-      <button class="btn tool" id="filters-toggle" aria-label="Filters" aria-expanded="false" aria-controls="more"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 4h12M4.5 8h7M6.5 12h3" stroke-linecap="round"/></svg><span class="tool-dot" hidden aria-hidden="true"></span></button>
-      <button class="btn tool tool-rec" id="recToggle" aria-pressed="false" aria-label="Show only recommended">
-        <span class="rec-star" aria-hidden="true">★</span><span class="tool-n" id="recCount">0</span>
-      </button>
-      <!-- The account. Signed out it says so and signs you in; signed in it is your
-           monogram and opens the menu, where your name and Sign out are. It is in
-           the bar rather than only in the menu because whether your books are
-           syncing is state you should be able to see without opening anything. -->
-      <button class="btn tool tool-account" id="account" aria-label="Sign in">
-        <span class="account-mono" id="account-mono" aria-hidden="true"></span>
-        <span class="account-word" id="account-word">Sign in</span>
-        <span class="account-warn" id="account-warn" hidden aria-hidden="true"></span>
-      </button>
-    </div>
-
   </div>
+
+  <div class="sidebar-foot">
+    <div class="status-card">
+      <p class="status-card-top"><span class="status-live" aria-hidden="true"></span><span>Profile v<b id="profile-rev">2</b></span><em>Live</em></p>
+      <p class="status-card-rule"><span id="threshold-line">7+ is recommended</span></p>
+      <p class="status-card-when" id="rebuilt-line"></p>
+    </div>
+    <button class="btn btn-ghost btn-block" id="auth"><svg class="ico" viewBox="0 0 24 24"><use href="#i-user"/></svg><span id="auth-word">Sign in</span></button>
+    <p class="privacy" id="auth-note">Saves stay on this device until you sign in.</p>
+  </div>
+</aside>
+
+<!-- Mobile chrome. 60px sticky header carrying the full wordmark, one brass-outlined
+     menu button, and a 66px four-column bar for the destinations used most. -->
+<header class="topbar">
+  <a class="wordmark wordmark-mobile" href="#" data-view="foryou">
+    <svg class="cr-mark" viewBox="0 0 32 32" aria-hidden="true"><use href="#i-cr"/></svg>
+    <span class="wordmark-name">Constant Reader</span>
+  </a>
+  <button class="menu-btn" id="menu-toggle" aria-expanded="false" aria-controls="menu-panel" aria-label="Sections">
+    <svg class="ico" viewBox="0 0 24 24"><use href="#i-menu"/></svg>
+  </button>
 </header>
 
-
-<nav class="controls" aria-label="Sorting and filtering">
-  <div class="wrap">
-    <div class="field field-search toolpanel" id="panel-search" hidden>
-      <label class="sr-only" for="q">Search</label>
-      <input type="search" id="q" placeholder="title, author, publisher, critic" autocomplete="off">
-    </div>
-    <div class="field toolpanel" id="panel-order" hidden>
-      <label class="sr-only" for="order">Order</label>
-      <select id="order">
-        <option value="latest">Newest reviews</option>
-        <option value="fit">Best fit for me</option>
-        <option value="published">Newest books</option>
-        <option value="reviewed">Most reviewed</option>
-        <option value="title">Title A–Z</option>
-      </select>
-    </div>
-
-    <details id="more">
-    <summary class="more-toggle sr-only">Filters <span class="more-count" id="more-count"></span></summary>
-    <div class="controls-grid" style="margin-top:var(--s3)">
-      <div class="field">
-        <label for="minScore">Min score</label>
-        <input type="number" id="minScore" min="1" max="10" step="0.5" placeholder="any">
-      </div>
-      <div class="field">
-        <label for="minPages">Min pages</label>
-        <input type="number" id="minPages" min="0" max="2000" step="50" placeholder="any">
-      </div>
-      <div class="group">
-        <span class="legend" id="lg-src">Publication</span>
-        <div class="chips" id="sources" role="group" aria-labelledby="lg-src"></div>
-      </div>
-
-    </div>
-
-    <div class="toggle-row toggle-row-in-more" style="margin-top:var(--s3)">
-      <label class="switch"><input type="checkbox" id="fWindow" checked> Inside the 10-year window</label>
-      <label class="switch"><input type="checkbox" id="fNonfiction"> Hide nonfiction</label>
-      <label class="switch"><input type="checkbox" id="fIdentity"> Only where the book is identified</label>
-      <label class="switch"><input type="checkbox" id="fPenalised"> Only profile-penalised</label>
-      <label class="switch"><input type="checkbox" id="fGroup"> Group by subject engine</label>
-      <label class="switch"><input type="checkbox" id="fUnseen"> Hide what I've ruled on</label>
-      <label class="switch"><input type="checkbox" id="fTune" checked> Tune scores from my saves</label>
-      <button class="btn" id="reset">Reset filters</button>
-    </div>
-    <div class="more-done">
-      <button class="btn btn-done" id="filters-done">Done</button>
-    </div>
-      <details id="tags-panel">
-        <summary class="more-toggle">Browse tags</summary>
-        <div id="tag-dir"></div>
-      </details>
-    </details>
-  </div>
-</nav>
+<div class="menu-panel" id="menu-panel" hidden>
+  <nav class="menu-grid" aria-label="All sections">
+    <button class="menu-item" data-view="foryou"><svg class="ico" viewBox="0 0 24 24"><use href="#i-sparkles"/></svg><span>For you</span></button>
+    <button class="menu-item" data-view="feed"><svg class="ico" viewBox="0 0 24 24"><use href="#i-listfilter"/></svg><span>Review feed</span></button>
+    <button class="menu-item" data-view="all"><svg class="ico" viewBox="0 0 24 24"><use href="#i-library"/></svg><span>All books</span></button>
+    <button class="menu-item" data-view="saved"><svg class="ico" viewBox="0 0 24 24"><use href="#i-bookmark"/></svg><span>Saved</span><em class="nav-count" data-saved-count>0</em></button>
+    <button class="menu-item" data-view="taste"><svg class="ico" viewBox="0 0 24 24"><use href="#i-compass"/></svg><span>Taste</span></button>
+    <button class="menu-item" data-view="profile"><svg class="ico" viewBox="0 0 24 24"><use href="#i-sliders"/></svg><span>Profile</span></button>
+  </nav>
+  <button class="btn btn-ghost btn-block menu-signin" data-auth><svg class="ico" viewBox="0 0 24 24"><use href="#i-user"/></svg><span>Sign in</span></button>
 </div>
 
-<div class="dock">
-  <div class="menu-panel" id="menu-panel" hidden>
-    <nav class="views" aria-label="Sections">
-      <button class="btn" id="view-shelves">Collections</button>
-      <button class="btn" id="view-feed" aria-current="page">My feed</button>
-      <button class="btn" id="view-all">All books</button>
-      <button class="btn" id="view-saved">Saved books <span class="n" id="savedCount">0</span></button>
-      <button class="btn" id="view-taste">Taste</button>
-      <button class="btn" id="view-profile">Profile <span class="nav-mark" id="profile-mark" hidden aria-hidden="true">•</span></button>
-      <button class="btn" id="view-start">Build your profile</button>
-      <button class="btn" id="theme" aria-label="Switch between light and dark">Theme</button>
-      <button class="btn" id="auth">Sign in</button>
-    </nav>
-    <p class="sub" id="auth-note" hidden></p>
-    <p class="built" id="built"></p>
-  </div>
-  <button class="to-top" id="to-top" hidden aria-label="Back to the top of the feed">
-  <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8">
-    <path d="M8 13V4M4 7.5 8 3.5l4 4" stroke-linecap="round" stroke-linejoin="round"/>
-  </svg>
-  </button>
-  <button class="dock-btn" id="menu-toggle" aria-label="Sections and settings" aria-expanded="false" aria-controls="menu-panel">
-    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7">
-      <path d="M2 4h12M2 8h12M2 12h12" stroke-linecap="round"/>
-    </svg>
-  </button>
-</div>
+<main class="pane" id="main">
+  <div id="view-root"></div>
 
-<main class="wrap" id="main">
-  <div class="tag-bar" id="tag-bar" hidden></div>
-  <div class="tally">
-    <p class="status" id="status" role="status" aria-live="polite"></p>
-  </div>
-
-  <section class="section" id="shelves-section" hidden>
-    <h2 id="shelves" class="sr-only">Collections drawn from your profile</h2>
-    <div id="best-pick"></div>
-    <p class="note" id="shelves-note"></p>
-    <div id="shelves-body"></div>
-    <div class="shelf-cta">
-      <p>These are drawn from books your profile can read. The archive is larger.</p>
-      <button class="btn btn-lead" id="to-all">See all <span id="to-all-n"></span> books</button>
+  <footer class="colophon">
+    <div class="colophon-mark">
+      <svg class="cr-mark" viewBox="0 0 32 32" aria-hidden="true"><use href="#i-cr"/></svg>
+      <span>
+        <strong>Constant Reader</strong>
+        <em>A better filter for the books being talked about now.</em>
+      </span>
     </div>
-  </section>
-
-  <section class="section" id="all-section" hidden>
-    <h2 id="all" class="sr-only">Every book</h2>
-    <div class="allbar">
-      <div class="viewswitch" role="group" aria-label="How to show these books">
-        <button class="btn" id="all-as-shelves" aria-pressed="true">Collections</button>
-        <button class="btn" id="all-as-list" aria-pressed="false">List</button>
-      </div>
-      <!-- Which books, as distinct from how they are shown. A reader who wants the
-           ones the profile has not read needs somewhere to click, not a filter to
-           construct. -->
-      <div class="viewswitch" role="group" aria-label="Which books">
-        <button class="btn" id="all-any" data-scope="any" aria-pressed="true">Everything <span class="n" id="n-any"></span></button>
-        <button class="btn" id="all-scored" data-scope="scored" aria-pressed="false">Scored <span class="n" id="n-scored"></span></button>
-        <button class="btn" id="all-no-score" data-scope="reviewed-unscored" aria-pressed="false">Reviewed · no score <span class="n" id="n-no-score"></span></button>
-        <button class="btn" id="all-awaiting" data-scope="awaiting-review" aria-pressed="false">Awaiting review <span class="n" id="n-awaiting"></span></button>
-      </div>
-    </div>
-    <p class="note" id="all-note"></p>
-    <div id="all-shelves"></div>
-    <div id="all-body"></div>
-  </section>
-
-  <section class="section" id="feed-section">
-    <h2 id="feed" class="sr-only">Every book reviewed</h2>
-    <p class="note" id="feed-note"></p>
-    <div id="feed-body"></div>
-  </section>
-
-  <section class="section" id="saved-section" hidden>
-    <div class="section-head">
-      <h2 id="saved">Saved Books</h2>
-      <div class="field">
-        <label for="savedSort">Sort by</label>
-        <select id="savedSort">
-          <option value="recent">Recently saved</option>
-          <option value="title">Title</option>
-          <option value="author">Author</option>
-        </select>
-      </div>
-    </div>
-    <p class="status" id="saved-status" role="status" aria-live="polite"></p>
-    <div id="saved-body"></div>
-  </section>
-
-  <section class="section" id="start-section" hidden>
-    <div class="section-head">
-      <h2 id="start">Build your profile</h2>
-    </div>
-    <div id="start-body"></div>
-  </section>
-
-  <section class="section" id="profile-section" hidden>
-    <div class="section-head">
-      <h2 id="profile">Your ordering</h2>
-    </div>
-    <div id="profile-body"></div>
-  </section>
-
-  <section class="section" id="taste-section" hidden>
-    <div class="section-head">
-      <h2 id="taste">What your saves have taught it</h2>
-    </div>
-    <div id="taste-body"></div>
-  </section>
+    <p class="colophon-note">Scores are transparent signals, not verdicts. Every recommendation shows its working.</p>
+  </footer>
 </main>
 
-<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<nav class="bottombar" aria-label="Main sections">
+  <button class="bottom-item" data-view="foryou"><svg class="ico" viewBox="0 0 24 24"><use href="#i-sparkles"/></svg><span>For you</span></button>
+  <button class="bottom-item" data-view="feed"><svg class="ico" viewBox="0 0 24 24"><use href="#i-listfilter"/></svg><span>Review feed</span></button>
+  <button class="bottom-item" data-view="all"><svg class="ico" viewBox="0 0 24 24"><use href="#i-library"/></svg><span>All books</span></button>
+  <button class="bottom-item" data-view="saved"><svg class="ico" viewBox="0 0 24 24"><use href="#i-bookmark"/></svg><span>Saved</span><em class="nav-count" data-saved-count>0</em></button>
+</nav>
 
-<footer class="foot wrap">
-  <p id="foot-note"></p>
-  <span style="display:flex;gap:var(--s2);flex-wrap:wrap">
-    <button class="btn" id="export">Export my verdicts</button>
-    <button class="btn" id="sources-info">Source status</button>
-  </span>
-</footer>
+<div class="scrim" id="scrim" hidden></div>
+<div class="dossier" id="dossier" role="dialog" aria-modal="true" aria-labelledby="dossier-title" hidden></div>
+
+<p class="toast" id="toast" role="status" aria-live="polite" hidden></p>
+<p class="sr-only" id="announce" role="status" aria-live="polite"></p>
 
 <script type="module" src="app.js"></script>
-
 </body>
 </html>

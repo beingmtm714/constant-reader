@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="4" fill="#744451"/>
+  <rect x="1.5" y="1.5" width="29" height="29" rx="3" fill="none" stroke="#b69a62" stroke-width="1.2"/>
+  <rect x="4" y="4" width="24" height="24" rx="2" fill="none" stroke="#eee9dd" stroke-width=".7" opacity=".45"/>
+  <text x="14.6" y="16.4" fill="#eee9dd" font-family="Didot,'Bodoni MT',Georgia,serif" font-size="13" text-anchor="end">C</text>
+  <text x="17.4" y="25" fill="#eee9dd" font-family="Didot,'Bodoni MT',Georgia,serif" font-size="13" text-anchor="start">R</text>
+</svg>
