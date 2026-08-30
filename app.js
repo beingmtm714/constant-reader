@@ -60,6 +60,8 @@ import { cleanBlurb } from './lib/blurb.mjs';
     { id: 'title', label: 'Title A–Z' },
   ];
 
+  const PCT_LABEL = 'Best fit for me';
+
   const SCOPES = [
     { id: 'any', label: 'Everything the profile can place' },
     { id: 'scored', label: 'Scored' },
@@ -200,6 +202,10 @@ import { cleanBlurb } from './lib/blurb.mjs';
     dimensions: FEED.dimensions,
     evidenceRule: FEED.evidenceRule,
     proseFloor: FEED.proseFloor,
+    // The corpus middle a thin score is shrunk toward. Without it the browser
+    // would reach a different number from the build the moment a reader touched
+    // a weight — see web/lib/total.mjs.
+    prior: FEED.prior,
   });
 
   const retune = () => { taste = buildTasteModel(verdicts, FEED?.books || [], FEED?.dimensions || []); };
@@ -222,6 +228,60 @@ import { cleanBlurb } from './lib/blurb.mjs';
   }
 
   const shownScore = (e, s = scoreOf(e)) => outOfTen(s.total);
+
+  // Where a book sits in this corpus rather than against an absolute line.
+  //
+  // A weighted sum out of a hundred is only legible next to the field it came
+  // from: 5.2 means nothing until you know that half the archive is under 2.5.
+  // Recomputed whenever the reader's weights change, because that is exactly
+  // when the field moves, and cached per render so a shelf of eighty cards does
+  // not sort the archive eighty times.
+  let percentiles = null;
+  function rankAll() {
+    const totals = FEED.books.filter(isScored).map((e) => scoreOf(e).total).sort((a, b) => a - b);
+    percentiles = totals;
+  }
+  function percentileOf(e, s = scoreOf(e)) {
+    if (!isScored(e) || !percentiles?.length) return null;
+    let lo = 0, hi = percentiles.length;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (percentiles[mid] < s.total) lo = mid + 1; else hi = mid; }
+    return Math.round(lo / percentiles.length * 100);
+  }
+
+  // Which single requirement is emptying the list.
+  //
+  // When a reader's profile surfaces almost nothing, the useful answer is not
+  // "nothing matched" but "your prose weighting is the reason". So each
+  // dimension is zeroed in turn and the top twenty recounted; the dimension
+  // whose removal lets the most new books in is the one doing the excluding.
+  // Brute force over seven dimensions and eight hundred books, which at this
+  // size is a loop rather than an algorithm.
+  function starvingDimension() {
+    const books = FEED.books.filter(isScored);
+    if (books.length < 20) return null;
+    // The weight has to be zeroed in the overrides rather than in the profile:
+    // rescore reads the reader's own weights last, so a change to the profile's
+    // copy is shadowed by whatever they have set and the experiment measures
+    // nothing. This cost an hour and would have shipped as a panel that never
+    // appeared.
+    const P = profileForOverrides();
+    const topOf = (zeroed) => {
+      const o = zeroed
+        ? { ...overrides, weights: { ...overrides.weights, [zeroed]: 0 } }
+        : overrides;
+      return new Set(books
+        .map((e) => ({ id: e.id, t: rescore(e.score, P, o).total }))
+        .sort((a, b) => b.t - a.t).slice(0, 20).map((x) => x.id));
+    };
+    const base = topOf(null);
+    let worst = null;
+    for (const d of FEED.dimensions) {
+      const without = topOf(d.id);
+      const fresh = [...without].filter((id) => !base.has(id)).length;
+      if (!worst || fresh > worst.fresh) worst = { name: d.name, id: d.id, fresh, weight: weightOf(d) };
+    }
+    return worst && worst.fresh >= 4 ? worst : null;
+  }
 
   // The build's rule, applied to the live number. Everything the build refused
   // for a reason other than the score stays refused.
@@ -931,6 +991,20 @@ import { cleanBlurb } from './lib/blurb.mjs';
         </div>
       </div>
 
+      ${(() => {
+        const w = starvingDimension();
+        if (!w) return '';
+        return `<section class="panel" aria-labelledby="starve-h">
+          <p class="eyebrow">What is narrowing your list</p>
+          <h2 id="starve-h" style="font-family:var(--font-display);font-weight:400;font-size:25px;color:var(--porcelain);margin:10px 0 0">
+            ${esc(w.name)} is doing the most excluding.</h2>
+          <p style="margin:12px 0 0;font-size:14px;line-height:1.55;color:var(--graphite);max-width:56ch">
+            It carries ${w.weight} of your 100 points. Set it to zero and ${w.fresh} books that cannot reach your top twenty today would enter it.
+            That is not a fault — it is what a strong preference does — but it is the one worth knowing about.</p>
+          <button class="btn" data-action="go" data-view="profile" style="margin-top:16px">Open the weights ${ico('arrow')}</button>
+        </section>`;
+      })()}
+
       <section aria-labelledby="how-h">
         <div class="section-head">
           <div>
@@ -1294,6 +1368,12 @@ import { cleanBlurb } from './lib/blurb.mjs';
         <span class="dossier-head-note">Profile v${esc(String(FEED.profileRevision))}</span>
         <h3>${scored ? `Why it earned ${shownScore(e, s).toFixed(1)}` : 'Why there is no score'}</h3>
         <p>${esc(scoreNarrative(e, s))}</p>
+        ${scored ? `<p class="dossier-facts" style="margin-top:14px">${
+          percentileOf(e, s) != null ? `Top ${100 - percentileOf(e, s)}% of your archive` : ''
+        } · ${e.score.dimensionsFired} of 7 dimensions read${
+          e.score.shrunk && Math.abs(e.score.shrinkPull || 0) >= 1
+            ? ` · pulled ${e.score.shrinkPull > 0 ? 'up' : 'down'} ${Math.abs(e.score.shrinkPull / 10).toFixed(1)} toward the field on thin evidence` : ''
+        }</p>` : ''}
         ${scored && fired.length ? `<div class="bars">${fired.map((d) => `<div class="bar-row">
           <span class="bar-name">${esc(d.name)}</span>
           <span class="bar-track"><span class="bar-fill" style="width:${Math.round(d.score * d.weight / maxc * 100)}%"></span></span>
@@ -1755,6 +1835,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
 
   function render() {
     computeStats();
+    rankAll();
     const root = $('view-root');
     root.innerHTML = `<div class="view">${VIEWS[state.view]()}</div>`;
     bindJackets(root);
