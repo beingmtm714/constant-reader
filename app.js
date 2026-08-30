@@ -1398,8 +1398,8 @@ import { cleanBlurb } from './lib/blurb.mjs';
         <h3>${scored ? `Why it earned ${shownScore(e, s).toFixed(1)}` : 'Why there is no score'}</h3>
         <p>${esc(scoreNarrative(e, s))}</p>
         ${scored ? `<p class="dossier-facts" style="margin-top:14px">${
-          percentileOf(e, s) != null ? `Top ${100 - percentileOf(e, s)}% of your archive` : ''
-        } · ${e.score.dimensionsFired} of 7 dimensions read${
+          percentileOf(e, s) != null ? `Top ${Math.max(1, 100 - percentileOf(e, s))}% of your archive` : ''
+        } · ${e.score.dimensionsFired} of ${FEED.dimensions.length} dimensions read${
           e.score.shrunk && Math.abs(e.score.shrinkPull || 0) >= 1
             ? ` · pulled ${e.score.shrinkPull > 0 ? 'up' : 'down'} ${Math.abs(e.score.shrinkPull / 10).toFixed(1)} toward the field on thin evidence` : ''
         }</p>` : ''}
