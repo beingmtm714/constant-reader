@@ -30,6 +30,8 @@ import { cleanBlurb } from './lib/blurb.mjs';
   // has never signed in never loads the SDK. See lib/sync.mjs.
   let user = null;
   let syncing = false;
+  let syncQueued = false;
+  let profileVersion = 0;
 
   // No affiliate programme has been approved for this app, so nothing is
   // configured and every link goes out clean. If one ever is, the id belongs
@@ -43,6 +45,10 @@ import { cleanBlurb } from './lib/blurb.mjs';
   let verdicts = saved.migrate(read(VERDICT_KEY, {}));
   let openRow = null;
   let openChooser = null;
+  // A card may point at a row hidden by the reader's current filters. Keep that
+  // one navigation target visible until they dismiss it, without silently
+  // resetting any filter they chose.
+  let focusedBookId = null;
   let toastTimer = null;
 
   const analytics = createAnalytics({
@@ -98,6 +104,10 @@ import { cleanBlurb } from './lib/blurb.mjs';
   // the overridden ones. A reader who re-scores a band changes what a book is
   // worth, not what it resembles, and nearest-neighbour asks about resemblance.
   function scoreOf(e) {
+    if (!isScored(e)) {
+      const base = e.score?.total ?? 0;
+      return { base, delta: 0, total: base, reasons: [], nearest: null, tuned: false, overridden: false, profileBase: base };
+    }
     const o = rescore(e.score, profileForOverrides(), overrides);
     const overridden = Boolean(o.changed);
     const base = overridden ? o.total : e.score.total;
@@ -115,6 +125,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
   // what counts. Everything the build refused for a reason other than the score
   // stays refused; tuning only ever moves the number.
   function recommendedNow(e, s) {
+    if (!isScored(e)) return false;
     if (!s.overridden && (!state.tune || !taste?.ready)) return e.recommended;
     if (!e.recommended && e.recommendedWhyNot && !/^scores /.test(e.recommendedWhyNot)) return false;
     return outOfTen(s.total) >= RECOMMEND_AT;
@@ -214,18 +225,32 @@ import { cleanBlurb } from './lib/blurb.mjs';
   // locally and drawn on screen by the time this runs, and the reader should
   // never wait on a network round trip to see their own tap land.
   async function syncNow() {
-    if (!user || syncing) return;
+    if (!user) return;
+    if (syncing) { syncQueued = true; return; }
     syncing = true;
     try {
-      adoptProfile(await sync.reconcile(user.uid, localProfile()));
-      showAuth();
-    } catch (err) {
-      // A toast clears itself, and a reader who missed it is left believing their
-      // books are syncing when they are not. The account control keeps the state
-      // until a sync succeeds - the same rule DESIGN.md applies to a filter left
-      // on and an ordering in force.
-      showAuth({ failing: true });
-      toast(sync.explain(err), { error: true });
+      do {
+        syncQueued = false;
+        const version = profileVersion;
+        const uid = user?.uid;
+        if (!uid) break;
+        try {
+          const merged = await sync.reconcile(uid, localProfile());
+          // A local decision made during the round trip is newer than the
+          // document that came back. Keep it, then reconcile once more.
+          if (user?.uid !== uid) break;
+          if (profileVersion === version) adoptProfile(merged);
+          else syncQueued = true;
+          showAuth();
+        } catch (err) {
+          // A toast clears itself, and a reader who missed it is left believing
+          // their books are syncing when they are not. The account control keeps
+          // the state until a later sync succeeds.
+          showAuth({ failing: true });
+          toast(sync.explain(err), { error: true });
+          break;
+        }
+      } while (syncQueued && user);
     } finally {
       syncing = false;
     }
@@ -288,11 +313,20 @@ import { cleanBlurb } from './lib/blurb.mjs';
   function initTheme() {
     const saved = read(THEME_KEY, null);
     if (saved) document.documentElement.dataset.theme = saved;
+    const system = window.matchMedia('(prefers-color-scheme: dark)');
+    const setThemeColor = (theme) => {
+      const meta = $('theme-color');
+      if (meta) meta.setAttribute('content', theme === 'dark' ? '#172724' : '#d4ddd8');
+    };
+    setThemeColor(saved || (system.matches ? 'dark' : 'light'));
+    system.addEventListener?.('change', (ev) => {
+      if (!document.documentElement.dataset.theme) setThemeColor(ev.matches ? 'dark' : 'light');
+    });
     $('theme').addEventListener('click', () => {
-      const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      const current = document.documentElement.dataset.theme || (dark ? 'dark' : 'light');
+      const current = document.documentElement.dataset.theme || (system.matches ? 'dark' : 'light');
       const next = current === 'dark' ? 'light' : 'dark';
       document.documentElement.dataset.theme = next;
+      setThemeColor(next);
       write(THEME_KEY, next);
     });
   }
@@ -320,6 +354,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
     render();
     try {
       persist(VERDICT_KEY, next);
+      profileVersion++;
       onOk?.();
       syncNow();
     } catch {
@@ -439,7 +474,23 @@ import { cleanBlurb } from './lib/blurb.mjs';
   const identified = (e) => e.identity === 'source-stated' || e.identity === 'catalogue-confirmed';
   const fictionOk = (e) => e.fiction === 'confirmed' || e.fiction === 'likely';
 
+  // One status test, everywhere. A missing number can mean two very different
+  // things: either no critical review exists yet, or a review exists but supplied
+  // too little reliable evidence for the seven dimensions. Conflating those made
+  // six reviewed books appear on "Ahead of the reviews" and made their rows claim
+  // that no critic had read them. The status is a fact about evidence, never a
+  // judgement on the book.
+  function scoreStatus(e) {
+    const noScore = e.listedOnly || e.score?.band === 'unscored' || e.score?.band === 'unresolved';
+    if (!noScore) return 'scored';
+    if (!e.listedOnly && e.reviewCount > 0) return 'reviewed-unscored';
+    return 'awaiting-review';
+  }
+
+  const isScored = (e) => scoreStatus(e) === 'scored';
+
   function visible(e) {
+    if (focusedBookId) return e.id === focusedBookId;
     // Everything reviewed inside the window, scored. The only things held back are
     // reviews with no book behind them, hard-filtered ones, and — by default —
     // books the catalogue calls nonfiction.
@@ -449,13 +500,12 @@ import { cleanBlurb } from './lib/blurb.mjs';
     // about does not belong in it - it was 474 rows of "nothing to score" pushing
     // scored books down the page. Those books are not thrown away: All books
     // carries every one of them, described rather than judged.
-    const unscored = e.listedOnly || e.score.band === 'unscored' || e.score.band === 'unresolved';
+    const status = scoreStatus(e);
     // My feed and Collections are the profile's opinion, so a book it cannot score
     // is not in either. Seeing those rows in a feed of recommendations is what made
     // the recommender look like it was not working: 474 of 770 rows saying nothing.
-    if (state.view !== 'all' && unscored) return false;
-    if (state.view === 'all' && state.allScope === 'reviewed' && unscored) return false;
-    if (state.view === 'all' && state.allScope === 'awaiting' && !unscored) return false;
+    if (state.view !== 'all' && status !== 'scored') return false;
+    if (state.view === 'all' && state.allScope !== 'any' && state.allScope !== status) return false;
     if (state.recommendedOnly && !recommendedNow(e, scoreOf(e))) return false;
     if (state.identity && !identified(e)) return false;
     if (state.nonfiction && e.fiction === 'nonfiction') return false;
@@ -480,7 +530,11 @@ import { cleanBlurb } from './lib/blurb.mjs';
     const b = e.book;
     const bits = [];
     bits.push(`<span>${esc(e.sources.join(' · '))}</span>`);
-    bits.push(`<span class="sep">·</span><span>${e.reviewCount === 1 ? 'reviewed' : `${e.reviewCount} reviews, latest`} ${esc(fmtDate(e.lastReviewed))}</span>`);
+    if (scoreStatus(e) === 'awaiting-review') {
+      bits.push(`<span class="sep">·</span><span>${viaInterview(e) ? 'author interview' : 'catalogue listing'} ${esc(fmtDate(e.lastReviewed))}</span>`);
+    } else {
+      bits.push(`<span class="sep">·</span><span>${e.reviewCount === 1 ? 'reviewed' : `${e.reviewCount} reviews, latest`} ${esc(fmtDate(e.lastReviewed))}</span>`);
+    }
     if (b.bookYear) {
       const guess = b.yearSource === 'inferred-from-review';
       bits.push(`<span class="sep">·</span><span class="${guess ? 'guess' : ''}" title="${esc(yearProvenance(b))}">published ${b.editionDate ? esc(b.editionDate) : b.bookYear}${guess ? '?' : ''}</span>`);
@@ -531,7 +585,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
   // which is the author talking about their own book at length; the rest are
   // publisher catalogues. Every one has a publisher, and they are overwhelmingly
   // Oxford, Cambridge, Verso, MIT and California, most published this year.
-  const viaInterview = (e) => e.mentions.some((m) => /^nbn/i.test(m.source.id));
+  const viaInterview = (e) => e.mentions.some((m) => /^(?:nbn|new-books-network)/i.test(m.source.id));
 
   function provenance(e) {
     const bits = [e.book.publisher, e.book.bookYear].filter(Boolean).join(', ');
@@ -551,6 +605,13 @@ import { cleanBlurb } from './lib/blurb.mjs';
   function unscoredLine(e) {
     if (e.score.band === 'unresolved') {
       return `<p class="risk">${esc('No book identified in this review.')}</p>`;
+    }
+    if (scoreStatus(e) === 'reviewed-unscored') {
+      const src = e.sources.length === 1 ? e.sources[0] : e.sources.join(' · ');
+      return `<p class="unscored">`
+        + `<span class="unscored-is">${esc(`${src} reviewed it.`)}</span> `
+        + `<span class="unscored-why">${esc('The available review did not supply enough reliable evidence for the seven taste dimensions, so no number was invented.')}</span>`
+        + `</p>`;
     }
     // Scale on its own is not a character: "mid-length" is a page count wearing a
     // sentence, and it was the only thing 100-odd of these rows had to say.
@@ -655,30 +716,33 @@ import { cleanBlurb } from './lib/blurb.mjs';
     const b = e.book;
     const v = saved.verdictOf(verdicts, e.id);
     const title = b.title;
-    const isUnresolved = e.score.band === 'unresolved' || e.score.band === 'unscored';
+    const status = scoreStatus(e);
+    const noScore = status !== 'scored';
 
     const s = scoreOf(e);
     const rec = recommendedNow(e, s);
-    const shown = isUnresolved ? '—' : outOfTen(s.total);
+    const shown = noScore ? null : outOfTen(s.total);
+    const scoreHtml = noScore
+      ? `<span class="score-state">No<br>score</span><span class="band">${status === 'reviewed-unscored' ? 'reviewed' : 'awaiting review'}</span>`
+      : `<span class="num">${shown}</span><span class="outof">/ 10</span>`;
 
-    return `<li><article class="row" data-id="${esc(e.id)}" data-band="${esc(e.score.band)}" data-rec="${rec}">
+    return `<li><article class="row" data-id="${esc(e.id)}" data-band="${esc(e.score.band)}" data-score-status="${esc(status)}" data-rec="${rec}">
       <div class="score">
-        <span class="num">${shown}</span>
-        <span class="outof">${isUnresolved ? '' : '/ 10'}</span>
+        ${scoreHtml}
         ${rec ? `<button class="rec-mark js-rec" title="Show only recommended">★<span class="sr-only"> Recommended. Show only recommended books.</span></button>` : ''}
-        ${s.tuned && !isUnresolved ? tuneMark(s) : ''}
+        ${s.tuned && !noScore ? tuneMark(s) : ''}
       </div>
       <div>
         <h3 class="title"><button class="js-open" aria-expanded="false" aria-controls="d-${cssId(e.id)}">${esc(title)}${authorOf(e) ? `<span class="author">${esc(authorOf(e))}</span>` : ''}</button></h3>
         <p class="meta">${bookLine(e)}</p>
-        ${s.tuned && !isUnresolved ? tuneLine(s) : ''}
+        ${s.tuned && !noScore ? tuneLine(s) : ''}
         ${describeBook(e)}
 
-        ${isUnresolved ? unscoredLine(e) : ''}
+        ${noScore ? unscoredLine(e) : ''}
         ${rowTags(e)}
         ${caveatLine(e)}
         <div class="row-links">
-          <button class="btn js-why" aria-expanded="false" aria-controls="d-${cssId(e.id)}">Why this score</button>
+          <button class="btn js-why" aria-expanded="false" aria-controls="d-${cssId(e.id)}">${noScore ? 'Why no score' : 'Why this score'}</button>
           <a class="btn" href="${esc(e.mentions[0].reviewUrl)}" target="_blank" rel="noopener">${esc(e.mentions[0].source.short)}${e.reviewCount > 1 ? ` +${e.reviewCount - 1}` : ''}</a>
           ${findCopyHtml(e, 'feed')}
         </div>
@@ -695,7 +759,11 @@ import { cleanBlurb } from './lib/blurb.mjs';
   const cssId = (s) => String(s).replace(/[^a-z0-9]/gi, '-');
 
   function detail(e) {
-    const dims = Object.values(e.score.dimensions);
+    const status = scoreStatus(e);
+    const scored = status === 'scored';
+    const ordered = rescore(e.score, profileForOverrides(), overrides);
+    const live = scoreOf(e);
+    const dims = Object.values(ordered.dimensions || e.score.dimensions);
     const dimHtml = dims.map((d) => `
       <div class="dim${d.defaulted ? ' is-default' : ''}">
         <span class="dim-id">${esc(d.dimension)}<br><span style="opacity:.7">×${d.weight}</span></span>
@@ -707,7 +775,9 @@ import { cleanBlurb } from './lib/blurb.mjs';
         <span class="dim-score">${d.score}</span>
       </div>`).join('');
 
-    const adj = (e.score.adjustments || []).map((a) => `<li><span class="pts ${a.points > 0 ? 'plus' : ''}">${a.points > 0 ? '+' : ''}${a.points}</span> ${esc(a.label)} <span style="opacity:.6">${esc((a.evidence || []).slice(0, 4).join(', '))}</span></li>`).join('');
+    const activeAdjustments = (e.score.adjustments || []).filter((a) => overrides.adjustments?.[a.id] !== false);
+    const adj = activeAdjustments.map((a) => `<li><span class="pts ${a.points > 0 ? 'plus' : ''}">${a.points > 0 ? '+' : ''}${a.points}</span> ${esc(a.label)} <span style="opacity:.6">${esc((a.evidence || []).slice(0, 4).join(', '))}</span></li>`).join('');
+    const activeFilters = (e.score.filters || []).filter((f) => overrides.adjustments?.[f.id] !== false);
 
     const b = e.book;
     const meta = [
@@ -715,7 +785,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
       ['Author', b.author || 'not extracted'],
       b.translator ? ['Translator', b.translator] : null,
       ['Publisher', b.publisher || 'unknown'],
-      ['Pages', b.pages ? String(b.pages) : 'unknown — D6 fell back to its default'],
+      ['Pages', b.pages ? String(b.pages) : scored ? 'unknown — D6 fell back to its default' : 'unknown'],
       ['Published', b.bookYear ? `${b.editionDate || b.bookYear} — ${yearProvenance(b)}` : 'unknown'],
       ['Fiction', `${e.fiction} — ${e.score.fiction?.why || ''}`],
       ['Identified by', `${b.extraction.method} (${e.identity})`],
@@ -731,18 +801,12 @@ import { cleanBlurb } from './lib/blurb.mjs';
 
     const risk = (e.score.risk || []).slice(0, 3);
     const rest = restTags(e);
-
-    return `
-      ${fullDescription(e)}
-      <div class="detail-actions">
-        ${e.mentions.map((m) => `<a class="btn" href="${esc(m.reviewUrl)}" target="_blank" rel="noopener">Read the ${esc(m.source.short)} review</a>`).join('')}
-        ${b.openLibraryUrl ? `<a class="btn" href="${esc(b.openLibraryUrl)}" target="_blank" rel="noopener">Catalogue</a>` : ''}
-        ${findCopyHtml(e, 'detail')}
-      </div>
-      <div class="chooser" id="${chooserId(e, 'detail')}" hidden></div>
-
-      ${e.reading?.summary ? `<h3>How it sits against the profile</h3>
-        <p class="reading">${esc(e.reading.summary)}</p>` : ''}
+    const liveRead = live.tuned || live.overridden
+      ? `The published profile scored this ${outOfTen(live.profileBase ?? e.score.total)}. ${live.overridden ? `Your ordering makes that ${outOfTen(live.base)}. ` : ''}${live.tuned ? `Your saves move it ${live.delta > 0 ? 'up' : 'down'} to ${outOfTen(live.total)}.` : ''}`
+      : e.reading?.summary || '';
+    const scoringHtml = scored ? `
+      ${liveRead ? `<h3>How it sits against the profile</h3>
+        <p class="reading">${esc(liveRead)}</p>` : ''}
       ${risk.length || e.reading?.caveats?.length ? `<h3>How far to trust it</h3>
         ${risk.map((r) => `<p class="risk">${esc(r)}</p>`).join('')}
         ${e.reading?.caveats?.length ? `<p class="reading-caveat">${esc(e.reading.caveats.join(' '))}</p>` : ''}` : ''}
@@ -751,15 +815,30 @@ import { cleanBlurb } from './lib/blurb.mjs';
       ${adj ? `<h3>Adjustments</h3><ul class="adjust">${adj}</ul>` : ''}
       ${(e.score.notes || []).length ? `<h3>Noted, at no cost</h3><ul class="adjust">${e.score.notes.map((n) => `<li><span class="pts" style="color:var(--ink-faint)">0</span> ${esc(n.label)} <span style="opacity:.6">${esc((n.evidence || []).slice(0, 5).join(', '))}</span></li>`).join('')}</ul>` : ''}
       ${e.score.proseFloorApplied ? `<h3>Prose floor</h3><p style="font-family:var(--mono);font-size:.75rem;margin:0">${esc(FEED.proseFloor.note)}</p>` : ''}
-      ${e.score.filters.length ? `<h3>Profile rules fired</h3><ul class="adjust">${e.score.filters.map((f) => `<li>${esc(f.label || f.id)} <span style="opacity:.6">${esc((f.evidence || []).slice(0, 5).join(', '))}</span></li>`).join('')}</ul>` : ''}
+      ${activeFilters.length ? `<h3>Profile rules fired</h3><ul class="adjust">${activeFilters.map((f) => `<li>${esc(f.label || f.id)} <span style="opacity:.6">${esc((f.evidence || []).slice(0, 5).join(', '))}</span></li>`).join('')}</ul>` : ''}`
+      : `<h3>Why there is no score</h3>
+        <p class="reading">${esc(status === 'reviewed-unscored'
+          ? 'A critical review exists, but it did not provide enough dependable evidence across the seven taste dimensions to support a number. The book stays visible; the ranking stays blank.'
+          : 'This book is known from a catalogue or an author interview, not from a critical review. It can be described and saved now, but it will not be ranked until review prose gives the profile something to read.')}</p>`;
+
+    return `
+      ${fullDescription(e)}
+      <div class="detail-actions">
+        ${e.mentions.map((m) => `<a class="btn" href="${esc(m.reviewUrl)}" target="_blank" rel="noopener">${status === 'awaiting-review' ? 'Open' : 'Read'} the ${esc(m.source.short)} ${status === 'awaiting-review' ? 'source' : 'review'}</a>`).join('')}
+        ${b.openLibraryUrl ? `<a class="btn" href="${esc(b.openLibraryUrl)}" target="_blank" rel="noopener">Catalogue</a>` : ''}
+        ${findCopyHtml(e, 'detail')}
+      </div>
+      <div class="chooser" id="${chooserId(e, 'detail')}" hidden></div>
+
+      ${scoringHtml}
       <h3>The book</h3>
       <dl class="kv">${meta.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
-      <h3>${e.reviewCount === 1 ? 'The review' : `The ${e.reviewCount} reviews, scored together`}</h3>
+      <h3>${status === 'awaiting-review' ? 'Where this listing came from' : e.reviewCount === 1 ? 'The review' : `The ${e.reviewCount} reviews, scored together`}</h3>
       <ul class="adjust">${mentionRows}</ul>
       ${chipTags(e).length ? `<h3>Tagged</h3><div class="tags">${chipTags(e).map((t) => `<button class="tag-chip k-${esc(t.kind)}" data-tag="${esc(t.id)}" title="Show every book tagged ${esc(t.label)}">${esc(t.label)}</button>`).join('')}</div>` : ''}
       ${rest.length ? `<h3>Also tagged</h3><div class="tags">${rest.map((t) => `<button class="tag-chip k-${esc(t.kind)}" data-tag="${esc(t.id)}" title="Show every book tagged ${esc(t.label)}">${esc(t.label)}</button>`).join('')}</div>` : ''}
       <p style="font-family:var(--mono);font-size:.6875rem;color:var(--ink-faint);margin:var(--s4) 0 0">
-        Scored by keyword against review prose. Treat it as triage, not as a reading of the book.
+        ${scored ? 'Scored by keyword against review prose. Treat it as triage, not as a reading of the book.' : 'No score is shown without sufficient critical evidence.'}
       </p>`;
   }
 
@@ -866,6 +945,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
     const e = row.entry;
     const b = e.book;
     const s = scoreOf(e);
+    const status = scoreStatus(e);
     const bits = [b.author, b.publisher, b.pages ? `${b.pages} pp.` : null,
       b.editionDate || b.bookYear || null, b.translator ? `tr. ${b.translator}` : null]
       .filter(Boolean);
@@ -885,9 +965,10 @@ import { cleanBlurb } from './lib/blurb.mjs';
         <div class="chooser" id="${chooserId(e, 'saved')}" hidden></div>
       </div>
       <div class="saved-score">
-        <span class="num">${e.outOfTen == null ? '—' : outOfTen(s.total)}</span>
-        <span class="outof">${e.outOfTen == null ? '' : '/ 10'}</span>
-        ${s.tuned && e.outOfTen != null ? tuneMark(s) : ''}
+        ${status === 'scored'
+          ? `<span class="num">${outOfTen(s.total)}</span><span class="outof">/ 10</span>`
+          : `<span class="saved-score-state">No score</span><span class="outof">${status === 'reviewed-unscored' ? 'reviewed' : 'awaiting review'}</span>`}
+        ${s.tuned && status === 'scored' ? tuneMark(s) : ''}
       </div>
     </article></li>`;
   }
@@ -1037,6 +1118,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
     // existed and loses to any stamped one — see lib/merge-profile.mjs.
     overrides = sync.stamp(overrides);
     write(OVERRIDES_KEY, overrides);
+    profileVersion++;
     markProfile();
     render();
     syncNow();
@@ -1240,7 +1322,8 @@ import { cleanBlurb } from './lib/blurb.mjs';
     });
   }
 
-  function setView(view) {
+  function setView(view, { keepFocus = false } = {}) {
+    if (!keepFocus) focusedBookId = null;
     state.view = view;
     savePrefs();
     $('shelves-section').hidden = view !== 'shelves';
@@ -1316,8 +1399,9 @@ import { cleanBlurb } from './lib/blurb.mjs';
   function bindJacketFallback(root, byId) {
     for (const img of root.querySelectorAll('.jacket img')) {
       img.addEventListener('error', () => {
-        const card = img.closest('[data-card]') || img.closest('.card')?.querySelector('[data-card]');
-        const entry = byId.get(card?.getAttribute('data-card'));
+        const carrier = img.closest('[data-card], [data-feature-book]') || img.closest('.card')?.querySelector('[data-card]');
+        const id = carrier?.getAttribute('data-card') || carrier?.getAttribute('data-feature-book');
+        const entry = byId.get(id);
         if (entry) img.closest('.jacket').innerHTML = drawnHtml(entry);
       }, { once: true });
     }
@@ -1329,7 +1413,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
     // The same test the lists use. `listedOnly` alone missed the books that do have
     // a review behind them but scored nothing from it, so a handful of cards on
     // "Awaiting a review" were showing a number for a book with no score.
-    const noScore = entry.listedOnly || entry.score?.band === 'unscored' || entry.score?.band === 'unresolved';
+    const noScore = !isScored(entry);
     const num = noScore ? '' : `<span class="card-score">${outOfTen(s.total).toFixed(1)}</span>`;
     // "not scored" on a card is a book wearing a label about our own coverage. The
     // publisher is real information, it is the thing these books have in common,
@@ -1338,7 +1422,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
       ? `<span class="card-imprint">${esc(b.publisher || (b.bookYear ? String(b.bookYear) : 'New'))}</span>`
       : '';
     return `<div class="card" data-band="${esc(entry.score?.band || '')}">
-      <button class="card-btn" data-card="${esc(entry.id)}" aria-label="${esc(b.title)}${b.author ? `, ${b.author}` : ''} — open in the feed">
+      <button class="card-btn" data-card="${esc(entry.id)}" aria-label="${esc(b.title)}${b.author ? `, ${b.author}` : ''} — open book details">
         ${jacketHtml(entry)}
       </button>
       <div class="card-meta">${num}${note}</div>
@@ -1353,17 +1437,49 @@ import { cleanBlurb } from './lib/blurb.mjs';
   function renderAllShelves() {
     const weights = {};
     for (const d of FEED.dimensions || []) weights[d.id] = overrides.weights?.[d.id] ?? d.weight;
-    const isUnscored = (e) => e.listedOnly || e.score.band === 'unscored' || e.score.band === 'unresolved';
     const scope = state.allScope || 'any';
-    const pool = FEED.books.filter((e) => (scope === 'reviewed' ? !isUnscored(e)
-      : scope === 'awaiting' ? isUnscored(e) : true));
-    const shelves = buildShelves(pool, { weights }, { only: scope === 'awaiting' ? 'unscored' : 'all' });
-    $('all-note').textContent = scope === 'awaiting'
+    const pool = FEED.books.filter((e) => scope === 'any' || scoreStatus(e) === scope);
+    const shelves = buildShelves(pool, { weights }, { only: scope === 'awaiting-review' ? 'unscored' : 'all' });
+    $('all-note').textContent = scope === 'awaiting-review'
       ? `${pool.length} new books, mostly from the university presses, whose authors have talked about them at length before any critic has. Nothing here is scored — there is no review to score it on — so they are grouped by what they are.`
-      : scope === 'reviewed'
-        ? `${pool.length} books with a review behind them, grouped by what they are rather than by what your profile makes of them.`
+      : scope === 'reviewed-unscored'
+        ? `${pool.length} reviewed books with too little dependable evidence for a number. They stay visible and unranked rather than receiving a score made from defaults.`
+        : scope === 'scored'
+          ? `${pool.length} books with enough critical evidence for the profile to score, grouped by what they are.`
         : `Every book the crawl found, ${pool.length} of them, grouped by what they are rather than by what your profile makes of them.`;
     drawShelves($('all-shelves'), shelves);
+  }
+
+  function bestPickHtml(entry) {
+    const b = entry.book;
+    const s = scoreOf(entry);
+    const mention = entry.mentions.find((m) => (m.standfirst || '').trim())
+      || entry.mentions.find((m) => (m.excerpt || '').trim());
+    let blurb = cleanBlurb(mention?.standfirst || mention?.excerpt || '', { title: b.title, author: b.author });
+    if (blurb.length > 280) blurb = `${blurb.slice(0, 280).replace(/\s+\S*$/, '')}…`;
+    const fit = s.tuned && s.reasons?.length
+      ? `Your saves moved the live score ${s.delta > 0 ? 'up' : 'down'}: ${s.reasons.map((r) => r.label).join(' · ')}.`
+      : s.overridden
+        ? 'Your ordering puts this first. Open the score to inspect the bands and weights now in force.'
+        : entry.reading?.summary || 'It has the highest live score among the books with enough critical evidence.';
+    return `<article class="best-pick" data-feature-book="${esc(entry.id)}">
+      <div class="best-pick-rule" aria-hidden="true"></div>
+      <p class="best-pick-kicker">Your best pick</p>
+      <button class="best-pick-jacket" data-open-book="${esc(entry.id)}" aria-label="Open ${esc(b.title)} in the feed">
+        ${jacketHtml(entry)}
+      </button>
+      <div class="best-pick-copy">
+        <p class="best-pick-score"><span>${outOfTen(s.total).toFixed(1)}</span> / 10 <em>${recommendedNow(entry, s) ? 'recommended' : 'closest match'}</em></p>
+        <h3><button data-open-book="${esc(entry.id)}">${esc(b.title)}</button></h3>
+        ${authorOf(entry) ? `<p class="best-pick-author">by ${esc(authorOf(entry))}</p>` : ''}
+        ${blurb ? `<p class="best-pick-blurb">${esc(blurb)}</p>` : ''}
+        ${fit ? `<p class="best-pick-fit"><span>${s.tuned || s.overridden ? 'Why it leads now' : 'Profile read'}</span> ${esc(fit)}</p>` : ''}
+        <div class="best-pick-actions">
+          <button class="btn btn-lead" data-open-book="${esc(entry.id)}">Open the score</button>
+          ${saveButton(entry, 'best-pick')}
+        </div>
+      </div>
+    </article>`;
   }
 
   function renderShelves() {
@@ -1373,6 +1489,21 @@ import { cleanBlurb } from './lib/blurb.mjs';
     const weights = {};
     for (const d of FEED.dimensions || []) weights[d.id] = overrides.weights?.[d.id] ?? d.weight;
     const shelves = buildShelves(FEED.books, { weights });
+    const ranked = FEED.books
+      .filter((e) => isScored(e) && e.inWindow !== false && saved.verdictOf(verdicts, e.id) !== 'passed')
+      .map((entry) => ({ entry, score: scoreOf(entry) }))
+      .sort((a, b) => b.score.total - a.score.total || reviewTime(b.entry) - reviewTime(a.entry));
+    const best = ranked.find(({ entry, score }) => recommendedNow(entry, score)) || ranked[0];
+    const feature = $('best-pick');
+    feature.innerHTML = best ? bestPickHtml(best.entry) : '';
+    feature.hidden = !best;
+    if (best) {
+      bindJacketFallback(feature, new Map([[best.entry.id, best.entry]]));
+      bindSaveAndFind(feature);
+      for (const button of feature.querySelectorAll('[data-open-book]')) {
+        button.addEventListener('click', () => openBook(button.dataset.openBook));
+      }
+    }
     const n = FEED.books.length;
     if ($('to-all-n')) $('to-all-n').textContent = String(n);
     $('shelves-note').textContent = shelves.length
@@ -1407,26 +1538,26 @@ import { cleanBlurb } from './lib/blurb.mjs';
     bindJacketFallback(body, new Map(FEED.books.map((e) => [e.id, e])));
 
     for (const btn of body.querySelectorAll('[data-card]')) {
-      btn.addEventListener('click', () => {
-        const id = btn.getAttribute('data-card');
-        // setView renders the feed synchronously, so the row exists by the time
-        // this returns and none of it needs deferring. It was written inside a
-        // requestAnimationFrame first, which never runs while the page is hidden -
-        // so a card tapped on a backgrounded tab left the reader at the top of 818
-        // rows with nothing open. The card opens the working as well as scrolling
-        // to it, because a reader who tapped a jacket wants the reason it was on
-        // that shelf. `openRow` is left alone: it holds a button element, never an id.
-        const entry = FEED.books.find((e) => e.id === id);
-        const scorable = entry && !entry.listedOnly
-          && entry.score?.band !== 'unscored' && entry.score?.band !== 'unresolved';
-        if (!scorable) state.allMode = 'list';
-        setView(scorable ? 'feed' : 'all');
-        const row = document.querySelector(`.row[data-id="${CSS.escape(id)}"]`);
-        if (!row) return;
-        row.scrollIntoView({ block: 'center', behavior: 'auto' });
-        if (!row.classList.contains('is-open')) row.querySelector('.js-why')?.click();
-      });
+      btn.addEventListener('click', () => openBook(btn.getAttribute('data-card')));
     }
+  }
+
+  // Collections are an index. Every route into a book ends at its canonical row,
+  // where the score and evidence expand inline. The status decides whether that
+  // row lives in My feed or the complete archive.
+  function openBook(id) {
+    const entry = FEED.books.find((e) => e.id === id);
+    if (!entry) return;
+    if (!isScored(entry)) {
+      state.allMode = 'list';
+      state.allScope = scoreStatus(entry);
+    }
+    focusedBookId = id;
+    setView(isScored(entry) ? 'feed' : 'all', { keepFocus: true });
+    const article = document.querySelector(`.row[data-id="${CSS.escape(id)}"]`);
+    if (!article) return;
+    article.scrollIntoView({ block: 'center', behavior: 'auto' });
+    if (!article.classList.contains('is-open')) article.querySelector('.js-why')?.click();
   }
 
   // ------------------------------------------------------------ grouping
@@ -1478,8 +1609,14 @@ import { cleanBlurb } from './lib/blurb.mjs';
     const shown = all.filter(visible).sort(compare);
 
     const active = state.tag ? (FEED.tags || []).find((t) => t.id === state.tag) : null;
-    $('tag-bar').hidden = !active;
-    if (active) {
+    const focused = focusedBookId ? FEED.books.find((e) => e.id === focusedBookId) : null;
+    $('tag-bar').hidden = !active && !focused;
+    if (focused) {
+      $('tag-bar').innerHTML = `<span class="lab-sm">Opened from Collections</span>
+        <strong>${esc(focused.book.title)}</strong>
+        <button class="btn" id="focus-clear">Back to the ${state.view === 'all' ? 'archive' : 'feed'}</button>`;
+      $('focus-clear').addEventListener('click', () => { focusedBookId = null; render(); });
+    } else if (active) {
       $('tag-bar').innerHTML = `<span class="lab-sm">${esc(active.kind)}</span>
         <strong>${esc(active.label)}</strong>
         <button class="btn" id="tag-clear">Clear</button>`;
@@ -1503,11 +1640,14 @@ import { cleanBlurb } from './lib/blurb.mjs';
       $('all-as-shelves').setAttribute('aria-pressed', String(asShelves));
       $('all-as-list').setAttribute('aria-pressed', String(!asShelves));
 
-      const isUnscored = (e) => e.listedOnly || e.score.band === 'unscored' || e.score.band === 'unresolved';
-      const awaiting = FEED.books.filter(isUnscored).length;
+      const counts = FEED.books.reduce((out, e) => {
+        out[scoreStatus(e)] = (out[scoreStatus(e)] || 0) + 1;
+        return out;
+      }, {});
       $('n-any').textContent = FEED.books.length;
-      $('n-reviewed').textContent = FEED.books.length - awaiting;
-      $('n-awaiting').textContent = awaiting;
+      $('n-scored').textContent = counts.scored || 0;
+      $('n-no-score').textContent = counts['reviewed-unscored'] || 0;
+      $('n-awaiting').textContent = counts['awaiting-review'] || 0;
       for (const b of document.querySelectorAll('.allbar [data-scope]')) {
         b.setAttribute('aria-pressed', String(b.dataset.scope === (state.allScope || 'any')));
       }
@@ -1516,12 +1656,16 @@ import { cleanBlurb } from './lib/blurb.mjs';
     const body = inAll ? $('all-body') : $('feed-body');
     if (inAll) {
       const scope = state.allScope || 'any';
-      const nAwaiting = FEED.books.filter((e) => e.listedOnly || e.score.band === 'unscored' || e.score.band === 'unresolved').length;
-      $('all-note').textContent = scope === 'awaiting'
-        ? `${nAwaiting} new books, mostly from the university presses, whose authors have talked about them before any critic has. Described rather than scored, because there is no review to score them on. Tap any tag to see the rest of its kind.`
-        : scope === 'reviewed'
-          ? `${FEED.books.length - nAwaiting} books with a review behind them. Tap any tag to see the rest of its kind.`
-          : `Every book the crawl found. ${nAwaiting} of the ${FEED.books.length} have no review behind them yet, so your profile has nothing to read on. Tap any tag to see the rest of its kind.`;
+      const nScored = FEED.books.filter((e) => scoreStatus(e) === 'scored').length;
+      const nReviewedUnscored = FEED.books.filter((e) => scoreStatus(e) === 'reviewed-unscored').length;
+      const nAwaiting = FEED.books.filter((e) => scoreStatus(e) === 'awaiting-review').length;
+      $('all-note').textContent = scope === 'awaiting-review'
+        ? `${nAwaiting} new books known from catalogues or author interviews, before a critical review has arrived. They are described and saveable, but never ranked on invented evidence.`
+        : scope === 'reviewed-unscored'
+          ? `${nReviewedUnscored} books have a critical review but too little dependable evidence for a score. Their reviews are here; their numbers are deliberately blank.`
+          : scope === 'scored'
+            ? `${nScored} books have enough critical evidence for the seven-dimension profile to score. Tap any tag to see the rest of its kind.`
+            : `Every book the crawl found: ${nScored} scored, ${nReviewedUnscored} reviewed without enough scoring evidence, and ${nAwaiting} awaiting a critical review.`;
     }
     if (!shown.length) {
       body.innerHTML = `<div class="panel">
@@ -1614,6 +1758,14 @@ import { cleanBlurb } from './lib/blurb.mjs';
       const e = FEED.books.find((x) => x.id === article.dataset.id);
       panel.innerHTML = detail(e);
       bindSaveAndFind(panel);
+      for (const btn of panel.querySelectorAll('.tag-chip')) {
+        btn.addEventListener('click', () => {
+          focusedBookId = null;
+          state.tag = btn.dataset.tag === state.tag ? null : btn.dataset.tag;
+          savePrefs(); render();
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+      }
       panel.hidden = false;
       article.classList.add('is-open');
       why.textContent = 'Hide the working';
@@ -1621,7 +1773,8 @@ import { cleanBlurb } from './lib/blurb.mjs';
     } else {
       panel.hidden = true;
       article.classList.remove('is-open');
-      why.textContent = 'Why this score';
+      const e = FEED.books.find((x) => x.id === article.dataset.id);
+      why.textContent = isScored(e) ? 'Why this score' : 'Why no score';
       openRow = null;
     }
     for (const c of article.querySelectorAll('.js-why, .js-open')) c.setAttribute('aria-expanded', String(open));
@@ -1737,6 +1890,11 @@ import { cleanBlurb } from './lib/blurb.mjs';
     const p = read(PREFS_KEY, null);
     if (!p) return;
     Object.assign(state, p, { sources: new Set(p.sources || []) });
+    // The former two-way split put every unscored book under "awaiting", even
+    // when a review existed. Keep old browser preferences useful after the split.
+    if (state.allScope === 'reviewed') state.allScope = 'scored';
+    if (state.allScope === 'awaiting') state.allScope = 'awaiting-review';
+    if (!['any', 'scored', 'reviewed-unscored', 'awaiting-review'].includes(state.allScope)) state.allScope = 'any';
     if (!ORDERS[state.order]) {
       const match = Object.entries(ORDERS).find(([, o]) => o.sort1 === state.sort1 && o.dir1 === state.dir1);
       state.order = match ? match[0] : 'latest';
@@ -2043,8 +2201,11 @@ import { cleanBlurb } from './lib/blurb.mjs';
         return e ? {
           verdict, savedAt, title: e.book.title, author: e.book.author, year: e.book.bookYear,
           isbn13: e.book.isbn13, isbn10: e.book.isbn10,
-          pages: e.book.pages, publisher: e.book.publisher, score: e.score.total,
-          dimensions: Object.fromEntries(Object.values(e.score.dimensions).map((d) => [d.dimension, d.score])),
+          pages: e.book.pages, publisher: e.book.publisher,
+          evidenceStatus: scoreStatus(e), score: isScored(e) ? e.score.total : null,
+          dimensions: isScored(e)
+            ? Object.fromEntries(Object.values(e.score.dimensions).map((d) => [d.dimension, d.score]))
+            : {},
           sources: e.sources, reviews: e.mentions.map((m) => m.reviewUrl),
         } : { verdict, savedAt, id };
       });

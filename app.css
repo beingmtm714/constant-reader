@@ -1,32 +1,45 @@
 /* Constant Reader — see DESIGN.md. Tokens only below this block.
 
-   A New York magazine office at two in the morning, 1929. Bond paper and carbon
-   under a desk lamp, brass fittings, black lacquer, one lipstick red. Warm where
-   the fog build was cool and hard-edged where it was soft: paper instead of
-   haar, and every rounded corner square.
+   A New York magazine office at two in the morning, 1929: bottle-green walls,
+   oxidised brass, a faded garnet proof mark and cool editorial stock. The ground
+   is deliberately celadon rather than parchment. The age comes from typography,
+   patina and proportion, not a beige wash.
 
    The discipline is the one that governed the fog. Nothing is dark for
-   atmosphere. Every text pair clears WCAG AA at 4.5:1 and every border clears
-   3:1, measured rather than judged by eye. */
+   atmosphere. Every text pair clears WCAG AA at 4.5:1 and every interactive
+   boundary clears 3:1, measured rather than judged by eye. */
 
 :root {
-  --bg: #f0e9dc;
-  --surface: #f8f4ea;
-  --surface-2: #e3daca;
-  --ink: #1a1613;
-  --ink-muted: #554c42;
-  --ink-faint: #63594e;
-  --rule: #cfc4b2;
-  /* #8b8071 came out of the spec at a claimed 3.2:1 against every ground; it is
-     2.79:1 against --surface-2, which is what the control bar and the chips are.
-     This is the lightest value that clears 3:1 on all three, because a border
-     should stay a hairline rather than become a second text colour. */
-  --rule-strong: #847a6b;
-  --accent: #9a2a24;
-  --accent-soft: #eddcd6;
-  --brass: #7a6224;
-  --warn: #7a5410;
-  --ok: #2a5d46;
+  --bg: #d4ddd8;
+  --surface: #edf0ec;
+  --surface-2: #c5d1cb;
+  --ink: #182522;
+  --ink-muted: #43534e;
+  --ink-faint: #4b5b56;
+  --rule: #a6b3ad;
+  --rule-strong: #62736c;
+
+  --garnet: #713647;
+  --garnet-soft: #ddcfd4;
+  --malachite: #315e4b;
+  --malachite-soft: #cfddd6;
+  --lapis: #3f5372;
+  --lapis-soft: #d1d8e2;
+  --olive: #565a31;
+  --olive-soft: #dce0cc;
+  --brass: #806a39;
+  --accent: var(--garnet);
+  --accent-soft: var(--garnet-soft);
+  --link: var(--lapis);
+  --warn: var(--olive);
+  --ok: var(--malachite);
+
+  --hero: #1c302d;
+  --hero-surface: #29423d;
+  --hero-ink: #f0eee7;
+  --hero-muted: #c5cec8;
+  --hero-accent: #d9a0ad;
+  --hero-rule: #b99b61;
 
   --serif: "Libre Caslon Text", Charter, "Iowan Old Style", Georgia, serif;
   --display: "Bodoni Moda", "Libre Caslon Text", Charter, Georgia, serif;
@@ -46,30 +59,41 @@
   --ease: cubic-bezier(0, 0, .25, 1);
 }
 
-:root[data-theme="dark"],
-:root:not([data-theme="light"]) {
-  color-scheme: light;
-}
+:root { color-scheme: light; }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #16130f; --surface: #1e1a15; --surface-2: #29241d;
-  --ink: #ede5d8; --ink-muted: #a99e8e; --ink-faint: #9e9484;
-  --rule: #352f26; --rule-strong: #7a7062;
-  --accent: #e59a8e; --accent-soft: #2e1d19;
-  --brass: #c9a55e;
-  --warn: #d9a441; --ok: #7fc9a2;
-  color-scheme: dark;
+    --bg: #172724; --surface: #213934; --surface-2: #2d4942;
+    --ink: #ece8de; --ink-muted: #c0bbb0; --ink-faint: #b5b0a5;
+    --rule: #435c54; --rule-strong: #87968d;
+    --garnet: #dda0ad; --garnet-soft: #4a2934;
+    --malachite: #8abca0; --malachite-soft: #29483c;
+    --lapis: #a0b5d7; --lapis-soft: #2c3c57;
+    --olive: #c0c08a; --olive-soft: #3d432c;
+    --brass: #c4a567;
+    --accent: var(--garnet); --accent-soft: var(--garnet-soft);
+    --link: var(--lapis); --warn: var(--olive); --ok: var(--malachite);
+    --hero: #111e1c; --hero-surface: #27443e;
+    --hero-ink: #f2eee5; --hero-muted: #c8d0ca;
+    --hero-accent: #e0a4b1; --hero-rule: #c4a567;
+    color-scheme: dark;
   }
 }
 
 :root[data-theme="dark"] {
-  --bg: #16130f; --surface: #1e1a15; --surface-2: #29241d;
-  --ink: #ede5d8; --ink-muted: #a99e8e; --ink-faint: #9e9484;
-  --rule: #352f26; --rule-strong: #7a7062;
-  --accent: #e59a8e; --accent-soft: #2e1d19;
-  --brass: #c9a55e;
-  --warn: #d9a441; --ok: #7fc9a2;
+  --bg: #172724; --surface: #213934; --surface-2: #2d4942;
+  --ink: #ece8de; --ink-muted: #c0bbb0; --ink-faint: #b5b0a5;
+  --rule: #435c54; --rule-strong: #87968d;
+  --garnet: #dda0ad; --garnet-soft: #4a2934;
+  --malachite: #8abca0; --malachite-soft: #29483c;
+  --lapis: #a0b5d7; --lapis-soft: #2c3c57;
+  --olive: #c0c08a; --olive-soft: #3d432c;
+  --brass: #c4a567;
+  --accent: var(--garnet); --accent-soft: var(--garnet-soft);
+  --link: var(--lapis); --warn: var(--olive); --ok: var(--malachite);
+  --hero: #111e1c; --hero-surface: #27443e;
+  --hero-ink: #f2eee5; --hero-muted: #c8d0ca;
+  --hero-accent: #e0a4b1; --hero-rule: #c4a567;
   color-scheme: dark;
 }
 
@@ -99,7 +123,7 @@ body {
   font-synthesis-weight: none;
 }
 
-a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+a { color: var(--link); text-decoration-thickness: 1px; text-underline-offset: 2px; }
 a:hover { text-decoration-thickness: 2px; }
 
 :where(a, button, select, input, [tabindex]):focus-visible {
@@ -1548,3 +1572,158 @@ details:not([open]) > *:not(summary) { display: none; }
 .unscored-tags { color: var(--ink-muted); }
 .unscored-why { color: var(--ink-faint); }
 .card-imprint { font-family: var(--mono); font-size: .6875rem; letter-spacing: .04em; color: var(--ink-muted); }
+
+/* ------------------------------------------------ 2026-08-30: jewel editorial
+
+   The Parker reference belongs in the hierarchy and the restraint, not in period
+   cosplay. Cool celadon replaces faux parchment; garnet, malachite, lapis and
+   olive are faded enough to sit together. Brass remains architecture only. */
+
+.section-head h2 {
+  font-family: var(--display); font-size: clamp(1.75rem, 3vw, 2.5rem);
+  line-height: 1.05; letter-spacing: -.025em; font-weight: 700;
+}
+
+.shelf-title {
+  font-size: clamp(1.45rem, 2.4vw, 1.9rem); line-height: 1.08;
+  letter-spacing: -.015em; text-transform: none;
+}
+
+.title {
+  font-family: var(--display); font-size: clamp(1.4rem, 2.1vw, 1.7rem);
+  line-height: 1.12; font-weight: 700; letter-spacing: -.02em;
+}
+
+.card-title {
+  font-family: var(--display); font-size: 1.0625rem; line-height: 1.16;
+  font-weight: 700; letter-spacing: -.015em;
+  -webkit-line-clamp: 3;
+}
+.card[data-band="lead"] .card-title { color: var(--accent); }
+
+.group-head, .taste-h, .ov-h {
+  font-family: var(--display); font-size: 1.2rem; line-height: 1.15;
+  letter-spacing: 0; text-transform: none; color: var(--ink);
+}
+
+/* A blank numeral used to be an em dash. These words say which kind of blank it
+   is, and the band below makes the state legible without colour. */
+.score .score-state,
+.saved-score-state {
+  display: block; font-family: var(--mono); font-size: .75rem; line-height: 1.1;
+  letter-spacing: .05em; text-transform: uppercase; color: var(--ink-muted);
+  white-space: nowrap;
+}
+.row[data-score-status="reviewed-unscored"] .score-state { color: var(--lapis); }
+.row[data-score-status="awaiting-review"] .score-state { color: var(--malachite); }
+
+/* The card Collections is allowed to have: one editorial lead, not a second
+   feed. It has a stepped edge, a doubled brass rule and no shadow or radius. */
+.best-pick {
+  position: relative; display: grid;
+  grid-template-columns: minmax(150px, 210px) minmax(0, 1fr);
+  grid-template-areas: "kicker kicker" "jacket copy";
+  gap: var(--s4) clamp(var(--s5), 5vw, var(--s8));
+  margin: 0 0 var(--s8); padding: clamp(var(--s5), 5vw, var(--s8));
+  background: var(--hero); color: var(--hero-ink);
+  border-top: 5px solid var(--hero-rule); border-bottom: 1px solid var(--hero-rule);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 24px), calc(100% - 24px) 100%, 0 100%);
+}
+.best-pick::after {
+  content: ""; position: absolute; inset: 11px 12px auto; height: 1px;
+  background: var(--hero-rule); opacity: .75;
+}
+.best-pick-rule { position: absolute; inset: auto 38px 20px 38px; border-top: 1px solid var(--hero-rule); opacity: .5; }
+.best-pick-kicker {
+  grid-area: kicker; margin: var(--s2) 0 var(--s3);
+  font-family: var(--mono); font-size: .75rem; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--hero-muted);
+}
+.best-pick-jacket {
+  grid-area: jacket; align-self: start; display: block; width: 100%;
+  padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer;
+}
+.best-pick-jacket:focus-visible { outline-color: var(--hero-accent); }
+.best-pick .jacket { border-color: var(--hero-rule); background: var(--hero-surface); }
+.best-pick-copy { grid-area: copy; align-self: center; min-width: 0; }
+.best-pick-score {
+  margin: 0 0 var(--s3); font-family: var(--mono); font-size: .75rem;
+  letter-spacing: .06em; text-transform: uppercase; color: var(--hero-muted);
+}
+.best-pick-score span {
+  font-family: var(--display); font-size: clamp(2.5rem, 5vw, 4rem);
+  line-height: .8; letter-spacing: -.04em; color: var(--hero-accent);
+  vertical-align: -.12em;
+}
+.best-pick-score em { margin-left: var(--s3); font-style: normal; color: var(--hero-ink); }
+.best-pick h3 { margin: 0; font-family: var(--display); font-size: clamp(2.4rem, 6vw, 4.75rem); line-height: .92; letter-spacing: -.045em; }
+.best-pick h3 button {
+  margin: 0; padding: 0; border: 0; background: none; color: inherit;
+  font: inherit; letter-spacing: inherit; text-align: left; cursor: pointer;
+}
+.best-pick h3 button:hover { color: var(--hero-accent); }
+.best-pick-author {
+  margin: var(--s3) 0 var(--s5); font-family: var(--mono); font-size: .8125rem;
+  letter-spacing: .08em; text-transform: uppercase; color: var(--hero-muted);
+}
+.best-pick-blurb { margin: 0 0 var(--s4); max-width: 66ch; font-size: 1.0625rem; line-height: 1.55; color: var(--hero-ink); }
+.best-pick-fit {
+  margin: 0; max-width: 66ch; padding-top: var(--s3);
+  border-top: 1px solid rgb(255 255 255 / .22);
+  font-size: .9375rem; line-height: 1.5; color: var(--hero-muted);
+}
+.best-pick-fit span {
+  display: block; margin-bottom: var(--s1); font-family: var(--mono);
+  font-size: .6875rem; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--hero-accent);
+}
+.best-pick-actions { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s5); }
+.best-pick-actions .btn { background: var(--hero-surface); border-color: var(--hero-muted); color: var(--hero-ink); }
+.best-pick-actions .btn:hover { background: var(--hero-ink); border-color: var(--hero-ink); color: var(--hero); }
+.best-pick-actions .btn-lead { background: var(--hero-ink); border-color: var(--hero-ink); color: var(--hero); }
+.best-pick-actions .btn-lead:hover { background: var(--hero-accent); border-color: var(--hero-accent); color: var(--hero); }
+#shelves-note { margin-top: calc(var(--s5) * -1); }
+
+/* Each tag kind gets one faded jewel outline. The former 3px left edge read as
+   the accent stripe the flat-list contract explicitly excludes. */
+.tag-chip.k-subject { color: var(--malachite); border-color: var(--malachite); }
+.tag-chip.k-period { color: var(--lapis); border-color: var(--lapis); }
+.tag-chip.k-form { color: var(--olive); border-color: var(--olive); }
+.tag-chip.k-genre { color: var(--garnet); border-color: var(--garnet); }
+.tag-chip.k-subject, .tag-chip.k-period, .tag-chip.k-form, .tag-chip.k-genre { border-left-width: 1px; }
+
+/* Detail is still inside its row, but now continues the list rather than becoming
+   a bordered card inside it. */
+:is(#feed-body, #all-body) .detail,
+:is(#feed-body, #all-body) .chooser-inner {
+  background: transparent; border: 0; border-top: 1px solid var(--rule-strong);
+  padding: var(--s4) 0 0;
+}
+
+@media (min-width: 761px) {
+  :is(#feed-body, #all-body) .detail,
+  :is(#feed-body, #all-body) .chooser { grid-column: 2 / -1; }
+}
+
+@media (max-width: 760px) {
+  .best-pick {
+    grid-template-columns: minmax(0, 1fr); grid-template-areas: "kicker" "jacket" "copy";
+    gap: var(--s4); margin-bottom: var(--s7); padding: var(--s5);
+  }
+  .best-pick-jacket { width: min(45vw, 150px); }
+  .best-pick h3 { font-size: clamp(2.15rem, 11vw, 3.2rem); }
+  .best-pick-blurb { font-size: 1rem; }
+  #shelves-note { margin-top: 0; }
+  .shelf-title { font-size: 1.45rem; }
+  .allbar .viewswitch[aria-label="Which books"] {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%;
+  }
+  .allbar .viewswitch[aria-label="Which books"] .btn {
+    min-width: 0; white-space: normal; border: 1px solid var(--rule-strong);
+    margin: -1px 0 0 -1px; text-align: center;
+  }
+}
+
+@media (pointer: coarse) {
+  input[type="search"], input[type="number"], select, textarea { font-size: 16px; }
+}

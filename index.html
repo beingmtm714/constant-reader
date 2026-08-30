@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Constant Reader</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2032%2032%27%20%3E%3Crect%20width%3D%2732%27%20height%3D%2732%27%20fill%3D%27%23f0e9dc%27%2F%3E%3Cg%20fill%3D%27none%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Ccircle%20cx%3D%2716%27%20cy%3D%2716%27%20r%3D%2713%27%20stroke%3D%27%237a6224%27%20stroke-width%3D%271.15%27%2F%3E%3Cg%20transform%3D%27rotate%28-7%2016%2017%29%27%3E%3Cpath%20d%3D%27M16%2020.4C13%2018.2%209.6%2017.4%206.2%2017.7l0-5.1C9.6%2012.3%2013%2013.1%2016%2015.3z%27%20stroke%3D%27%231a1613%27%20stroke-width%3D%271.15%27%2F%3E%3Cpath%20d%3D%27M16%2020.4c3-2.2%206.4-3%209.8-2.7l0-5.1C22.4%2012.3%2019%2013.1%2016%2015.3z%27%20stroke%3D%27%231a1613%27%20stroke-width%3D%271.15%27%2F%3E%3Cpath%20d%3D%27M16%2015.3v5.1%27%20stroke%3D%27%231a1613%27%20stroke-width%3D%271.15%27%2F%3E%3Cpath%20d%3D%27M6.2%2015.2c1.1-.2%202.2-.2%203.3%200M6.2%2013.9c1.1-.2%202.2-.2%203.3%200%27%20stroke%3D%27%239a2a24%27%20stroke-width%3D%27.85%27%2F%3E%3Cpath%20d%3D%27M25.8%2015.2c-1.1-.2-2.2-.2-3.3%200M25.8%2013.9c-1.1-.2-2.2-.2-3.3%200%27%20stroke%3D%27%239a2a24%27%20stroke-width%3D%27.85%27%2F%3E%3C%2Fg%3E%3C%2Fg%3E%3C%2Fsvg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2032%2032%27%20%3E%3Crect%20width%3D%2732%27%20height%3D%2732%27%20fill%3D%27%231c302d%27%2F%3E%3Cg%20fill%3D%27none%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Ccircle%20cx%3D%2716%27%20cy%3D%2716%27%20r%3D%2713%27%20stroke%3D%27%23b99b61%27%20stroke-width%3D%271.15%27%2F%3E%3Cg%20transform%3D%27rotate%28-7%2016%2017%29%27%3E%3Cpath%20d%3D%27M16%2020.4C13%2018.2%209.6%2017.4%206.2%2017.7l0-5.1C9.6%2012.3%2013%2013.1%2016%2015.3z%27%20stroke%3D%27%23ebe9df%27%20stroke-width%3D%271.15%27%2F%3E%3Cpath%20d%3D%27M16%2020.4c3-2.2%206.4-3%209.8-2.7l0-5.1C22.4%2012.3%2019%2013.1%2016%2015.3z%27%20stroke%3D%27%23ebe9df%27%20stroke-width%3D%271.15%27%2F%3E%3Cpath%20d%3D%27M16%2015.3v5.1%27%20stroke%3D%27%23ebe9df%27%20stroke-width%3D%271.15%27%2F%3E%3Cpath%20d%3D%27M6.2%2015.2c1.1-.2%202.2-.2%203.3%200M6.2%2013.9c1.1-.2%202.2-.2%203.3%200%27%20stroke%3D%27%23d2a2ad%27%20stroke-width%3D%27.85%27%2F%3E%3Cpath%20d%3D%27M25.8%2015.2c-1.1-.2-2.2-.2-3.3%200M25.8%2013.9c-1.1-.2-2.2-.2-3.3%200%27%20stroke%3D%27%23d2a2ad%27%20stroke-width%3D%27.85%27%2F%3E%3C%2Fg%3E%3C%2Fg%3E%3C%2Fsvg%3E">
 <meta name="description" content="Everything the literary press reviewed, scored out of ten against one reader's taste.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -22,8 +22,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="theme-color" content="#e9ece8" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#171b1a" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" id="theme-color" content="#d4ddd8">
 </head>
 <body>
 <a class="skip" href="#feed">Skip to the feed</a>
@@ -155,6 +154,7 @@
 
   <section class="section" id="shelves-section" hidden>
     <h2 id="shelves" class="sr-only">Collections drawn from your profile</h2>
+    <div id="best-pick"></div>
     <p class="note" id="shelves-note"></p>
     <div id="shelves-body"></div>
     <div class="shelf-cta">
@@ -175,8 +175,9 @@
            construct. -->
       <div class="viewswitch" role="group" aria-label="Which books">
         <button class="btn" id="all-any" data-scope="any" aria-pressed="true">Everything <span class="n" id="n-any"></span></button>
-        <button class="btn" id="all-reviewed" data-scope="reviewed" aria-pressed="false">Reviewed <span class="n" id="n-reviewed"></span></button>
-        <button class="btn" id="all-awaiting" data-scope="awaiting" aria-pressed="false">Ahead of the reviews <span class="n" id="n-awaiting"></span></button>
+        <button class="btn" id="all-scored" data-scope="scored" aria-pressed="false">Scored <span class="n" id="n-scored"></span></button>
+        <button class="btn" id="all-no-score" data-scope="reviewed-unscored" aria-pressed="false">Reviewed · no score <span class="n" id="n-no-score"></span></button>
+        <button class="btn" id="all-awaiting" data-scope="awaiting-review" aria-pressed="false">Awaiting review <span class="n" id="n-awaiting"></span></button>
       </div>
     </div>
     <p class="note" id="all-note"></p>
