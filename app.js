@@ -193,11 +193,24 @@ import { cleanBlurb } from './lib/blurb.mjs';
     write(ACCOUNT_KEY, { name: u.displayName || u.email || 'your account', mono: monogramOf(u) });
   }
 
+  // `user` is the truth once Firebase has answered; before that, the remembered
+  // account is, and only for a reader who was signed in when they left. Pulled
+  // out of showAuth because the standing reminder and the first-visit prompt both
+  // have to ask it without repainting the bar.
+  const signedInNow = () => Boolean(user)
+    || (Boolean(read(ACCOUNT_KEY, null)) && read(sync.RETURNING_KEY, false) === true);
+
+  // An ordering of the reader's own, living in one browser and nowhere else.
+  // Not a failure - nothing is broken and nothing has been lost - but the one
+  // thing about this app a reader would be sorry to learn too late, and the only
+  // honest reason to ask a stranger for an account.
+  const profileAtRisk = () => !signedInNow() && overridesDirty();
+
+  const AT_RISK_LABEL = 'Your profile is saved in this browser only. Sign in with Google to keep it.';
+
   function showAuth({ failing = false } = {}) {
     const account = read(ACCOUNT_KEY, null);
-    // `user` is the truth once Firebase has answered; before that, the remembered
-    // account is, and only for a reader who was signed in when they left.
-    const signedIn = Boolean(user) || (account && read(sync.RETURNING_KEY, false) === true);
+    const signedIn = signedInNow();
     const name = user ? (user.displayName || user.email || 'your account') : account?.name;
     const mono = user ? monogramOf(user) : account?.mono;
 
@@ -206,16 +219,25 @@ import { cleanBlurb } from './lib/blurb.mjs';
     $('account-word').hidden = Boolean(signedIn);
     $('account-mono').hidden = !signedIn;
     $('account-warn').hidden = !(signedIn && failing);
+    // Standing, and deliberately not dismissable: it stops being shown by signing
+    // in, which is the only thing that stops it being true.
+    const atRisk = profileAtRisk();
+    $('account-mark').hidden = !atRisk;
     btn.classList.toggle('is-in', Boolean(signedIn));
     btn.setAttribute('aria-label', signedIn
       ? (failing ? `Signed in as ${name}, but syncing is failing. Open the menu.` : `Signed in as ${name}. Open the menu.`)
+      : atRisk ? AT_RISK_LABEL
       : 'Sign in with Google to sync your books');
 
     const menuBtn = $('auth');
     menuBtn.textContent = signedIn ? 'Sign out' : 'Sign in';
     const note = $('auth-note');
-    note.hidden = !signedIn;
-    note.textContent = !signedIn ? ''
+    // The dot is a mark; this is the sentence behind it, one tap away in the menu
+    // where Sign in itself is. A mark nobody can get an explanation for is worse
+    // than no mark.
+    note.hidden = !signedIn && !atRisk;
+    note.textContent = !signedIn
+      ? (atRisk ? 'Your profile and your saved books are in this browser only. Sign in to keep them, and to read the same feed on your other devices.' : '')
       : failing ? `Signed in as ${name}. Not syncing right now — your books are safe on this device.`
       : `Signed in as ${name}. Your books sync across your devices.`;
   }
@@ -497,13 +519,13 @@ import { cleanBlurb } from './lib/blurb.mjs';
     if (!e.book.title) return false;
     if (state.penalised && !e.score.filters.length) return false;
     // The feed is the profile's opinion, so a book the profile has no opinion
-    // about does not belong in it - it was 474 rows of "nothing to score" pushing
+    // about does not belong in it - it was 499 rows of "nothing to score" pushing
     // scored books down the page. Those books are not thrown away: All books
     // carries every one of them, described rather than judged.
     const status = scoreStatus(e);
     // My feed and Collections are the profile's opinion, so a book it cannot score
     // is not in either. Seeing those rows in a feed of recommendations is what made
-    // the recommender look like it was not working: 474 of 770 rows saying nothing.
+    // the recommender look like it was not working: 499 of 811 rows saying nothing.
     if (state.view !== 'all' && status !== 'scored') return false;
     if (state.view === 'all' && state.allScope !== 'any' && state.allScope !== status) return false;
     if (state.recommendedOnly && !recommendedNow(e, scoreOf(e))) return false;
@@ -581,7 +603,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
   // book sits without a number being invented to rank it.
   const DESCRIBING = new Set(['period', 'subject', 'form', 'prose', 'tone', 'scale', 'genre']);
 
-  // How we know this book exists. 382 of the 492 come from the New Books Network,
+  // How we know this book exists. 456 of the 493 come from the New Books Network,
   // which is the author talking about their own book at length; the rest are
   // publisher catalogues. Every one has a publisher, and they are overwhelmingly
   // Oxford, Cambridge, Verso, MIT and California, most published this year.
@@ -1110,6 +1132,19 @@ import { cleanBlurb } from './lib/blurb.mjs';
     const dirty = overridesDirty();
     const a = $('profile-mark'); if (a) a.hidden = !dirty;
     const b = $('deskProfileMark'); if (b) b.hidden = !dirty;
+    // The standing sign-in reminder turns on the same fact and comes into force
+    // at the same moment, so it is set here rather than left until the next thing
+    // that happens to repaint the bar. Only the signed-out label is touched: the
+    // signed-in ones carry whether sync is failing, which this does not know.
+    const c = $('account-mark');
+    if (c) {
+      const atRisk = profileAtRisk();
+      c.hidden = !atRisk;
+      if (atRisk) $('account').setAttribute('aria-label', AT_RISK_LABEL);
+    }
+    // And the reminder comes down the moment there is a profile, without waiting
+    // for a reload: it asks for the one thing that just happened.
+    showRemind();
   }
 
   function saveOverrides() {
@@ -2105,6 +2140,117 @@ import { cleanBlurb } from './lib/blurb.mjs';
   // than growing a second panel of its own. One place holds the account actions.
   let openMenu = () => {};
 
+  // ------------------------------------------------------------ return reminder
+
+  // What the prompt leaves behind. A reader who was asked once and came back
+  // without a profile is reading a feed ranked against somebody else's taste,
+  // and the likeliest reason is that they were mid-something and closed the
+  // dialog rather than that they weighed it and declined. So it is said again,
+  // quietly, in the flow rather than over the top of anything.
+  //
+  // Only from the second visit on: `promptSpentBefore` is read at boot, before
+  // bindFirstRun can write the key, so dismissing the dialog does not raise a
+  // banner in its place in the same breath.
+  //
+  // Hiding lasts the visit, in sessionStorage rather than localStorage. A
+  // permanent dismissal would be the third time this reader is asked to make
+  // the same decision, and a reminder they cannot quiet for an afternoon is
+  // the kind that gets the whole site closed.
+  const REMIND_HIDDEN_KEY = 'litfeed:remind-hidden';
+  let promptSpentBefore = false;
+
+  const remindHidden = () => {
+    try { return sessionStorage.getItem(REMIND_HIDDEN_KEY) === '1'; } catch { return false; }
+  };
+
+  function showRemind() {
+    const el = $('remind');
+    if (!el) return;
+    el.hidden = !(promptSpentBefore && !overridesDirty() && !signedInNow() && !remindHidden());
+  }
+
+  function bindRemind() {
+    $('remind-build').addEventListener('click', () => setView('start'));
+    $('remind-hide').addEventListener('click', () => {
+      try { sessionStorage.setItem(REMIND_HIDDEN_KEY, '1'); } catch { /* private mode: it stays up */ }
+      showRemind();
+    });
+    showRemind();
+  }
+
+  // ------------------------------------------------------ the first-visit prompt
+
+  // A stranger's first minute is the only one where interrupting them is
+  // affordable, and it is also the one where it is warranted: every number on
+  // screen is ranked against one reader's taste, and nothing says so until you
+  // go looking on the Profile screen. So this says it once, offers the two
+  // minutes that fix it, and never asks again.
+  //
+  // It leads with the profile rather than with the account because the profile
+  // is what a stranger actually gains, and it needs no account at all - see
+  // lib/onboard.mjs. Signing in is offered underneath, for what it really buys:
+  // not losing the thing they are about to build. Asking for a Google identity
+  // twenty seconds in, before they have got anything, is a worse trade for both
+  // sides than asking once they have something to keep.
+  const FIRSTRUN_KEY = 'litfeed:firstrun';
+  const FIRSTRUN_MS = 20000;
+
+  function bindFirstRun() {
+    const dlg = $('firstrun');
+    // No <dialog> support, no prompt. A modal faked out of a div is one more way
+    // for a first visit to go wrong, and the app is complete without this.
+    if (!dlg || typeof dlg.showModal !== 'function') return;
+    if (read(FIRSTRUN_KEY, false) === true) return;
+    // A reader who already has an ordering of their own, or is already signed in,
+    // has had this conversation. Write the key rather than leaving a timer running
+    // against a prompt that would be wrong to show.
+    if (overridesDirty() || signedInNow()) { write(FIRSTRUN_KEY, true); return; }
+
+    // Foreground time, not wall clock. A tab opened and left behind three others
+    // has read nothing, and a dialog waiting there is an ambush rather than an
+    // offer. Half-second ticks: twenty seconds does not need better resolution,
+    // and the interval stops for good the moment it fires.
+    let ms = 0;
+    let last = Date.now();
+    let timer = null;
+    const stop = () => { clearInterval(timer); timer = null; };
+    const spent = () => { write(FIRSTRUN_KEY, true); stop(); };
+
+    // Every exit routes through `close` - the three buttons, Escape, and the
+    // backdrop - so no path can leave the key unwritten and ask a second time.
+    dlg.addEventListener('close', spent);
+
+    document.addEventListener('visibilitychange', () => { last = Date.now(); });
+
+    timer = setInterval(() => {
+      const now = Date.now();
+      if (document.hidden) { last = now; return; }
+      ms += now - last;
+      last = now;
+      if (ms < FIRSTRUN_MS) return;
+      stop();
+      // Twenty seconds is long enough for the reader to have got there on their
+      // own, or to be reading the builder already. Either way the offer is moot.
+      if (state.view === 'start' || overridesDirty() || signedInNow()) { spent(); return; }
+      dlg.showModal();
+    }, 500);
+
+    $('firstrun-build').addEventListener('click', () => { dlg.close(); setView('start'); });
+
+    // Sign in and go, without waiting on the popup or the round trip. The builder
+    // is where they were headed, the profile does not need the account to be
+    // built, and a sign-in that fails should leave them building rather than
+    // stranded on an error - $('auth') puts its own message in the toast either
+    // way, and the sync that follows carries whatever they have made by then.
+    $('firstrun-signin').addEventListener('click', () => {
+      dlg.close();
+      $('auth').click();
+      setView('start');
+    });
+
+    $('firstrun-later').addEventListener('click', () => dlg.close());
+  }
+
   function bindMenu() {
     const btn = $('menu-toggle');
     const panel = $('menu-panel');
@@ -2328,6 +2474,12 @@ import { cleanBlurb } from './lib/blurb.mjs';
     // to once you know what you are looking for. A reader who was last on some other
     // screen is returned to it, because the view is a preference like any other.
     setView(state.view || 'shelves');
+    // Read before bindFirstRun, which writes this key: the reminder is for the
+    // visit after the one that spent the prompt, not for the same one.
+    promptSpentBefore = read(FIRSTRUN_KEY, false) === true;
+    // Last, and after setView, so it can see which screen the reader landed on.
+    bindFirstRun();
+    bindRemind();
   }
 
   boot();

@@ -1163,22 +1163,26 @@ body { overflow-x: clip; }
 }
 .wordmark-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* The mark is the drawn illustration, recoloured from the tokens: circle in
-   brass, book in ink, the ruled page lines carrying the red note, the table
-   grain a faint brass. Sized in em so it tracks the heading.
+/* The mark is the Art Deco one: bottle-green ground, brass ring, the book in
+   off-white with the page lines carrying the garnet note. Sized in em so it
+   tracks the heading.
 
-   It is a raster because it is a drawing rather than a diagram, served at 128px
-   for a mark shown at about 30, so it stays sharp at 3x. The favicon is still
-   the simplified SVG: at 16px this illustration is a grey blob, and a tab icon
-   that cannot be told apart from any other tab icon is not doing its job. */
+   It was a pair of rasters when it was a drawing, one per theme, and both were
+   left behind by the jewel redesign: the palette moved and the masthead kept
+   the parchment illustration, which is the one thing on the page a reader looks
+   at on every screen. A geometric mark needs neither. It carries its own ground,
+   so it reads the same in both themes and the light/dark pair is gone with the
+   drawing, and it is vector, so it is sharp at any size without a raster tuned
+   to one.
+
+   This is the 32px cut rather than icons/constant-reader.svg, which is drawn on
+   a 512 grid: its inner ring is two units wide, a fifth of a pixel at the size
+   the masthead shows it, and a ring that thin renders as a shimmer or as
+   nothing. Same mark, stroke weights that survive at 27px. */
 .mark {
   display: block; flex: 0 0 auto;
   width: 1.7em; height: 1.7em;
-  background: url('icons/mark-light.png') center / contain no-repeat;
-}
-:root[data-theme="dark"] .mark { background-image: url('icons/mark-dark.png'); }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .mark { background-image: url('icons/mark-dark.png'); }
+  background: url('icons/mark.svg') center / contain no-repeat;
 }
 
 .topbar.is-compact .masthead h1 { font-size: .9375rem; letter-spacing: .14em; border-top-width: 2px; }
@@ -1431,6 +1435,73 @@ details:not([open]) > *:not(summary) { display: none; }
   background: var(--warn); border: 1px solid var(--bg);
 }
 .tool-account { position: relative; }
+
+/* The standing reminder. A reader who has built a profile and is not signed in
+   has an ordering that exists in one browser's localStorage and nowhere else,
+   and clearing site data is the whole loss. It is a mark on the account control
+   rather than a banner because the control is on every screen and is also the
+   thing that fixes it — a banner would be a second place to say it and a first
+   place to dismiss it. Accent, not --warn: nothing is wrong yet. */
+.account-mark {
+  color: var(--accent); margin-left: 2px; line-height: 1;
+}
+
+/* ------------------------------------------------------------ return reminder
+
+   A band in the flow rather than a fixed bar. It describes the feed underneath
+   it, so it should scroll away with it; a sticky one would be an alert, and
+   nothing here is wrong enough to warrant standing over the reader. Accent rule
+   on top so it reads as the app talking rather than as a row of the feed. */
+.remind {
+  border-top: 2px solid var(--accent);
+  border-bottom: 1px solid var(--rule);
+  background: var(--surface);
+  padding: var(--s3) 0;
+}
+.remind-row { display: flex; flex-wrap: wrap; gap: var(--s3); align-items: center; justify-content: space-between; }
+/* A measure, so the line does not run the full width of a desktop window and
+   stop being readable at the very moment it is asking for something. */
+.remind-text { margin: 0; flex: 1 1 34ch; max-width: 68ch; color: var(--ink-muted); }
+.remind-actions { display: flex; gap: var(--s2); flex-wrap: wrap; }
+/* The dismiss reads as the lesser path without becoming an icon nobody can hit. */
+.remind-hide { background: none; border-color: transparent; color: var(--ink-faint); }
+
+/* ------------------------------------------------------------ first-visit prompt
+
+   Sized in ch rather than px so the measure holds when a reader has bumped their
+   own font size, and capped at the viewport so a small phone in landscape still
+   shows the buttons rather than scrolling them off. */
+.firstrun {
+  max-width: min(46ch, calc(100vw - 2 * var(--s3)));
+  max-height: calc(100dvh - 2 * var(--s3));
+  overflow-y: auto;
+  padding: var(--s4);
+  border: 1px solid var(--rule-strong);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 12px 40px rgb(0 0 0 / .22);
+}
+.firstrun::backdrop { background: rgb(0 0 0 / .45); }
+.firstrun-title {
+  font-family: var(--display); font-weight: 700;
+  font-size: 1.5rem; line-height: 1.15; margin: 0 0 var(--s2);
+}
+.firstrun-body { margin: 0 0 var(--s3); color: var(--ink-muted); }
+.firstrun-actions { display: flex; flex-direction: column; gap: var(--s2); align-items: stretch; }
+.firstrun-actions .btn { justify-content: center; text-align: center; }
+/* The two lesser paths read as text, not as rival buttons: one primary action is
+   the point of asking at all. They stay real buttons at a real tap size. */
+.firstrun-signin, .firstrun-later {
+  background: none; border-color: transparent; color: var(--ink-muted);
+}
+.firstrun-signin { text-decoration: underline; text-underline-offset: 3px; }
+.firstrun-later { color: var(--ink-faint); font-size: .8rem; }
+
+/* A reader who asked for less motion gets the dialog without the rise. */
+@media (prefers-reduced-motion: no-preference) {
+  .firstrun[open] { animation: firstrun-in .18s ease-out; }
+  @keyframes firstrun-in { from { opacity: 0; transform: translateY(6px); } }
+}
 
 /* Hidden on a phone, where the dock is the navigation and four icons plus the
    name is already the whole width. */

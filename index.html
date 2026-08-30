@@ -54,6 +54,7 @@
         <span class="account-mono" id="account-mono" aria-hidden="true"></span>
         <span class="account-word" id="account-word">Sign in</span>
         <span class="account-warn" id="account-warn" hidden aria-hidden="true"></span>
+        <span class="account-mark" id="account-mark" hidden aria-hidden="true">•</span>
       </button>
     </div>
 
@@ -117,6 +118,21 @@
   </div>
 </nav>
 </div>
+
+<!-- The return-visit reminder. In the flow under the topbar rather than fixed,
+     because it is a standing fact about the feed below it and not an alert: it
+     should scroll away with the thing it describes. app.js shows it only to a
+     reader who has already been asked once, on a later visit, and still has no
+     profile. -->
+<aside class="remind" id="remind" hidden>
+  <div class="wrap remind-row">
+    <p class="remind-text">You haven’t built a taste profile yet, so every score here is still one reader’s rather than yours. Three questions, about two minutes.</p>
+    <div class="remind-actions">
+      <button class="btn btn-done" id="remind-build">Build your profile</button>
+      <button class="btn remind-hide" id="remind-hide" aria-label="Hide this reminder until your next visit">Hide for now</button>
+    </div>
+  </div>
+</aside>
 
 <div class="dock">
   <div class="menu-panel" id="menu-panel" hidden>
@@ -238,6 +254,21 @@
     <button class="btn" id="sources-info">Source status</button>
   </span>
 </footer>
+
+<!-- The first-visit prompt. Markup rather than a template string because it is
+     one fixed dialog with three controls, and a reader with JavaScript half
+     loaded should never see a half-built modal. app.js opens it once, after
+     twenty seconds of foreground reading, and only for a stranger with no
+     profile of their own. -->
+<dialog class="firstrun" id="firstrun" aria-labelledby="firstrun-title">
+  <h2 class="firstrun-title" id="firstrun-title">These scores aren’t yours yet.</h2>
+  <p class="firstrun-body">Everything here is ranked against one reader’s taste profile. Three questions, about two minutes, and it ranks against yours instead.</p>
+  <div class="firstrun-actions">
+    <button class="btn btn-done" id="firstrun-build" autofocus>Build my profile</button>
+    <button class="btn firstrun-signin" id="firstrun-signin">Sign in with Google to keep it across devices</button>
+    <button class="btn firstrun-later" id="firstrun-later">Not now</button>
+  </div>
+</dialog>
 
 <script type="module" src="app.js"></script>
 
