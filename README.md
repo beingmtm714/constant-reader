@@ -4,7 +4,7 @@ Everything the literary press reviewed in the last ten years, scored out of ten 
 
 Live at https://beingmtm714.github.io/constant-reader/
 
-Eighty-four publications sit in the registry and fifty-four are enabled: Publishers Weekly, Book Marks, the NYRB, the LRB, LARB, the New Yorker, the Guardian, the NYT Book Review, the Atlantic, the Paris Review, the Chicago and Cleveland Reviews of Books, the LA Times, Full Stop, Electric Literature, The Millions, Kirkus, Bookforum, Public Books, 4Columns and the rest. Thirty-seven of them are review sources whose text can move a score. The others — publisher catalogues and the New Books Network — establish that a book exists and supply its metadata, and never touch a score, because jacket copy and author interviews never say the prose is the weakness.
+Eighty-four publications sit in the registry and fifty-four are enabled: Publishers Weekly, Book Marks, the NYRB, the LRB, LARB, the New Yorker, the Guardian, the NYT Book Review, the Atlantic, the Paris Review, the Chicago and Cleveland Reviews of Books, the LA Times, Full Stop, Electric Literature, The Millions, Kirkus, Bookforum, Public Books, 4Columns and the rest. Thirty-seven of them are review sources whose text can move a score. The others are publisher catalogues and the New Books Network. They establish that a book exists and supply its metadata, and they never touch a score, because jacket copy and author interviews never say the prose is the weakness.
 
 **The unit is the book, not the review.** Three publications on the same novel is one row carrying three mentions, scored in a single pass over all three texts.
 
@@ -26,7 +26,7 @@ The words are shared. What they are worth is not. The **Profile** screen re-scor
 
 Saving, passing and every preference are written to this browser's local storage, and the app opens, ranks and re-scores with no network and no account.
 
-Signing in is optional and off unless you ask for it. It is Google sign-in only, and it syncs your saves, your passes and your profile changes to a document in your own Google account and nowhere else. The Firebase SDK is not even fetched until the first time you tap Sign in. Theme, filters and the rest stay on the device that set them: they describe a browser, not a reader.
+Signing in is optional and off unless you ask for it. It is Google sign-in only, and it syncs your saves, your passes and your profile changes to a document in your own Google account and nowhere else. The Firebase SDK is not fetched at all until the first time you tap Sign in. Theme, filters and the rest stay on the device that set them: they describe a browser, not a reader.
 
 ## Where it comes from
 
