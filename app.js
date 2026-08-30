@@ -61,16 +61,16 @@ import { cleanBlurb } from './lib/blurb.mjs';
   ];
 
   const SCOPES = [
-    { id: 'any', label: 'All reviewed books' },
+    { id: 'any', label: 'Everything the profile can place' },
     { id: 'scored', label: 'Scored' },
-    { id: 'reviewed-unscored', label: 'Reviewed · no score' },
+    { id: 'reviewed-unscored', label: 'Described · no score' },
   ];
 
   const ALL_SCOPES = [
     { id: 'any', label: 'Everything in the archive' },
     { id: 'scored', label: 'Scored' },
-    { id: 'reviewed-unscored', label: 'Reviewed · no score' },
-    { id: 'awaiting-review', label: 'Awaiting review' },
+    { id: 'reviewed-unscored', label: 'Described · no score' },
+    { id: 'awaiting-review', label: 'Not yet described' },
   ];
 
   const state = {
@@ -189,6 +189,13 @@ import { cleanBlurb } from './lib/blurb.mjs';
   }
   const isScored = (e) => scoreStatus(e) === 'scored';
 
+  // Where the number came from. A critic on a book they read, or the author on
+  // their own book at length — the second is a real placement and it is not a
+  // critical judgement, and the row is owed the difference.
+  const readFrom = (e) => e.score?.readFrom
+    || (e.reviewCount > 0 ? 'reviews' : e.describedOnly ? 'author-account' : 'none');
+  const fromAuthor = (e) => readFrom(e) === 'author-account';
+
   const profileForOverrides = () => ({
     dimensions: FEED.dimensions,
     evidenceRule: FEED.evidenceRule,
@@ -237,9 +244,14 @@ import { cleanBlurb } from './lib/blurb.mjs';
     const books = FEED.books;
     const byStatus = { scored: 0, 'reviewed-unscored': 0, 'awaiting-review': 0 };
     let recentReviews = 0;
+    let fromReviews = 0;
+    let fromAccount = 0;
     const cutoff = Date.now() - 30 * 86400000;
     for (const e of books) {
       byStatus[scoreStatus(e)]++;
+      if (scoreStatus(e) === 'scored') {
+        if (readFrom(e) === 'author-account') fromAccount++; else fromReviews++;
+      }
       for (const m of e.mentions) if ((Date.parse(m.reviewDate || '') || 0) >= cutoff) recentReviews++;
     }
     stats = {
@@ -247,7 +259,9 @@ import { cleanBlurb } from './lib/blurb.mjs';
       scored: byStatus.scored,
       unscored: byStatus['reviewed-unscored'],
       awaiting: byStatus['awaiting-review'],
-      reviewed: byStatus.scored + byStatus['reviewed-unscored'],
+      placed: byStatus.scored + byStatus['reviewed-unscored'],
+      fromReviews,
+      fromAccount,
       recentReviews,
     };
   }
@@ -362,10 +376,10 @@ import { cleanBlurb } from './lib/blurb.mjs';
   function matchLine(e, s) {
     if (!isScored(e)) {
       return scoreStatus(e) === 'reviewed-unscored'
-        ? 'Reviewed, but the evidence was too thin for a reliable number.'
-        : 'Catalogued and browseable. No critic has reviewed it yet.';
+        ? 'Described, but the evidence was too thin for a reliable number.'
+        : 'A catalogue listing and nothing more. Nobody has described it yet.';
     }
-    if (!readTheReview(e)) return 'Ranked on its length and its publisher; the review said nothing the profile could read.';
+    if (!readTheReview(e)) return `Ranked on its length and its publisher; ${e.reviewCount > 0 ? 'the review' : 'the description'} said nothing the profile could read.`;
     const fired = firedDims(e);
     if (!fired.length) return 'Scored on the little the review gave, so treat the number lightly.';
     const [a, b] = fired;
@@ -380,7 +394,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
   // The dossier's fuller version of the same argument.
   function caseFor(e, s) {
     if (!isScored(e)) return matchLine(e, s);
-    if (!readTheReview(e)) return 'There is no case yet. The review said nothing the profile could read.';
+    if (!readTheReview(e)) return `There is no case yet. ${e.reviewCount > 0 ? 'The review' : 'The description'} said nothing the profile could read.`;
     const fired = firedDims(e);
     const names = fired.slice(0, 3).map((d) => lower(d.name));
     if (!names.length) return 'Too little of this review spoke to the profile for a confident argument.';
@@ -499,7 +513,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
   function scoreBadge(e, s) {
     const status = scoreStatus(e);
     if (status === 'scored') return `<span class="card-score">${shownScore(e, s).toFixed(1)}</span>`;
-    return `<span class="card-score" data-state="none">${status === 'reviewed-unscored' ? 'No score' : 'Not scored'}</span>`;
+    return `<span class="card-score" data-state="none">${status === 'reviewed-unscored' ? 'No score' : 'Not described'}</span>`;
   }
 
   function card(row, i) {
@@ -513,7 +527,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
         <span class="card-peek" aria-hidden="true">${ico('arrow')}View dossier</span>
       </button>
       <div class="card-body">
-        <p class="card-source">${esc(status === 'awaiting-review' ? (e.book.publisher || 'Catalogue listing') : e.sources.join(' · '))}</p>
+        <p class="card-source">${esc(status === 'awaiting-review' && !e.sources.length ? (e.book.publisher || 'Catalogue listing') : e.sources.join(' · '))}</p>
         <button class="card-title" data-action="open" data-id="${esc(e.id)}">${esc(e.book.title)}</button>
         ${e.book.author ? `<p class="card-author">${esc(e.book.author)}</p>` : ''}
         <div class="tags card-tags">${formTags(e).map((t) =>
@@ -537,7 +551,9 @@ import { cleanBlurb } from './lib/blurb.mjs';
 
     const meta = [
       e.sources.join(' · '),
-      status === 'awaiting-review' ? `listed ${fmtDate(e.lastReviewed)}` : `reviewed ${fmtDate(e.lastReviewed)}`,
+      e.reviewCount > 0 ? `reviewed ${fmtDate(e.lastReviewed)}`
+        : fromAuthor(e) ? `author’s account, ${fmtDate(e.lastReviewed)}`
+        : `listed ${fmtDate(e.lastReviewed)}`,
       b.editionDate || b.bookYear || null,
       b.pages ? `${b.pages} pp.` : null,
     ].filter(Boolean).join(' · ');
@@ -552,9 +568,10 @@ import { cleanBlurb } from './lib/blurb.mjs';
           ? `<span class="row-num">${shownScore(e, s).toFixed(1)}<small>/ 10</small></span>`
           : `<span class="row-num" data-state="none">No score</span>`}
         ${scored && rec ? `<span class="row-rec">${ico('sparkles')}Recommended</span>` : ''}
-        ${scored && !readTheReview(e) ? `<span class="row-rec" data-state="thin">Length and press only</span>` : ''}
+        ${scored && !readTheReview(e) ? `<span class="row-rec" data-state="thin">Length and press only</span>`
+          : scored && fromAuthor(e) ? `<span class="row-rec" data-state="thin">From the author’s account</span>` : ''}
         ${status === 'reviewed-unscored' ? `<span class="row-rec" data-state="thin">Evidence too thin</span>` : ''}
-        ${status === 'awaiting-review' ? `<span class="row-rec" data-state="thin">Awaiting review</span>` : ''}
+        ${status === 'awaiting-review' ? `<span class="row-rec" data-state="thin">Not yet described</span>` : ''}
       </div>
       <div class="row-main">
         <h3 class="row-title"><button data-action="open" data-id="${esc(e.id)}">${esc(b.title)}${
@@ -562,8 +579,8 @@ import { cleanBlurb } from './lib/blurb.mjs';
         <p class="row-meta">${esc(meta)}</p>
         ${blurbOf(e, 190) ? `<p class="row-blurb">${esc(blurbOf(e, 190))}</p>` : ''}
         ${!scored ? `<p class="row-note">${esc(status === 'reviewed-unscored'
-          ? 'A review exists, but it did not supply enough dependable evidence across the seven dimensions for a number to mean anything.'
-          : 'Known from a catalogue listing or the author’s own account. It will be scored when review prose gives the profile something to read.')}</p>` : ''}
+          ? 'Something has been written about this book, but it did not supply enough dependable evidence across the seven dimensions for a number to mean anything.'
+          : 'Known from a catalogue listing alone. Nobody has described it yet — not a critic, and not the author.')}</p>` : ''}
         ${tags.length ? `<div class="tags">${tags.map((t) => `<span class="tag" data-kind="${esc(t.kind)}">${esc(t.label)}</span>`).join('')}</div>` : ''}
         <button class="row-why" data-action="open" data-id="${esc(e.id)}">${ico('sparkles')}${
           scored ? `Why it’s a ${shownScore(e, s).toFixed(1)}` : 'Why there’s no score'}${ico('arrow')}</button>
@@ -769,16 +786,18 @@ import { cleanBlurb } from './lib/blurb.mjs';
       ${viewHead({
         eyebrow: 'Your live edit',
         title: 'Review feed',
-        lede: `${esc(String(stats.reviewed))} reviewed titles: ${esc(String(stats.scored))} scored, plus ${esc(String(stats.unscored))} where the evidence was not strong enough for a reliable number.`,
-        aside: `${shown.length} previewed · ${rows.length} reviewed`,
+        lede: `${esc(String(stats.placed))} titles the profile can place: ${esc(String(stats.fromReviews))} read from reviews and ${esc(String(stats.fromAccount))} from the author’s own account, plus ${esc(String(stats.unscored))} where the evidence was not strong enough for a reliable number.`,
+        aside: `${shown.length} previewed · ${rows.length} placed`,
       })}
 
       <div class="coverage">
-        <p class="eyebrow">Review coverage</p>
+        <p class="eyebrow">Where the scores come from</p>
         <div class="coverage-figs">
-          <span class="coverage-fig"><b>${stats.scored}</b><span>scored</span></span>
+          <span class="coverage-fig"><b>${stats.fromReviews}</b><span>read from reviews</span></span>
           <span class="coverage-sep" aria-hidden="true">|</span>
-          <span class="coverage-fig"><b>${stats.unscored}</b><span>reviewed without enough evidence</span></span>
+          <span class="coverage-fig"><b>${stats.fromAccount}</b><span>from the author’s account</span></span>
+          <span class="coverage-sep" aria-hidden="true">|</span>
+          <span class="coverage-fig"><b>${stats.unscored}</b><span>evidence too thin</span></span>
         </div>
       </div>
 
@@ -813,7 +832,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
       ${viewHead({
         eyebrow: 'The complete catalogue',
         title: 'Every book, clearly accounted for.',
-        lede: `The full ${esc(String(stats.total))}-book archive—scored and unscored—without making absence look like a verdict.`,
+        lede: `The full ${esc(String(stats.total))}-book archive—placed and unplaced—without making absence look like a verdict.`,
         aside: `${shown.length} previewed · ${rows.length} total`,
       })}
 
@@ -821,13 +840,13 @@ import { cleanBlurb } from './lib/blurb.mjs';
         <div class="board-lede">
           <p class="eyebrow">Score status</p>
           <h2>A missing score is information, not a judgment.</h2>
-          <p>Books stay fully browseable. We show whether a review lacked enough evidence or has not been evaluated yet.</p>
+          <p>A book is placed on whatever anyone has written about it — a critic, or the author on their own book. The ${esc(String(stats.awaiting))} left are the ones nobody has described at all.</p>
         </div>
         <div class="board-figs">
           ${fig(stats.total, 'All books', 'Complete archive', 'any')}
-          ${fig(stats.scored, 'Scored', 'Reliable fit evidence', 'scored')}
-          ${fig(stats.unscored, 'Reviewed · no score', 'Evidence too thin', 'reviewed-unscored')}
-          ${fig(stats.awaiting, 'Awaiting review', 'Catalogue only', 'awaiting-review')}
+          ${fig(stats.scored, 'Scored', `${stats.fromReviews} from reviews, ${stats.fromAccount} from the author`, 'scored')}
+          ${fig(stats.unscored, 'Described · no score', 'Evidence too thin', 'reviewed-unscored')}
+          ${fig(stats.awaiting, 'Not yet described', 'Catalogue listing only', 'awaiting-review')}
         </div>
       </div>
 
@@ -1248,8 +1267,9 @@ import { cleanBlurb } from './lib/blurb.mjs';
             ${scored ? `<b>${shownScore(e, s).toFixed(1)}<small>FIT</small></b>` : ''}
             <span class="dossier-state" data-state="${scored && rec ? 'rec' : 'none'}">${
               scored ? (rec ? 'Recommended for you' : 'Below your threshold') :
-              status === 'reviewed-unscored' ? 'Reviewed · no score' : 'Awaiting review'}</span>
-            ${scored && !readTheReview(e) ? '<span class="dossier-state" data-state="none">Length and press only</span>' : ''}
+              status === 'reviewed-unscored' ? 'Described · no score' : 'Not yet described'}</span>
+            ${scored && !readTheReview(e) ? '<span class="dossier-state" data-state="none">Length and press only</span>'
+              : scored && fromAuthor(e) ? '<span class="dossier-state" data-state="none">From the author’s account</span>' : ''}
           </p>
           <h2 id="dossier-title">${esc(b.title)}</h2>
           ${b.author ? `<p class="dossier-author">${esc(b.author)}</p>` : ''}
@@ -1282,11 +1302,12 @@ import { cleanBlurb } from './lib/blurb.mjs';
       </section>
 
       ${m?.standfirst ? `<section class="dossier-block">
-        <p class="eyebrow">${status === 'awaiting-review' ? 'From the listing' : 'From the review'}</p>
+        <p class="eyebrow">${e.reviewCount > 0 ? 'From the review' : fromAuthor(e) ? 'From the author’s account' : 'From the listing'}</p>
         <blockquote class="quote">${esc(m.standfirst.length > 300 ? `${m.standfirst.slice(0, 300).replace(/\s+\S*$/, '')}…` : m.standfirst)}
           <span class="quote-source">${esc(m.source.name)} · ${esc(fmtDate(m.reviewDate))}${m.byline ? ` · ${esc(m.byline)}` : ''}</span>
         </blockquote>
-        <p><a href="${esc(m.reviewUrl)}" target="_blank" rel="noopener">Read the ${esc(m.source.short)} ${status === 'awaiting-review' ? 'source' : 'review'} ↗</a></p>
+        <p><a href="${esc(m.reviewUrl)}" target="_blank" rel="noopener">${
+          e.reviewCount > 0 ? `Read the ${esc(m.source.short)} review` : `Open the ${esc(m.source.short)} source`} ↗</a></p>
       </section>` : ''}
 
       ${buys ? `<section class="dossier-block">
@@ -1304,10 +1325,10 @@ import { cleanBlurb } from './lib/blurb.mjs';
   function scoreNarrative(e, s) {
     const status = scoreStatus(e);
     if (status === 'reviewed-unscored') {
-      return 'A critical review exists, but it did not supply enough dependable evidence across the seven dimensions to support a number. The book stays visible; the ranking stays blank.';
+      return 'Something has been written about this book, but it did not supply enough dependable evidence across the seven dimensions to support a number. The book stays visible; the ranking stays blank.';
     }
     if (status === 'awaiting-review') {
-      return 'This book is known from a catalogue listing or the author’s own account, not from a critical review. It can be described and saved now, but it will not be ranked until review prose gives the profile something to read.';
+      return 'This book is known from a catalogue listing alone — nobody has described it, not a critic and not the author. It can be found and saved now, and it will be placed as soon as anyone writes about it.';
     }
     // A score with nothing from the review behind it needs saying outright, not
     // softening: two of the seven dimensions read the catalogue rather than the
@@ -1317,7 +1338,8 @@ import { cleanBlurb } from './lib/blurb.mjs';
       const s6 = e.score?.dimensions?.D6, s7 = e.score?.dimensions?.D7;
       const from = [s6 && !s6.defaulted ? 'its length' : null, s7 && !s7.defaulted ? 'its publisher' : null]
         .filter(Boolean).join(' and ') || 'catalogue data';
-      return `Nothing in the review spoke to the profile. This number is built from ${from} alone, so it is a placeholder for a reading rather than one.`;
+      const src = e.reviewCount > 0 ? 'the review' : 'the description';
+      return `Nothing in ${src} spoke to the profile. This number is built from ${from} alone, so it is a placeholder for a reading rather than one.`;
     }
     const fired = firedDims(e);
     const names = fired.slice(0, 3).map((d) => lower(d.name));
