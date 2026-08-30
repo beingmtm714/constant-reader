@@ -350,7 +350,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
   // row is always something a critic wrote. A book whose review said nothing
   // categorisable shows no tags, which is the honest outcome: 90 of the 312
   // scored books, and most of the archive, where there is no review at all.
-  const REVIEW_TAGS = new Set(['period', 'subject', 'form', 'prose', 'tone']);
+  const REVIEW_TAGS = new Set(['period', 'subject', 'form', 'prose', 'tone', 'narration']);
 
   // What the book is, which every book has and no review is needed for. The
   // classification is on all 811 records — 500 nonfiction, 180 confirmed
