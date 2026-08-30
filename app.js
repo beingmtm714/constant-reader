@@ -13,8 +13,8 @@ import { RETAILERS, linkFor, canFindCopy } from './lib/retailers.mjs';
 import { createAnalytics } from './lib/analytics.mjs';
 import { buildTasteModel, tunedTotal, MIN_SIGNAL, MAX_ADJUSTMENT } from './lib/taste.mjs';
 import { outOfTen, RECOMMEND_AT } from './lib/recommend.mjs';
-import { rescore, isEmpty, bandKey, EMPTY as EMPTY_OVERRIDES } from './lib/overrides.mjs';
-import { READS, chipsFor, buildProfile } from './lib/onboard.mjs';
+import { rescore, isEmpty, bandKey, AVERSION_STRENGTHS, MAX_AVERSIONS, EMPTY as EMPTY_OVERRIDES } from './lib/overrides.mjs';
+import { READS, REFUSALS, chipsFor, buildProfile } from './lib/onboard.mjs';
 import * as sync from './lib/sync.mjs';
 import { jacketFor } from './lib/jacket.mjs';
 import { cleanBlurb } from './lib/blurb.mjs';
@@ -1034,7 +1034,6 @@ import { cleanBlurb } from './lib/blurb.mjs';
     { group: 'rules', key: 'twist_override', copy: 'Resolve formal-device scores downward when the review reveals a twist.' },
     { group: 'rules', key: 'trap4_land_scale', copy: 'Require institutional or multi-decade stakes for land and labor themes.' },
     { group: 'rules', key: 'd6_sprawl_without_ambition', copy: 'Penalize long books when the review shows no multi-strand structure.' },
-    { group: 'adjustments', key: 'nonfiction', copy: 'Keep nonfiction below fiction unless provenance is exceptionally strong.' },
   ];
 
   const guardrailOn = (g) => overrides[g.group]?.[g.key] !== false;
@@ -1159,6 +1158,28 @@ import { cleanBlurb } from './lib/blurb.mjs';
           </div>`).join('')}
         </section>
 
+        <section class="guardrails profile-guardrails" aria-labelledby="averse-h">
+          <div class="weights-head">
+            <div>
+              <p class="eyebrow">What closes the book</p>
+              <h2 id="averse-h">Things you won’t read</h2>
+            </div>
+            <span class="weights-total">${Object.keys(overrides.aversions || {}).length} of ${MAX_AVERSIONS}</span>
+          </div>
+          <p class="view-lede" style="margin:0 0 6px">Everything above weighs a book’s strengths against its weaknesses. These do not: they come off the score at full force, or take the book out altogether. The list is capped, because a veto list long enough to be comfortable is long enough to empty the shelf.</p>
+          ${REFUSALS.map((r) => {
+            const cur = overrides.aversions?.[r.key] || 'off';
+            return `<div class="guardrail-row averse-row">
+              <span id="av-${esc(cssId(r.key))}">${esc(r.label)}</span>
+              <span class="averse-picks" role="group" aria-labelledby="av-${esc(cssId(r.key))}">
+                ${['off', 'mild', 'strong', 'never'].map((k) => `<button class="averse-pick"
+                  data-action="aversion" data-key="${esc(r.key)}" data-strength="${k}"
+                  aria-pressed="${cur === k}">${k === 'off' ? 'Fine' : k === 'never' ? 'Never' : k}</button>`).join('')}
+              </span>
+            </div>`;
+          }).join('')}
+        </section>
+
         <div class="profile-extras">
           <p>Your saves and passes are what the next revision of the profile is written from. Export them as JSON to keep or to feed back in.</p>
           <button class="btn" data-action="export">Export my verdicts</button>
@@ -1177,7 +1198,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
   // prompt and the return band point at it, the Profile screen keeps everything
   // it produces, and a permanent seventh nav item for a screen used once would
   // cost a slot on every other visit.
-  let answers = { reads: 'both', liked: [], disliked: [], satire: false };
+  let answers = { reads: 'both', liked: [], disliked: [], refused: [], satire: false };
 
   function viewStart() {
     const chips = (which) => chipsFor(answers.reads).map((c) => {
@@ -1216,6 +1237,14 @@ import { cleanBlurb } from './lib/blurb.mjs';
           <h2>What puts you off?</h2>
           <p>A model with nothing to push against ranks everything alike, so this list is worth as much as the one above it.</p>
           <div class="start-chips">${chips('disliked')}</div>
+        </section>
+
+        <section class="start-block">
+          <p class="eyebrow">And last</p>
+          <h2>Is there anything you simply won’t read?</h2>
+          <p>Different from the list above. A dislike is weighed against everything else a book has going for it; this is the thing that closes the book whatever else is true, so it comes off the score at full force.</p>
+          <div class="start-chips">${REFUSALS.map((r) => `<button class="start-chip" data-action="refuse"
+            data-key="${esc(r.key)}" aria-pressed="${answers.refused.includes(r.key)}">${esc(r.label)}</button>`).join('')}</div>
           <div class="start-foot">
             <p>${n ? `${n} answer${n === 1 ? '' : 's'}` : 'Nothing picked yet'}</p>
             <div class="remind-actions">
@@ -1531,6 +1560,20 @@ import { cleanBlurb } from './lib/blurb.mjs';
   function toggleGuardrail(i) {
     const g = GUARDRAILS[i];
     setOverride(g.group, g.key, guardrailOn(g) ? false : null);
+  }
+
+  function setAversion(key, strength) {
+    const next = { ...overrides, aversions: { ...overrides.aversions } };
+    if (strength === 'off') delete next.aversions[key];
+    else if (Object.keys(next.aversions).length >= MAX_AVERSIONS && !next.aversions[key]) {
+      toast(`That is ${MAX_AVERSIONS} already. Take one off first.`, { error: true });
+      return;
+    } else next.aversions[key] = strength;
+    overrides = sync.stamp(next);
+    write(OVERRIDES_KEY, overrides);
+    profileVersion++;
+    render();
+    syncNow();
   }
 
   function togglePenalty(id) {
@@ -1936,6 +1979,15 @@ import { cleanBlurb } from './lib/blurb.mjs';
           break;
         }
         case 'satire': answers.satire = !answers.satire; render(); break;
+        case 'refuse': {
+          const k = btn.dataset.key;
+          const i = answers.refused.indexOf(k);
+          if (i >= 0) answers.refused.splice(i, 1);
+          else if (answers.refused.length < MAX_AVERSIONS) answers.refused.push(k);
+          render();
+          break;
+        }
+        case 'aversion': setAversion(btn.dataset.key, btn.dataset.strength); break;
         case 'buy':
           write('litfeed:last-retailer', btn.dataset.retailer);
           analytics.track('retailer_opened', { bookId: btn.dataset.id, retailer: btn.dataset.retailer, resolution: btn.dataset.resolution });
@@ -2060,7 +2112,9 @@ import { cleanBlurb } from './lib/blurb.mjs';
     retune();
 
     $('profile-rev').textContent = String(FEED.profileRevision);
-    $('threshold-line').textContent = `${threshold()}+ is recommended`;
+    $('threshold-line').textContent = FEED.recommendShare
+      ? `Top ${Math.round(FEED.recommendShare * 100)}% is recommended`
+      : `${threshold()}+ is recommended`;
     $('rebuilt-line').textContent = rebuiltPhrase(FEED.builtAt);
 
     bindGlobal();

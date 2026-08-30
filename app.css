@@ -799,6 +799,12 @@ button.tag:hover { border-color: var(--brass); color: var(--porcelain); }
 }
 
 @media (max-width: 1023px) {
+  /* Label above, the four strengths below it: at 320px a row of four plus a
+     sentence does not fit, and shrinking the targets is not the trade to make. */
+  .averse-row { flex-direction: column; align-items: stretch; gap: 9px; }
+  .averse-picks { justify-content: flex-start; }
+  .averse-pick { flex: 1 1 auto; min-height: 40px; text-align: center; justify-content: center; }
+
   .remind-actions .btn { flex: 1 1 auto; justify-content: center; }
   .band-row { grid-template-columns: 1fr 64px; }
   .band-was { grid-column: 2; text-align: right; }
@@ -1186,6 +1192,25 @@ input[type="number"] {
 }
 
 .penalty-row .band-note { display: inline; margin-left: 6px; }
+
+/* An aversion has a strength, not a switch: mild and strong take points off, and
+   never takes the book out. Four states in a row, so the difference between "I
+   would rather not" and "I will not" is one tap apart and visibly distinct. */
+.averse-row { align-items: center; gap: 12px; }
+.averse-picks { display: flex; flex-wrap: wrap; gap: 4px; flex: none; }
+.averse-pick {
+  border: 1px solid var(--hairline);
+  border-radius: 2px;
+  padding: 5px 9px;
+  min-height: 34px;
+  font-family: var(--font-mono); font-size: 9px;
+  letter-spacing: .08em; text-transform: uppercase;
+  color: var(--muted-ink);
+}
+.averse-pick:hover { border-color: var(--brass); color: var(--porcelain); }
+.averse-pick[aria-pressed="true"] { color: var(--porcelain); border-color: var(--graphite); background: #ffffff12; }
+.averse-pick[data-strength="strong"][aria-pressed="true"] { background: var(--oxblood-rich); border-color: var(--oxblood); }
+.averse-pick[data-strength="never"][aria-pressed="true"] { background: var(--destructive); border-color: var(--destructive); color: #1b1112; }
 
 /* ------------------------------------------------------------ dossier */
 
