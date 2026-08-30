@@ -616,6 +616,7 @@ a:hover { text-decoration: underline; }
   text-align: left;
 }
 .card-author { font-family: var(--font-text); font-style: italic; font-size: 14px; color: #ffffffc4; }
+.card-tags { margin-top: 7px; gap: 5px; }
 .card-why {
   display: flex; gap: 7px; align-items: flex-start;
   margin-top: 5px;
@@ -711,6 +712,9 @@ a:hover { text-decoration: underline; }
   padding: 3px 7px;
   font-family: var(--font-mono); font-size: 9px; color: #ffffffb0;
 }
+/* What the book is, as against what a critic said about it. Same chip, brass
+   rule, so the classification reads as the standing fact it is. */
+.tag[data-kind="form"] { border-color: #b69a6273; color: var(--brass); }
 button.tag:hover { border-color: var(--brass); color: var(--porcelain); }
 
 .row-why {

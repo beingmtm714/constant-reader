@@ -277,7 +277,43 @@ import { cleanBlurb } from './lib/blurb.mjs';
   // categorisable shows no tags, which is the honest outcome: 90 of the 312
   // scored books, and most of the archive, where there is no review at all.
   const REVIEW_TAGS = new Set(['period', 'subject', 'form', 'prose', 'tone']);
-  const reviewTags = (e) => (e.tags || []).filter((t) => REVIEW_TAGS.has(t.kind));
+
+  // What the book is, which every book has and no review is needed for. The
+  // classification is on all 811 records — 500 nonfiction, 180 confirmed
+  // fiction, 14 likely, 117 nothing establishes either way — so this tag is
+  // always there, and it leads. It is a fact about the book rather than about
+  // our coverage, which is the line the caveat tags failed.
+  const FORM = {
+    confirmed: 'Fiction',
+    likely: 'Fiction, probably',
+    nonfiction: 'Nonfiction',
+    unknown: 'Unclassified',
+  };
+
+  // The catalogue's own word, where it is narrower than fiction or nonfiction.
+  const SPECIFIC = new Set(['Poetry', 'Comics', 'Mystery & thriller', 'SF, fantasy & horror', 'Religion']);
+
+  function formTags(e) {
+    const out = [{ kind: 'form', label: FORM[e.fiction] || FORM.unknown }];
+    for (const t of e.tags || []) {
+      if (t.kind === 'genre' && SPECIFIC.has(t.label)) out.push({ kind: 'form', label: t.label });
+    }
+    return out;
+  }
+
+  // The classification first, then whatever the review actually said.
+  const tagsFor = (e) => [...formTags(e), ...(e.tags || []).filter((t) => REVIEW_TAGS.has(t.kind))];
+
+  // Five of the seven dimensions read the review for what the book is like. The
+  // other two read the catalogue: D6 is a page count and D7 is a publisher.
+  //
+  // A book where only those two fired has a score built from nothing a critic
+  // wrote — 90 of the 312 scored books — and that is worth saying on the row
+  // rather than leaving as a number with nothing behind it. It is a fact about
+  // how far to trust the score, so it sits beside the score as a status, not in
+  // the tags.
+  const READ_DIMS = ['D1', 'D2', 'D3', 'D4', 'D5'];
+  const readTheReview = (e) => READ_DIMS.some((id) => e.score?.dimensions?.[id] && !e.score.dimensions[id].defaulted);
 
   // What today's shortlist leans toward, counted rather than asserted: the tags
   // that recur most across the books at the top of the edit.
@@ -287,7 +323,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
     for (const { e } of pool) {
       for (const t of e.tags || []) {
         if (!REVIEW_TAGS.has(t.kind)) continue;
-        const row = counts.get(t.id) || { label: t.label, n: 0 };
+        const row = counts.get(t.id) || { label: t.label, kind: t.kind, n: 0 };
         row.n++;
         counts.set(t.id, row);
       }
@@ -329,6 +365,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
         ? 'Reviewed, but the evidence was too thin for a reliable number.'
         : 'Catalogued and browseable. No critic has reviewed it yet.';
     }
+    if (!readTheReview(e)) return 'Ranked on its length and its publisher; the review said nothing the profile could read.';
     const fired = firedDims(e);
     if (!fired.length) return 'Scored on the little the review gave, so treat the number lightly.';
     const [a, b] = fired;
@@ -343,6 +380,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
   // The dossier's fuller version of the same argument.
   function caseFor(e, s) {
     if (!isScored(e)) return matchLine(e, s);
+    if (!readTheReview(e)) return 'There is no case yet. The review said nothing the profile could read.';
     const fired = firedDims(e);
     const names = fired.slice(0, 3).map((d) => lower(d.name));
     if (!names.length) return 'Too little of this review spoke to the profile for a confident argument.';
@@ -478,6 +516,8 @@ import { cleanBlurb } from './lib/blurb.mjs';
         <p class="card-source">${esc(status === 'awaiting-review' ? (e.book.publisher || 'Catalogue listing') : e.sources.join(' · '))}</p>
         <button class="card-title" data-action="open" data-id="${esc(e.id)}">${esc(e.book.title)}</button>
         ${e.book.author ? `<p class="card-author">${esc(e.book.author)}</p>` : ''}
+        <div class="tags card-tags">${formTags(e).map((t) =>
+          `<span class="tag" data-kind="form">${esc(t.label)}</span>`).join('')}</div>
         <p class="card-why">${ico('sparkles')}<span>${esc(matchLine(e, s))}</span></p>
       </div>
       <div class="card-foot">${bookmarkBtn(e)}</div>
@@ -502,7 +542,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
       b.pages ? `${b.pages} pp.` : null,
     ].filter(Boolean).join(' · ');
 
-    const tags = reviewTags(e).slice(0, 3);
+    const tags = tagsFor(e).slice(0, 4);
 
     return `<li><article class="feed-row" data-family="${i % 4}" data-id="${esc(e.id)}">
       <button class="row-cover" data-action="open" data-id="${esc(e.id)}"
@@ -512,6 +552,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
           ? `<span class="row-num">${shownScore(e, s).toFixed(1)}<small>/ 10</small></span>`
           : `<span class="row-num" data-state="none">No score</span>`}
         ${scored && rec ? `<span class="row-rec">${ico('sparkles')}Recommended</span>` : ''}
+        ${scored && !readTheReview(e) ? `<span class="row-rec" data-state="thin">Length and press only</span>` : ''}
         ${status === 'reviewed-unscored' ? `<span class="row-rec" data-state="thin">Evidence too thin</span>` : ''}
         ${status === 'awaiting-review' ? `<span class="row-rec" data-state="thin">Awaiting review</span>` : ''}
       </div>
@@ -523,7 +564,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
         ${!scored ? `<p class="row-note">${esc(status === 'reviewed-unscored'
           ? 'A review exists, but it did not supply enough dependable evidence across the seven dimensions for a number to mean anything.'
           : 'Known from a catalogue listing or the author’s own account. It will be scored when review prose gives the profile something to read.')}</p>` : ''}
-        ${tags.length ? `<div class="tags">${tags.map((t) => `<span class="tag">${esc(t.label)}</span>`).join('')}</div>` : ''}
+        ${tags.length ? `<div class="tags">${tags.map((t) => `<span class="tag" data-kind="${esc(t.kind)}">${esc(t.label)}</span>`).join('')}</div>` : ''}
         <button class="row-why" data-action="open" data-id="${esc(e.id)}">${ico('sparkles')}${
           scored ? `Why it’s a ${shownScore(e, s).toFixed(1)}` : 'Why there’s no score'}${ico('arrow')}</button>
       </div>
@@ -991,7 +1032,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
           <hr>
           <h3>Your profile in one sentence</h3>
           <p>Historically alive, formally ambitious fiction with controlled prose and a reason to be long.</p>
-          <div class="tags">${tags.map((t) => `<span class="tag">${esc(t.label)}</span>`).join('')}</div>
+          <div class="tags">${tags.map((t) => `<span class="tag" data-kind="${esc(t.kind)}">${esc(t.label)}</span>`).join('')}</div>
         </aside>
 
         <section class="guardrails profile-guardrails" aria-labelledby="guard-h">
@@ -1187,7 +1228,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
     const maxc = Math.max(1, ...fired.map((d) => d.score * d.weight));
 
     const m = e.mentions.find((x) => (x.standfirst || '').trim()) || e.mentions[0];
-    const tags = reviewTags(e).slice(0, 6);
+    const tags = tagsFor(e).slice(0, 7);
 
     const buys = canFindCopy(buyIds(e)) ? RETAILERS.map((r) => {
       const link = linkFor(r.id, buyIds(e), AFFILIATES);
@@ -1208,6 +1249,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
             <span class="dossier-state" data-state="${scored && rec ? 'rec' : 'none'}">${
               scored ? (rec ? 'Recommended for you' : 'Below your threshold') :
               status === 'reviewed-unscored' ? 'Reviewed · no score' : 'Awaiting review'}</span>
+            ${scored && !readTheReview(e) ? '<span class="dossier-state" data-state="none">Length and press only</span>' : ''}
           </p>
           <h2 id="dossier-title">${esc(b.title)}</h2>
           ${b.author ? `<p class="dossier-author">${esc(b.author)}</p>` : ''}
@@ -1236,7 +1278,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
           <span class="bar-name">${esc(d.name)}</span>
           <span class="bar-track"><span class="bar-fill" style="width:${Math.round(d.score * d.weight / maxc * 100)}%"></span></span>
           <span class="bar-val">${d.score}</span></div>`).join('')}</div>` : ''}
-        ${tags.length ? `<div class="tags">${tags.map((t) => `<span class="tag">${esc(t.label)}</span>`).join('')}</div>` : ''}
+        ${tags.length ? `<div class="tags">${tags.map((t) => `<span class="tag" data-kind="${esc(t.kind)}">${esc(t.label)}</span>`).join('')}</div>` : ''}
       </section>
 
       ${m?.standfirst ? `<section class="dossier-block">
@@ -1266,6 +1308,16 @@ import { cleanBlurb } from './lib/blurb.mjs';
     }
     if (status === 'awaiting-review') {
       return 'This book is known from a catalogue listing or the author’s own account, not from a critical review. It can be described and saved now, but it will not be ranked until review prose gives the profile something to read.';
+    }
+    // A score with nothing from the review behind it needs saying outright, not
+    // softening: two of the seven dimensions read the catalogue rather than the
+    // prose, and a book where only those fired has been ranked on its length and
+    // its publisher.
+    if (!readTheReview(e)) {
+      const s6 = e.score?.dimensions?.D6, s7 = e.score?.dimensions?.D7;
+      const from = [s6 && !s6.defaulted ? 'its length' : null, s7 && !s7.defaulted ? 'its publisher' : null]
+        .filter(Boolean).join(' and ') || 'catalogue data';
+      return `Nothing in the review spoke to the profile. This number is built from ${from} alone, so it is a placeholder for a reading rather than one.`;
     }
     const fired = firedDims(e);
     const names = fired.slice(0, 3).map((d) => lower(d.name));
