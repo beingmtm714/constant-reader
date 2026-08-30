@@ -1,13 +1,13 @@
 {
   "name": "Constant Reader",
   "short_name": "Constant Reader",
-  "description": "Everything the literary press reviewed, scored out of ten.",
+  "description": "Independent reading intelligence. Everything the literary press reviewed, scored out of ten.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#172724",
-  "theme_color": "#172724",
+  "background_color": "#182526",
+  "theme_color": "#132624",
   "icons": [
     { "src": "icons/constant-reader-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "icons/constant-reader-512.png", "sizes": "512x512", "type": "image/png" },

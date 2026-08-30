@@ -1,13 +1,21 @@
-/* Constant Reader — reads data/feed.json, sorts, filters, explains. See DESIGN.md. */
+/* Constant Reader — the jewel editorial desk.
+
+   Reads data/feed.json, ranks it against the reading profile, and draws six
+   sections over one normalised book record: For you, Review feed, All books,
+   Saved, Taste, Profile. Every route into a book ends at the same dossier.
+
+   The scoring is not here. It lives in lib/, shared with the build, so the
+   browser and the build can never disagree about what a number means. This file
+   decides what is shown and in what order. */
+
 import * as saved from './lib/saved-books.mjs';
 import { RETAILERS, linkFor, canFindCopy } from './lib/retailers.mjs';
 import { createAnalytics } from './lib/analytics.mjs';
-import { buildTasteModel, tunedTotal, weightProposal, MIN_SIGNAL, MAX_ADJUSTMENT } from './lib/taste.mjs';
+import { buildTasteModel, tunedTotal, MIN_SIGNAL, MAX_ADJUSTMENT } from './lib/taste.mjs';
 import { outOfTen, RECOMMEND_AT } from './lib/recommend.mjs';
-import { rescore, summarize, isEmpty, bandKey, EMPTY as EMPTY_OVERRIDES } from './lib/overrides.mjs';
-import { CHIPS, READS, chipsFor, buildProfile } from './lib/onboard.mjs';
+import { rescore, isEmpty, bandKey, EMPTY as EMPTY_OVERRIDES } from './lib/overrides.mjs';
+import { READS, chipsFor, buildProfile } from './lib/onboard.mjs';
 import * as sync from './lib/sync.mjs';
-import { buildShelves } from './lib/shelves.mjs';
 import { jacketFor } from './lib/jacket.mjs';
 import { cleanBlurb } from './lib/blurb.mjs';
 
@@ -15,40 +23,29 @@ import { cleanBlurb } from './lib/blurb.mjs';
   'use strict';
 
   const $ = (id) => document.getElementById(id);
+  const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+
   const VERDICT_KEY = 'litfeed:verdicts';
   const PREFS_KEY = 'litfeed:prefs';
-  // The reader's own ordering, kept apart from prefs because it is a different kind
-  // of thing: prefs are how the feed is displayed, this is what the scores mean.
   const OVERRIDES_KEY = 'litfeed:overrides';
-  let overrides = { ...EMPTY_OVERRIDES };
-  const THEME_KEY = 'litfeed:theme';
   const EVENTS_KEY = 'litfeed:events';
-  const RETAILER_KEY = 'litfeed:last-retailer';
+  const ACCOUNT_KEY = 'litfeed:account';
 
-  // Sign-in is optional and this is the only trace of it when nobody has used it:
-  // one boolean, read before anything from Firebase is fetched, so a reader who
-  // has never signed in never loads the SDK. See lib/sync.mjs.
+  // No affiliate programme has been approved, so every outbound link goes clean.
+  const AFFILIATES = {};
+
+  // How many rows or cards a section previews before the reader asks for more.
+  const ROW_PAGE = 14;
+  const CARD_PAGE = 16;
+
+  let FEED = null;
+  let verdicts = saved.migrate(read(VERDICT_KEY, {}));
+  let overrides = { ...EMPTY_OVERRIDES };
+  let taste = null;
   let user = null;
   let syncing = false;
   let syncQueued = false;
   let profileVersion = 0;
-
-  // No affiliate programme has been approved for this app, so nothing is
-  // configured and every link goes out clean. If one ever is, the id belongs
-  // here keyed by retailer and the link builder picks it up — see
-  // lib/retailers.mjs, which refuses to write an empty tracking parameter.
-  const AFFILIATES = {};
-
-  let FEED = null;
-  // One store for both verdicts. Anything written by a build from before saves
-  // carried a timestamp is upgraded on the way in.
-  let verdicts = saved.migrate(read(VERDICT_KEY, {}));
-  let openRow = null;
-  let openChooser = null;
-  // A card may point at a row hidden by the reader's current filters. Keep that
-  // one navigation target visible until they dismiss it, without silently
-  // resetting any filter they chose.
-  let focusedBookId = null;
   let toastTimer = null;
 
   const analytics = createAnalytics({
@@ -56,80 +53,39 @@ import { cleanBlurb } from './lib/blurb.mjs';
     store: (log) => write(EVENTS_KEY, log),
   });
 
-  // An order is one decision, so it is one control. The comparator still takes a
-  // primary and a secondary key with a direction each, because sorting a feed of
-  // reviews genuinely needs both — a column of books all reviewed the same week
-  // has to break its ties on something. What was wrong was asking the reader to
-  // assemble that from four selects. These five are the orders worth having, and
-  // each one names what you get rather than the field it sorts on.
-  const ORDERS = {
-    latest:    { label: 'newest reviews',  sort1: 'reviewDate', dir1: 'desc', sort2: 'bookDate',   dir2: 'desc' },
-    fit:       { label: 'best fit',        sort1: 'score',      dir1: 'desc', sort2: 'reviewDate', dir2: 'desc' },
-    published: { label: 'newest books',    sort1: 'bookDate',   dir1: 'desc', sort2: 'reviewDate', dir2: 'desc' },
-    reviewed:  { label: 'most reviewed',   sort1: 'reviews',    dir1: 'desc', sort2: 'reviewDate', dir2: 'desc' },
-    title:     { label: 'title A–Z',       sort1: 'title',      dir1: 'asc',  sort2: 'none',       dir2: 'asc'  },
-  };
+  const SORTS = [
+    { id: 'fit', label: 'Best fit for me' },
+    { id: 'latest', label: 'Newest reviews' },
+    { id: 'short', label: 'Shortest first' },
+    { id: 'title', label: 'Title A–Z' },
+  ];
+
+  const SCOPES = [
+    { id: 'any', label: 'All reviewed books' },
+    { id: 'scored', label: 'Scored' },
+    { id: 'reviewed-unscored', label: 'Reviewed · no score' },
+  ];
+
+  const ALL_SCOPES = [
+    { id: 'any', label: 'Everything in the archive' },
+    { id: 'scored', label: 'Scored' },
+    { id: 'reviewed-unscored', label: 'Reviewed · no score' },
+    { id: 'awaiting-review', label: 'Awaiting review' },
+  ];
 
   const state = {
-    q: '', order: 'latest',
-    sort1: 'reviewDate', dir1: 'desc', sort2: 'bookDate', dir2: 'desc',
-    minPages: null, minScore: null, sources: new Set(), tag: null,
-    window: true, nonfiction: false, identity: false, penalised: false,
-    recommendedOnly: false, group: false, unseen: false,
-    view: 'shelves', allMode: 'shelves', allScope: 'any', savedSort: 'recent', tune: true,
+    view: 'foryou',
+    q: '',
+    sort: 'fit',
+    scope: 'any',
+    allScope: 'any',
+    recommendedOnly: false,
+    shortOnly: false,
+    limit: ROW_PAGE,
+    allLimit: CARD_PAGE,
+    openMenu: null,
+    draftWeights: null,
   };
-
-  // Rebuilt whenever the verdicts change, which is what makes a save feel like
-  // it did something: the feed re-ranks on the next render with no rebuild.
-  let taste = null;
-  const retune = () => { taste = buildTasteModel(verdicts, FEED?.books || [], FEED?.dimensions || []); };
-
-  // The score a row is sorted and displayed by. With tuning off, or before there
-  // is enough signal to learn from, this is exactly the profile's own number.
-  // rescore() wants the same profile object the build scored against. Everything it
-  // reads travels in feed.json: the dimensions with their bands, the evidence rule
-  // and the prose floor.
-  const profileForOverrides = () => ({
-    dimensions: FEED.dimensions,
-    evidenceRule: FEED.evidenceRule,
-    proseFloor: FEED.proseFloor,
-  });
-
-  // Two layers, in order. The reader's ordering decides what the profile's own
-  // number should have been; the saves then tune that number. They compose rather
-  // than compete, which is why the override is applied first and handed on as the
-  // base rather than added to the result.
-  //
-  // The taste model is still built from the profile's dimension vectors rather than
-  // the overridden ones. A reader who re-scores a band changes what a book is
-  // worth, not what it resembles, and nearest-neighbour asks about resemblance.
-  function scoreOf(e) {
-    if (!isScored(e)) {
-      const base = e.score?.total ?? 0;
-      return { base, delta: 0, total: base, reasons: [], nearest: null, tuned: false, overridden: false, profileBase: base };
-    }
-    const o = rescore(e.score, profileForOverrides(), overrides);
-    const overridden = Boolean(o.changed);
-    const base = overridden ? o.total : e.score.total;
-    if (!state.tune || !taste?.ready) {
-      return { base, delta: 0, total: base, reasons: [], nearest: null, tuned: false, overridden, profileBase: e.score.total };
-    }
-    // tunedTotal reads entry.score.total, so it has to be handed the overridden
-    // number rather than left to read the profile's straight off the entry.
-    const ent = overridden ? { ...e, score: { ...e.score, total: base, dimensions: o.dimensions } } : e;
-    return { ...tunedTotal(ent, taste), overridden, profileBase: e.score.total };
-  }
-
-  // Recommendation under tuning follows the same rule the build follows — same
-  // rounding, same threshold, same module — so the two can never disagree about
-  // what counts. Everything the build refused for a reason other than the score
-  // stays refused; tuning only ever moves the number.
-  function recommendedNow(e, s) {
-    if (!isScored(e)) return false;
-    if (!s.overridden && (!state.tune || !taste?.ready)) return e.recommended;
-    if (!e.recommended && e.recommendedWhyNot && !/^scores /.test(e.recommendedWhyNot)) return false;
-    return outOfTen(s.total) >= RECOMMEND_AT;
-  }
 
   // ------------------------------------------------------------ storage
 
@@ -139,237 +95,1207 @@ import { cleanBlurb } from './lib/blurb.mjs';
   function write(key, value) {
     try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* private mode */ }
   }
+  // The one write whose failure the reader has to know about. Private mode and a
+  // full quota both land here, and both mean the save did not happen.
+  function persist(key, value) { localStorage.setItem(key, JSON.stringify(value)); }
 
-  // Saving a book is the one write whose failure the reader needs to know about,
-  // so unlike write() this one throws. Private mode and a full quota both land
-  // here, and both mean the save did not happen however the button looks.
-  function persist(key, value) {
-    localStorage.setItem(key, JSON.stringify(value));
+  function loadPrefs() {
+    const p = read(PREFS_KEY, {});
+    for (const k of ['view', 'sort', 'scope', 'allScope']) if (p[k]) state[k] = p[k];
+    if (typeof p.recommendedOnly === 'boolean') state.recommendedOnly = p.recommendedOnly;
+    if (typeof p.shortOnly === 'boolean') state.shortOnly = p.shortOnly;
+    if (!VIEWS[state.view]) state.view = 'foryou';
+  }
+  function savePrefs() {
+    write(PREFS_KEY, {
+      view: state.view, sort: state.sort, scope: state.scope, allScope: state.allScope,
+      recommendedOnly: state.recommendedOnly, shortOnly: state.shortOnly,
+    });
   }
 
-  // ------------------------------------------------------------ sync
-
-  // Signed out, this whole section is dead weight and the app is what it always
-  // was: a JSON file, localStorage, and no network after the feed loads. Signed
-  // in, the same two things a reader owns — their verdicts and their ordering —
-  // are merged with whatever their other devices know and written back.
-  //
-  // localStorage stays the source of truth on this device. The server is a copy,
-  // and every path that fails here leaves the local copy exactly as it was, which
-  // is why a failed sync is a message rather than a lost book.
-
-  function localProfile() {
-    return { verdicts, overrides };
+  function loadOverrides() {
+    overrides = { ...EMPTY_OVERRIDES, ...read(OVERRIDES_KEY, {}) };
+    for (const k of Object.keys(EMPTY_OVERRIDES)) overrides[k] = overrides[k] || {};
   }
 
-  function adoptProfile(merged) {
-    verdicts = merged.verdicts;
-    overrides = { ...EMPTY_OVERRIDES, ...merged.overrides };
-    write(VERDICT_KEY, verdicts);
-    write(OVERRIDES_KEY, overrides);
-    markProfile();
-    retune();
-    render();
+  // ------------------------------------------------------------ helpers
+
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  const ico = (name, cls = 'ico') => `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-${name}"/></svg>`;
+
+  const cssId = (s) => String(s).replace(/[^a-z0-9]/gi, '-');
+
+  function fmtDate(iso) {
+    const d = new Date(iso || '');
+    if (Number.isNaN(d.getTime())) return 'undated';
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
-  // Who is signed in, kept locally so the bar can say so on the very first paint.
-  // Firebase takes a network round trip to answer, and a control that reads "Sign
-  // in" for a second and then becomes your monogram tells a reader they were
-  // signed out when they never were.
-  const ACCOUNT_KEY = 'litfeed:account';
-
-  // A drawn monogram rather than the Google photo. photoURL is an external fetch
-  // on every load, it 404s when Google rotates the id, and it drops a full-colour
-  // photograph into a palette that allows one red. A letter in Bodoni on a token
-  // ground is on-brand and can never be a broken image.
-  const monogramOf = (u) => {
-    const name = u?.displayName || u?.email || '';
-    const letter = name.trim().charAt(0).toUpperCase();
-    return /[A-Z0-9]/.test(letter) ? letter : '@';
-  };
-
-  function rememberAccount(u) {
-    if (!u) { write(ACCOUNT_KEY, null); return; }
-    write(ACCOUNT_KEY, { name: u.displayName || u.email || 'your account', mono: monogramOf(u) });
+  function relative(iso) {
+    const t = Date.parse(iso || '');
+    if (!t) return '';
+    const days = Math.round((Date.now() - t) / 86400000);
+    if (days <= 0) return 'today';
+    if (days === 1) return 'yesterday';
+    if (days < 30) return `${days} days ago`;
+    if (days < 365) return `${Math.round(days / 30)} months ago`;
+    return `${Math.round(days / 365)} years ago`;
   }
 
-  // `user` is the truth once Firebase has answered; before that, the remembered
-  // account is, and only for a reader who was signed in when they left. Pulled
-  // out of showAuth because the standing reminder and the first-visit prompt both
-  // have to ask it without repainting the bar.
-  const signedInNow = () => Boolean(user)
-    || (Boolean(read(ACCOUNT_KEY, null)) && read(sync.RETURNING_KEY, false) === true);
+  // "Rebuilt this morning" is a claim about today; a build from last week has to
+  // say so rather than borrow the phrasing.
+  function rebuiltPhrase(iso) {
+    const t = Date.parse(iso || '');
+    if (!t) return 'Rebuild time unknown';
+    const d = new Date(t);
+    const sameDay = d.toDateString() === new Date().toDateString();
+    if (!sameDay) return `Rebuilt ${relative(iso)}`;
+    return d.getHours() < 12 ? 'Rebuilt this morning' : 'Rebuilt today';
+  }
 
-  // An ordering of the reader's own, living in one browser and nowhere else.
-  // Not a failure - nothing is broken and nothing has been lost - but the one
-  // thing about this app a reader would be sorry to learn too late, and the only
-  // honest reason to ask a stranger for an account.
-  const profileAtRisk = () => !signedInNow() && overridesDirty();
+  function greetingWord() {
+    const h = new Date().getHours();
+    if (h < 12) return 'Good morning';
+    if (h < 18) return 'Good afternoon';
+    return 'Good evening';
+  }
 
-  const AT_RISK_LABEL = 'Your profile is saved in this browser only. Sign in with Google to keep it.';
-
-  function showAuth({ failing = false } = {}) {
+  // The prototype greeted a signed-in persona by name. A stranger has no name to
+  // use, so the greeting stands on its own rather than inventing one.
+  function greeting() {
     const account = read(ACCOUNT_KEY, null);
-    const signedIn = signedInNow();
-    const name = user ? (user.displayName || user.email || 'your account') : account?.name;
-    const mono = user ? monogramOf(user) : account?.mono;
-
-    const btn = $('account');
-    $('account-mono').textContent = signedIn ? (mono || '@') : '';
-    $('account-word').hidden = Boolean(signedIn);
-    $('account-mono').hidden = !signedIn;
-    $('account-warn').hidden = !(signedIn && failing);
-    // Standing, and deliberately not dismissable: it stops being shown by signing
-    // in, which is the only thing that stops it being true.
-    const atRisk = profileAtRisk();
-    $('account-mark').hidden = !atRisk;
-    btn.classList.toggle('is-in', Boolean(signedIn));
-    btn.setAttribute('aria-label', signedIn
-      ? (failing ? `Signed in as ${name}, but syncing is failing. Open the menu.` : `Signed in as ${name}. Open the menu.`)
-      : atRisk ? AT_RISK_LABEL
-      : 'Sign in with Google to sync your books');
-
-    const menuBtn = $('auth');
-    menuBtn.textContent = signedIn ? 'Sign out' : 'Sign in';
-    const note = $('auth-note');
-    // The dot is a mark; this is the sentence behind it, one tap away in the menu
-    // where Sign in itself is. A mark nobody can get an explanation for is worse
-    // than no mark.
-    note.hidden = !signedIn && !atRisk;
-    note.textContent = !signedIn
-      ? (atRisk ? 'Your profile and your saved books are in this browser only. Sign in to keep them, and to read the same feed on your other devices.' : '')
-      : failing ? `Signed in as ${name}. Not syncing right now — your books are safe on this device.`
-      : `Signed in as ${name}. Your books sync across your devices.`;
+    const name = (user?.displayName || account?.name || '').trim().split(/\s+/)[0];
+    const usable = name && !name.includes('@') ? name.replace(/[^\p{L}\p{N}'\-]/gu, '') : '';
+    return usable ? `${greetingWord()}, ${usable}.` : `${greetingWord()}.`;
   }
 
-  // Called after every local write while signed in. It is deliberately not
-  // awaited by the thing that triggered it: a save has already been persisted
-  // locally and drawn on screen by the time this runs, and the reader should
-  // never wait on a network round trip to see their own tap land.
-  async function syncNow() {
-    if (!user) return;
-    if (syncing) { syncQueued = true; return; }
-    syncing = true;
-    try {
-      do {
-        syncQueued = false;
-        const version = profileVersion;
-        const uid = user?.uid;
-        if (!uid) break;
-        try {
-          const merged = await sync.reconcile(uid, localProfile());
-          // A local decision made during the round trip is newer than the
-          // document that came back. Keep it, then reconcile once more.
-          if (user?.uid !== uid) break;
-          if (profileVersion === version) adoptProfile(merged);
-          else syncQueued = true;
-          showAuth();
-        } catch (err) {
-          // A toast clears itself, and a reader who missed it is left believing
-          // their books are syncing when they are not. The account control keeps
-          // the state until a later sync succeeds.
-          showAuth({ failing: true });
-          toast(sync.explain(err), { error: true });
-          break;
-        }
-      } while (syncQueued && user);
-    } finally {
-      syncing = false;
+  function dateline() {
+    const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+    return `${today} · ${rebuiltPhrase(FEED.builtAt)}`;
+  }
+
+  // ------------------------------------------------------------ scoring
+
+  // One status test, everywhere. A missing number means one of two very different
+  // things — no critic has reviewed the book yet, or a review exists and gave too
+  // little dependable evidence — and neither is ever shown as a zero.
+  function scoreStatus(e) {
+    const noScore = e.listedOnly || e.score?.band === 'unscored' || e.score?.band === 'unresolved';
+    if (!noScore) return 'scored';
+    if (!e.listedOnly && e.reviewCount > 0) return 'reviewed-unscored';
+    return 'awaiting-review';
+  }
+  const isScored = (e) => scoreStatus(e) === 'scored';
+
+  const profileForOverrides = () => ({
+    dimensions: FEED.dimensions,
+    evidenceRule: FEED.evidenceRule,
+    proseFloor: FEED.proseFloor,
+  });
+
+  const retune = () => { taste = buildTasteModel(verdicts, FEED?.books || [], FEED?.dimensions || []); };
+
+  // Two layers, in order: the reader's own weighting decides what the profile's
+  // number should have been, then their saves tune it within a bounded range.
+  function scoreOf(e) {
+    if (!isScored(e)) {
+      const base = e.score?.total ?? 0;
+      return { base, delta: 0, total: base, reasons: [], nearest: null, tuned: false, overridden: false, profileBase: base };
+    }
+    const o = rescore(e.score, profileForOverrides(), overrides);
+    const overridden = Boolean(o.changed);
+    const base = overridden ? o.total : e.score.total;
+    if (!taste?.ready) {
+      return { base, delta: 0, total: base, reasons: [], nearest: null, tuned: false, overridden, profileBase: e.score.total };
+    }
+    const ent = overridden ? { ...e, score: { ...e.score, total: base, dimensions: o.dimensions } } : e;
+    return { ...tunedTotal(ent, taste), overridden, profileBase: e.score.total };
+  }
+
+  const shownScore = (e, s = scoreOf(e)) => outOfTen(s.total);
+
+  // The build's rule, applied to the live number. Everything the build refused
+  // for a reason other than the score stays refused.
+  function recommendedNow(e, s) {
+    if (!isScored(e)) return false;
+    if (!s.overridden && !taste?.ready) return e.recommended;
+    if (!e.recommended && e.recommendedWhyNot && !/^scores /.test(e.recommendedWhyNot)) return false;
+    return outOfTen(s.total) >= threshold();
+  }
+
+  const threshold = () => FEED?.recommendAt ?? RECOMMEND_AT;
+
+  const passed = (e) => saved.verdictOf(verdicts, e.id) === 'passed';
+  const isSaved = (e) => saved.isSaved(verdicts, e.id);
+
+  // ------------------------------------------------------------ derived facts
+
+  let stats = null;
+  function computeStats() {
+    const books = FEED.books;
+    const byStatus = { scored: 0, 'reviewed-unscored': 0, 'awaiting-review': 0 };
+    let recentReviews = 0;
+    const cutoff = Date.now() - 30 * 86400000;
+    for (const e of books) {
+      byStatus[scoreStatus(e)]++;
+      for (const m of e.mentions) if ((Date.parse(m.reviewDate || '') || 0) >= cutoff) recentReviews++;
+    }
+    stats = {
+      total: books.length,
+      scored: byStatus.scored,
+      unscored: byStatus['reviewed-unscored'],
+      awaiting: byStatus['awaiting-review'],
+      reviewed: byStatus.scored + byStatus['reviewed-unscored'],
+      recentReviews,
+    };
+  }
+
+  // The day's edit: everything the profile can score, not already ruled on,
+  // ranked by the live number. Ranked once per render rather than per section.
+  function edit() {
+    return FEED.books
+      .filter((e) => isScored(e) && e.inWindow !== false && !passed(e))
+      .map((e) => ({ e, s: scoreOf(e) }))
+      .sort((a, b) => b.s.total - a.s.total || reviewTime(b.e) - reviewTime(a.e));
+  }
+
+  const reviewTime = (e) => Date.parse(e.lastReviewed || '') || 0;
+
+  // Tags come from the review and from nothing else.
+  //
+  // The feed carries thirteen kinds and most of them are facts about our own
+  // bookkeeping rather than about the book: `caveat` holds "thin evidence",
+  // `rule` and `question` hold which of the profile's rules fired, `attention`
+  // holds how many critics turned up, `imprint` and `press` hold the publisher.
+  // `scale` is a page count wearing a word and `genre` is a catalogue subject.
+  // None of them describes what a reader would find inside the book.
+  //
+  // These five do. Each is read out of review prose by keyword, so a tag on a
+  // row is always something a critic wrote. A book whose review said nothing
+  // categorisable shows no tags, which is the honest outcome: 90 of the 312
+  // scored books, and most of the archive, where there is no review at all.
+  const REVIEW_TAGS = new Set(['period', 'subject', 'form', 'prose', 'tone']);
+  const reviewTags = (e) => (e.tags || []).filter((t) => REVIEW_TAGS.has(t.kind));
+
+  // What today's shortlist leans toward, counted rather than asserted: the tags
+  // that recur most across the books at the top of the edit.
+  function leanCounts(ranked, n = 4) {
+    const pool = ranked.slice(0, 40);
+    const counts = new Map();
+    for (const { e } of pool) {
+      for (const t of e.tags || []) {
+        if (!REVIEW_TAGS.has(t.kind)) continue;
+        const row = counts.get(t.id) || { label: t.label, n: 0 };
+        row.n++;
+        counts.set(t.id, row);
+      }
+    }
+    return [...counts.values()].sort((a, b) => b.n - a.n).slice(0, n);
+  }
+
+  // The dimensions a review actually spoke to, strongest first. Everything that
+  // explains a score in plain words is built from this.
+  function firedDims(e) {
+    const dims = Object.values(e.score?.dimensions || {});
+    return dims
+      .filter((d) => !d.defaulted && d.score != null)
+      .sort((a, b) => (b.score * b.weight) - (a.score * a.weight));
+  }
+
+  const lower = (s) => String(s || '').charAt(0).toLowerCase() + String(s || '').slice(1);
+
+  // Why this book, in one sentence, built from the dimensions that fired rather
+  // than from a model. Two dimensions is the most a single line can carry.
+  // Four books whose reviews fired the same two dimensions would otherwise carry
+  // the same sentence four times across one shelf, which reads as boilerplate
+  // rather than as a reason. The claim is identical; the phrasing rotates on the
+  // book's own id, so it is stable per book and varied across a row.
+  const STRONG = [
+    (x, y) => `${x} and ${lower(y)} align almost perfectly with your profile.`,
+    (x, y) => `Two of your highest-weight dimensions appear here: ${lower(x)} and ${lower(y)}.`,
+    (x, y) => `Your ${lower(x)} and ${lower(y)} preferences both fire on this one.`,
+  ];
+  const SOLID = [
+    (x, y) => `A high-confidence match for ${lower(x)}, with ${lower(y)} behind it.`,
+    (x, y) => `${x} carries it; ${lower(y)} holds the rest up.`,
+    (x, y) => `Strong on ${lower(x)}, and ${lower(y)} does not let it down.`,
+  ];
+
+  function matchLine(e, s) {
+    if (!isScored(e)) {
+      return scoreStatus(e) === 'reviewed-unscored'
+        ? 'Reviewed, but the evidence was too thin for a reliable number.'
+        : 'Catalogued and browseable. No critic has reviewed it yet.';
+    }
+    const fired = firedDims(e);
+    if (!fired.length) return 'Scored on the little the review gave, so treat the number lightly.';
+    const [a, b] = fired;
+    const pick = (bank) => bank[hashId(e.id) % bank.length](a.name, b.name);
+    if (b && a.score >= 9 && b.score >= 9) return pick(STRONG);
+    if (b && a.score >= 8) return pick(SOLID);
+    if (a.score >= 8) return `${a.name} is the signal doing the work here.`;
+    if (s.tuned && s.reasons?.length) return `Your saves lift this: ${s.reasons.map((r) => r.label).join(', ')}.`;
+    return `${a.name} reads clearly; the rest of the review says less.`;
+  }
+
+  // The dossier's fuller version of the same argument.
+  function caseFor(e, s) {
+    if (!isScored(e)) return matchLine(e, s);
+    const fired = firedDims(e);
+    const names = fired.slice(0, 3).map((d) => lower(d.name));
+    if (!names.length) return 'Too little of this review spoke to the profile for a confident argument.';
+    const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0];
+    const strength = shownScore(e, s) >= 9 ? 'align almost perfectly with' : shownScore(e, s) >= threshold() ? 'sit well inside' : 'only partly meet';
+    return `Strong signals for ${list} ${strength} your profile.`;
+  }
+
+  function blurbOf(e, max = 320) {
+    const m = e.mentions.find((x) => (x.standfirst || '').trim()) || e.mentions.find((x) => (x.excerpt || '').trim());
+    const text = cleanBlurb(m?.standfirst || m?.excerpt || '', { title: e.book.title, author: e.book.author });
+    if (!text) return '';
+    if (text.length <= max) return text;
+    return `${text.slice(0, max).replace(/\s+\S*$/, '')}…`;
+  }
+
+  // ------------------------------------------------------------ covers
+
+  // A cover URL rots between builds — Google rotates volume ids and this feed is
+  // republished every morning — so a dead image falls back to the drawn jacket
+  // rather than leaving an empty box or a broken-image glyph.
+  const TONES = ['paper', 'dark', 'garnet', 'lapis', 'olive'];
+
+  function drawnJacket(e) {
+    const j = jacketFor({ id: e.id, title: e.book.title, author: e.book.author });
+    const tone = TONES[Math.abs(hashId(e.id)) % TONES.length];
+    return `<div class="jacket-drawn" data-tone="${tone}" data-size="${esc(j.size)}">
+      <div class="j-rule" aria-hidden="true"></div>
+      <div class="j-title">${esc(j.title)}</div>
+      <div><div class="j-rule" aria-hidden="true"></div><div class="j-author">${esc(j.author)}</div></div>
+    </div>`;
+  }
+
+  function hashId(s) {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < String(s).length; i++) { h ^= String(s).charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+    return h >>> 0;
+  }
+
+  function jacket(e) {
+    if (!e.book.coverUrl) return `<div class="jacket">${drawnJacket(e)}</div>`;
+    return `<div class="jacket" data-jacket="${esc(e.id)}">
+      <img src="${esc(e.book.coverUrl)}" alt="" loading="lazy" decoding="async">
+    </div>`;
+  }
+
+  function bindJackets(root) {
+    const swap = (img) => {
+      const box = img.closest('.jacket');
+      if (!box) return;
+      const e = FEED.books.find((x) => x.id === box.dataset.jacket);
+      if (e) box.innerHTML = drawnJacket(e);
+    };
+    for (const img of $$('.jacket[data-jacket] img', root)) {
+      // A 404 already in the browser cache resolves before this handler can be
+      // attached, and that error never fires again — which is exactly the case
+      // for a cover URL that has been dead since the first visit. So the
+      // finished-and-empty state is tested as well as listened for.
+      if (img.complete && img.naturalWidth === 0) { swap(img); continue; }
+      img.addEventListener('error', () => swap(img), { once: true });
+      // A request that never resolves leaves an empty ground where a jacket
+      // should be, which reads the same as a broken one. Covers come from hosts
+      // this app does not control, so a slow or unreachable one falls back too.
+      // Ten seconds, not two: a slow connection should still get the real jacket.
+      // Past that the request is not arriving and an empty ground is the worse
+      // of the two failures.
+      const t = setTimeout(() => { if (!img.complete || !img.naturalWidth) swap(img); }, 10000);
+      img.addEventListener('load', () => clearTimeout(t), { once: true });
     }
   }
 
-  function bindAuth() {
-    $('auth').addEventListener('click', async () => {
-      if (user) {
-        try { await sync.signOut(); } catch { /* already gone */ }
-        write(sync.RETURNING_KEY, false);
-        rememberAccount(null);
-        user = null;
-        showAuth();
-        toast('Signed out. Your books stay on this device.');
-        return;
-      }
-      try {
-        user = await sync.signIn();
-        write(sync.RETURNING_KEY, true);
-        rememberAccount(user);
-        showAuth();
-        await syncNow();
-        toast('Signed in. Your books are synced.');
-      } catch (err) {
-        user = null;
-        write(sync.RETURNING_KEY, false);
-        rememberAccount(null);
-        showAuth();
-        toast(sync.explain(err), { error: true });
-      }
-    });
+  // ------------------------------------------------------------ filtering
 
-    // A reader who signed in before gets their session back and one reconcile.
-    // A reader who never did loads nothing: watch() returns immediately.
-    sync.watch((u, { authoritative } = {}) => {
-      user = u;
-      // Only Firebase itself gets to say a reader is signed out. A null user it
-      // actually returned means the session is gone - revoked, or signed out on
-      // another device - and keeping the monogram up would claim a sync that is
-      // not happening. A null user because the SDK never loaded means we could not
-      // ask, and the remembered account stands: being offline is not a sign-out.
-      if (!u && authoritative) { write(sync.RETURNING_KEY, false); rememberAccount(null); }
-      else if (u) rememberAccount(u);
-      showAuth({ failing: !u && !authoritative });
-      if (u) syncNow();
-    }, { returning: read(sync.RETURNING_KEY, false) === true });
-
-    // The bar control: signs a stranger in, and opens the menu for someone who
-    // already is, because that is where their name and Sign out live.
-    $('account').addEventListener('click', () => {
-      if (read(sync.RETURNING_KEY, false) === true) { openMenu(); return; }
-      $('auth').click();
-    });
-
-    showAuth();
+  function matches(e, q) {
+    if (!q) return true;
+    const hay = [e.book.title, e.book.author, e.book.publisher,
+      ...e.mentions.flatMap((m) => [m.reviewTitle, m.byline, m.source.name])]
+      .filter(Boolean).join(' ').toLowerCase();
+    return q.toLowerCase().split(/\s+/).filter(Boolean).every((w) => hay.includes(w));
   }
 
-  // ------------------------------------------------------------ theme
+  function sortPool(pool, sort) {
+    const rows = pool.slice();
+    if (sort === 'latest') return rows.sort((a, b) => reviewTime(b.e) - reviewTime(a.e));
+    if (sort === 'title') return rows.sort((a, b) =>
+      (a.e.book.title || '').localeCompare(b.e.book.title || ''));
+    if (sort === 'short') {
+      // A book with no page count cannot be ranked by length, so it goes last
+      // rather than being treated as the shortest thing in the archive.
+      return rows.sort((a, b) => (a.e.book.pages || Infinity) - (b.e.book.pages || Infinity));
+    }
+    // Best fit. A missing score is never ordered against a number.
+    return rows.sort((a, b) => {
+      const as = isScored(a.e), bs = isScored(b.e);
+      if (as !== bs) return as ? -1 : 1;
+      if (!as) return reviewTime(b.e) - reviewTime(a.e);
+      return b.s.total - a.s.total || reviewTime(b.e) - reviewTime(a.e);
+    });
+  }
 
-  function initTheme() {
-    const saved = read(THEME_KEY, null);
-    if (saved) document.documentElement.dataset.theme = saved;
-    const system = window.matchMedia('(prefers-color-scheme: dark)');
-    const setThemeColor = (theme) => {
-      const meta = $('theme-color');
-      if (meta) meta.setAttribute('content', theme === 'dark' ? '#172724' : '#d4ddd8');
-    };
-    setThemeColor(saved || (system.matches ? 'dark' : 'light'));
-    system.addEventListener?.('change', (ev) => {
-      if (!document.documentElement.dataset.theme) setThemeColor(ev.matches ? 'dark' : 'light');
-    });
-    $('theme').addEventListener('click', () => {
-      const current = document.documentElement.dataset.theme || (system.matches ? 'dark' : 'light');
-      const next = current === 'dark' ? 'light' : 'dark';
-      document.documentElement.dataset.theme = next;
-      setThemeColor(next);
-      write(THEME_KEY, next);
-    });
+  // ------------------------------------------------------------ components
+
+  function saveBtn(e, { block = false, label = 'Save' } = {}) {
+    const on = isSaved(e);
+    return `<button class="btn js-save${block ? ' btn-block' : ''}" data-action="save" data-id="${esc(e.id)}"
+      aria-pressed="${on}" aria-label="${on ? 'Remove from your shelf' : 'Save to your shelf'}">
+      ${ico('bookmark')}<span>${on ? 'Saved' : label}</span></button>`;
+  }
+
+  function bookmarkBtn(e) {
+    const on = isSaved(e);
+    return `<button class="card-bookmark" data-action="save" data-id="${esc(e.id)}"
+      aria-pressed="${on}" aria-label="${on ? 'Remove from your shelf' : 'Save to your shelf'}">${ico('bookmark')}</button>`;
+  }
+
+  function scoreBadge(e, s) {
+    const status = scoreStatus(e);
+    if (status === 'scored') return `<span class="card-score">${shownScore(e, s).toFixed(1)}</span>`;
+    return `<span class="card-score" data-state="none">${status === 'reviewed-unscored' ? 'No score' : 'Not scored'}</span>`;
+  }
+
+  function card(row, i) {
+    const { e, s } = row;
+    const status = scoreStatus(e);
+    return `<article class="card" data-family="${i % 4}">
+      <button class="card-cover" data-action="open" data-id="${esc(e.id)}"
+        aria-label="Open the dossier for ${esc(e.book.title)}">
+        ${jacket(e)}
+        ${scoreBadge(e, s)}
+        <span class="card-peek" aria-hidden="true">${ico('arrow')}View dossier</span>
+      </button>
+      <div class="card-body">
+        <p class="card-source">${esc(status === 'awaiting-review' ? (e.book.publisher || 'Catalogue listing') : e.sources.join(' · '))}</p>
+        <button class="card-title" data-action="open" data-id="${esc(e.id)}">${esc(e.book.title)}</button>
+        ${e.book.author ? `<p class="card-author">${esc(e.book.author)}</p>` : ''}
+        <p class="card-why">${ico('sparkles')}<span>${esc(matchLine(e, s))}</span></p>
+      </div>
+      <div class="card-foot">${bookmarkBtn(e)}</div>
+    </article>`;
+  }
+
+  function shelf(rows) {
+    return `<div class="shelf">${rows.map(card).join('')}</div>`;
+  }
+
+  function feedRow(row, i) {
+    const { e, s } = row;
+    const b = e.book;
+    const status = scoreStatus(e);
+    const scored = status === 'scored';
+    const rec = recommendedNow(e, s);
+
+    const meta = [
+      e.sources.join(' · '),
+      status === 'awaiting-review' ? `listed ${fmtDate(e.lastReviewed)}` : `reviewed ${fmtDate(e.lastReviewed)}`,
+      b.editionDate || b.bookYear || null,
+      b.pages ? `${b.pages} pp.` : null,
+    ].filter(Boolean).join(' · ');
+
+    const tags = reviewTags(e).slice(0, 3);
+
+    return `<li><article class="feed-row" data-family="${i % 4}" data-id="${esc(e.id)}">
+      <button class="row-cover" data-action="open" data-id="${esc(e.id)}"
+        aria-label="Open the dossier for ${esc(b.title)}">${jacket(e)}</button>
+      <div class="row-score">
+        ${scored
+          ? `<span class="row-num">${shownScore(e, s).toFixed(1)}<small>/ 10</small></span>`
+          : `<span class="row-num" data-state="none">No score</span>`}
+        ${scored && rec ? `<span class="row-rec">${ico('sparkles')}Recommended</span>` : ''}
+        ${status === 'reviewed-unscored' ? `<span class="row-rec" data-state="thin">Evidence too thin</span>` : ''}
+        ${status === 'awaiting-review' ? `<span class="row-rec" data-state="thin">Awaiting review</span>` : ''}
+      </div>
+      <div class="row-main">
+        <h3 class="row-title"><button data-action="open" data-id="${esc(e.id)}">${esc(b.title)}${
+          b.author ? `<span class="row-author">${esc(b.author)}</span>` : ''}</button></h3>
+        <p class="row-meta">${esc(meta)}</p>
+        ${blurbOf(e, 190) ? `<p class="row-blurb">${esc(blurbOf(e, 190))}</p>` : ''}
+        ${!scored ? `<p class="row-note">${esc(status === 'reviewed-unscored'
+          ? 'A review exists, but it did not supply enough dependable evidence across the seven dimensions for a number to mean anything.'
+          : 'Known from a catalogue listing or the author’s own account. It will be scored when review prose gives the profile something to read.')}</p>` : ''}
+        ${tags.length ? `<div class="tags">${tags.map((t) => `<span class="tag">${esc(t.label)}</span>`).join('')}</div>` : ''}
+        <button class="row-why" data-action="open" data-id="${esc(e.id)}">${ico('sparkles')}${
+          scored ? `Why it’s a ${shownScore(e, s).toFixed(1)}` : 'Why there’s no score'}${ico('arrow')}</button>
+      </div>
+      <div class="row-actions">
+        ${saveBtn(e, { block: true })}
+        <button class="btn btn-quiet" data-action="pass" data-id="${esc(e.id)}">Pass</button>
+      </div>
+    </article></li>`;
+  }
+
+  function viewHead({ eyebrow, title, lede, aside = '', action = '' }) {
+    return `<header class="view-head">
+      <div class="view-head-main">
+        <p class="eyebrow">${esc(eyebrow)}</p>
+        <h1>${esc(title)}</h1>
+        ${lede ? `<p class="view-lede">${lede}</p>` : ''}
+      </div>
+      ${aside || action ? `<div class="view-head-aside">${aside ? `<span>${esc(aside)}</span>` : ''}${action}</div>` : ''}
+    </header>`;
+  }
+
+  function toolbar({ scopes, scope, showRecommended = true }) {
+    const sortLabel = SORTS.find((x) => x.id === state.sort)?.label || 'Best fit for me';
+    return `<div class="toolbar" data-toolbar>
+      <div class="search">
+        ${ico('search')}
+        <label class="sr-only" for="q">Search books</label>
+        <input type="search" id="q" value="${esc(state.q)}" placeholder="Title, author, publisher, critic…" autocomplete="off">
+      </div>
+      <div class="tool-pair">
+        <button class="tool-btn" data-action="menu" data-menu="sort" aria-haspopup="true" aria-expanded="${state.openMenu === 'sort'}">
+          <span>${esc(sortLabel)}</span>${ico('chevron')}
+        </button>
+        <button class="tool-btn" data-action="menu" data-menu="filter" aria-haspopup="true" aria-expanded="${state.openMenu === 'filter'}">
+          ${ico('sliders')}<span>Filters</span>
+        </button>
+      </div>
+      ${state.openMenu === 'sort' ? sortMenu() : ''}
+      ${state.openMenu === 'filter' ? filterMenu(scopes, scope, showRecommended) : ''}
+    </div>`;
+  }
+
+  function sortMenu() {
+    return `<div class="menu-pop" role="menu" data-pop>
+      <span class="label">Order</span>
+      ${SORTS.map((o) => `<button class="menu-opt" role="menuitemradio" aria-checked="${state.sort === o.id}"
+        data-action="sort" data-value="${o.id}">${ico('check')}<span>${esc(o.label)}</span></button>`).join('')}
+    </div>`;
+  }
+
+  function filterMenu(scopes, scope, showRecommended) {
+    return `<div class="menu-pop" role="menu" data-pop>
+      <div class="menu-pop-group">
+        ${showRecommended ? `<button class="menu-opt" role="menuitemcheckbox" aria-checked="${state.recommendedOnly}"
+          data-action="toggle" data-value="recommendedOnly">${ico('check')}<span>Recommended only (${threshold()}+)</span></button>` : ''}
+        <button class="menu-opt" role="menuitemcheckbox" aria-checked="${state.shortOnly}"
+          data-action="toggle" data-value="shortOnly">${ico('check')}<span>Under 300 pages</span></button>
+      </div>
+      <div class="menu-pop-group">
+        <span class="label">Which books</span>
+        ${scopes.map((o) => `<button class="menu-opt" role="menuitemradio" aria-checked="${scope === o.id}"
+          data-action="scope" data-value="${o.id}">${ico('check')}<span>${esc(o.label)}</span></button>`).join('')}
+        <p class="menu-pop-note">Score ranges apply only to scored books. Missing scores are never treated as zero.</p>
+      </div>
+    </div>`;
+  }
+
+  function moreBtn(shown, total, action) {
+    if (shown >= total) return '';
+    return `<button class="btn btn-block" data-action="${action}">Show ${Math.min(
+      action === 'more-cards' ? CARD_PAGE : ROW_PAGE, total - shown)} more of ${total}</button>`;
+  }
+
+  // ------------------------------------------------------------ For you
+
+  function viewForYou() {
+    const ranked = edit();
+    if (!ranked.length) {
+      return `${viewHead({ eyebrow: dateline(), title: greeting(), lede: 'Nothing in the current build clears the profile. The archive is still browseable under All books.' })}
+        <div class="panel panel-empty"><h2>No edit today</h2>
+        <p>Every scored book has been ruled on, or the build found nothing inside the window.</p>
+        <button class="btn btn-solid" data-action="go" data-view="all">Open the archive ${ico('arrow')}</button></div>`;
+    }
+
+    const best = ranked.find(({ e, s }) => recommendedNow(e, s)) || ranked[0];
+    const rest = ranked.filter((r) => r.e.id !== best.e.id);
+    const picks = rest.slice(0, 4);
+    const leans = leanCounts(ranked);
+    const newly = ranked.slice()
+      .sort((a, b) => reviewTime(b.e) - reviewTime(a.e))
+      .filter((r) => r.e.id !== best.e.id)
+      .slice(0, 3);
+
+    return `
+      ${viewHead({
+        eyebrow: dateline(),
+        title: greeting(),
+        lede: `A quiet edit of the books most worth your attention—drawn from ${esc(String(stats.recentReviews))} new reviews, ordered by your taste.`,
+      })}
+
+      ${spotlight(best)}
+
+      <section class="lean" aria-label="What today’s selection leans toward">
+        <div class="lean-copy">
+          <p class="eyebrow">Today’s selection leans</p>
+          <p>Toward ${esc(leanPhrase(leans, ranked))}.</p>
+        </div>
+        <div class="lean-counts">
+          ${leans.map((t) => `<span class="lean-count">${esc(t.label)}<b>${t.n}</b></span>`).join('')}
+        </div>
+      </section>
+
+      <section aria-labelledby="sel-h">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">A considered shelf</p>
+            <h2 id="sel-h">Selected for you</h2>
+          </div>
+          <button class="section-head-link" data-action="go" data-view="feed">See the full feed ${ico('arrow')}</button>
+        </div>
+        ${shelf(picks)}
+      </section>
+
+      <section aria-labelledby="new-h">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">The review desk</p>
+            <h2 id="new-h">Newly reviewed</h2>
+          </div>
+          <span class="label">Updated daily</span>
+        </div>
+        <ul class="rows">${newly.map(feedRow).join('')}</ul>
+      </section>`;
+  }
+
+  // What the shortlist leans toward and away from. Both halves are counted rather
+  // than asserted: the tags that recur most across today's edit, against the
+  // penalty the profile fired most often on the books it pushed down.
+  function leanPhrase(leans, ranked) {
+    if (!leans.length) return 'nothing in particular yet';
+    const toward = leans.slice(0, 2).map((t) => t.label.toLowerCase()).join(' and ');
+    const fires = new Map();
+    for (const { e } of ranked.slice(-120)) {
+      for (const f of e.score?.filters || []) fires.set(f.id, (fires.get(f.id) || 0) + 1);
+    }
+    const top = [...fires.entries()].sort((a, b) => b[1] - a[1])[0];
+    const label = top && (FEED.hardFilters || []).find((f) => f.id === top[0])?.label;
+    return label ? `${toward}, away from ${lower(label)}` : toward;
+  }
+
+  function spotlight({ e, s }) {
+    const b = e.book;
+    return `<article class="spotlight">
+      <div class="spotlight-body">
+        <div class="spotlight-kicker">
+          <span class="diamond" aria-hidden="true">◆</span>
+          <span>
+            <b>Your best pick</b>
+            <span class="label">Highest fit in today’s edit</span>
+          </span>
+        </div>
+        <h2>${esc(b.title)}</h2>
+        ${b.author ? `<p class="spotlight-author">${esc(b.author)}</p>` : ''}
+        ${blurbOf(e, 240) ? `<p class="spotlight-blurb">${esc(blurbOf(e, 240))}</p>` : ''}
+        <p class="spotlight-fit">${ico('sparkles')}<span>${esc(caseFor(e, s))}</span></p>
+        <div class="spotlight-actions">
+          <button class="btn btn-solid" data-action="open" data-id="${esc(e.id)}">Open the dossier ${ico('arrow')}</button>
+          ${saveBtn(e, { label: 'Save for later' })}
+        </div>
+      </div>
+      <div class="spotlight-cover">
+        <button class="jacket-btn" data-action="open" data-id="${esc(e.id)}" aria-label="Open the dossier for ${esc(b.title)}">
+          ${jacket(e)}
+        </button>
+        <span class="spotlight-score"><b>${shownScore(e, s).toFixed(1)}</b><span>Your fit</span></span>
+        <span class="folio">CR / 001</span>
+      </div>
+    </article>`;
+  }
+
+  // ------------------------------------------------------------ Review feed
+
+  function viewFeed() {
+    const pool = FEED.books
+      .filter((e) => {
+        const st = scoreStatus(e);
+        if (st === 'awaiting-review') return false;
+        // A pass takes a book out of the views that recommend. All books keeps it,
+        // because the archive is a record rather than an opinion.
+        if (passed(e)) return false;
+        if (state.scope !== 'any' && st !== state.scope) return false;
+        if (state.shortOnly && !(e.book.pages && e.book.pages < 300)) return false;
+        return matches(e, state.q);
+      })
+      .map((e) => ({ e, s: scoreOf(e) }))
+      .filter(({ e, s }) => !state.recommendedOnly || recommendedNow(e, s));
+
+    const rows = sortPool(pool, state.sort);
+    const shown = rows.slice(0, state.limit);
+
+    return `
+      ${viewHead({
+        eyebrow: 'Your live edit',
+        title: 'Review feed',
+        lede: `${esc(String(stats.reviewed))} reviewed titles: ${esc(String(stats.scored))} scored, plus ${esc(String(stats.unscored))} where the evidence was not strong enough for a reliable number.`,
+        aside: `${shown.length} previewed · ${rows.length} reviewed`,
+      })}
+
+      <div class="coverage">
+        <p class="eyebrow">Review coverage</p>
+        <div class="coverage-figs">
+          <span class="coverage-fig"><b>${stats.scored}</b><span>scored</span></span>
+          <span class="coverage-sep" aria-hidden="true">|</span>
+          <span class="coverage-fig"><b>${stats.unscored}</b><span>reviewed without enough evidence</span></span>
+        </div>
+      </div>
+
+      ${toolbar({ scopes: SCOPES, scope: state.scope })}
+
+      ${rows.length
+        ? `<ul class="rows">${shown.map(feedRow).join('')}</ul>${moreBtn(shown.length, rows.length, 'more-rows')}`
+        : `<div class="panel panel-empty"><h2>Nothing matches</h2>
+           <p>No reviewed book answers that search under the filters now set.</p>
+           <button class="btn btn-solid" data-action="clear">Clear the filters</button></div>`}`;
+  }
+
+  // ------------------------------------------------------------ All books
+
+  function viewAll() {
+    const pool = FEED.books
+      .filter((e) => {
+        const st = scoreStatus(e);
+        if (state.allScope !== 'any' && st !== state.allScope) return false;
+        if (state.shortOnly && !(e.book.pages && e.book.pages < 300)) return false;
+        return matches(e, state.q);
+      })
+      .map((e) => ({ e, s: scoreOf(e) }));
+
+    const rows = sortPool(pool, state.sort);
+    const shown = rows.slice(0, state.allLimit);
+
+    const fig = (n, name, note, id) => `<div class="board-fig" aria-current="${state.allScope === id}">
+      <b>${n}</b><span><span class="board-fig-name">${esc(name)}</span><span class="board-fig-note">${esc(note)}</span></span></div>`;
+
+    return `
+      ${viewHead({
+        eyebrow: 'The complete catalogue',
+        title: 'Every book, clearly accounted for.',
+        lede: `The full ${esc(String(stats.total))}-book archive—scored and unscored—without making absence look like a verdict.`,
+        aside: `${shown.length} previewed · ${rows.length} total`,
+      })}
+
+      <div class="board">
+        <div class="board-lede">
+          <p class="eyebrow">Score status</p>
+          <h2>A missing score is information, not a judgment.</h2>
+          <p>Books stay fully browseable. We show whether a review lacked enough evidence or has not been evaluated yet.</p>
+        </div>
+        <div class="board-figs">
+          ${fig(stats.total, 'All books', 'Complete archive', 'any')}
+          ${fig(stats.scored, 'Scored', 'Reliable fit evidence', 'scored')}
+          ${fig(stats.unscored, 'Reviewed · no score', 'Evidence too thin', 'reviewed-unscored')}
+          ${fig(stats.awaiting, 'Awaiting review', 'Catalogue only', 'awaiting-review')}
+        </div>
+      </div>
+
+      ${toolbar({ scopes: ALL_SCOPES, scope: state.allScope, showRecommended: false })}
+
+      ${rows.length
+        ? `${shelf(shown)}${moreBtn(shown.length, rows.length, 'more-cards')}`
+        : `<div class="panel panel-empty"><h2>Nothing matches</h2>
+           <p>No book in the archive answers that search under the filters now set.</p>
+           <button class="btn btn-solid" data-action="clear">Clear the filters</button></div>`}`;
+  }
+
+  // ------------------------------------------------------------ Saved
+
+  function viewSaved() {
+    const rows = saved.listSaved(verdicts, FEED.books, 'recent')
+      .map(({ entry }) => ({ e: entry, s: scoreOf(entry) }));
+    const missing = saved.savedCount(verdicts) - rows.length;
+
+    return `
+      ${viewHead({
+        eyebrow: 'Your shelf',
+        title: rows.length ? 'Your shelf, so far.' : 'A shelf with room to grow.',
+        lede: 'Save books from the feed and they’ll gather here—ready to compare, buy, or export.',
+        aside: rows.length ? `${rows.length} saved${missing > 0 ? ` · ${missing} not in this build` : ''}` : '',
+      })}
+      ${rows.length
+        ? shelf(rows)
+        : `<div class="panel panel-empty">
+            ${ico('bookmark')}
+            <h2>Nothing saved yet</h2>
+            <p>Start with today’s shortlist. One tap keeps a book without interrupting your browse.</p>
+            <button class="btn btn-solid" data-action="go" data-view="foryou">Browse your recommendations ${ico('arrow')}</button>
+          </div>`}`;
+  }
+
+  // ------------------------------------------------------------ Taste
+
+  function viewTaste() {
+    const savedN = taste?.savedCount ?? saved.savedCount(verdicts);
+    const need = Math.max(0, MIN_SIGNAL - savedN);
+    const dims = FEED.dimensions
+      .map((d) => ({ name: d.name, weight: weightOf(d) }))
+      .sort((a, b) => b.weight - a.weight)
+      .slice(0, 5);
+    const max = dims[0]?.weight || 1;
+
+    return `
+      ${viewHead({
+        eyebrow: 'Learning from your choices',
+        title: 'Your taste, made legible.',
+        lede: 'The profile is the foundation. Your saves can gently refine it—never silently rewrite it.',
+      })}
+
+      <div class="dash">
+        <div class="dash-side">
+          <div class="dash-calibrate">
+            <span class="calibrate-dial">${savedN}<small>/ ${MIN_SIGNAL}</small></span>
+            <div>
+              <p class="eyebrow">Calibration</p>
+              <h2>${need ? `${need} more save${need === 1 ? '' : 's'} to begin learning.` : 'Your saves are tuning the feed.'}</h2>
+              <p>Saves can move a score by no more than ${(MAX_ADJUSTMENT / 10).toFixed(1)} points. Rules and penalties remain entirely yours.</p>
+              <button class="btn btn-solid" data-action="go" data-view="foryou">${need ? 'Find something to keep' : 'Keep reading the edit'}</button>
+            </div>
+          </div>
+        </div>
+        <div class="dash-side">
+          <div class="dash-signal-head">
+            <div>
+              <p class="eyebrow">Profile signal</p>
+              <h2>What currently matters</h2>
+            </div>
+            <span class="label">v${esc(String(FEED.profileRevision))}</span>
+          </div>
+          <div class="bars">
+            ${dims.map((d) => `<div class="bar-row">
+              <span class="bar-name">${esc(d.name)}</span>
+              <span class="bar-track"><span class="bar-fill" style="width:${Math.round(d.weight / max * 100)}%"></span></span>
+              <span class="bar-val">${d.weight}</span>
+            </div>`).join('')}
+          </div>
+        </div>
+      </div>
+
+      <section aria-labelledby="how-h">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Plain English, always</p>
+            <h2 id="how-h">How a recommendation moves</h2>
+          </div>
+        </div>
+        <div class="steps">
+          <div class="step"><span class="step-n">01</span><h3>The review is read</h3>
+            <p>Shared tags describe the book’s form, subject, tone, scale, and provenance.</p></div>
+          <div class="step"><span class="step-n">02</span><h3>Your weights decide</h3>
+            <p>Your profile determines what each signal is worth, with explicit rules and penalties.</p></div>
+          <div class="step"><span class="step-n">03</span><h3>Your saves nudge</h3>
+            <p>Saved books make small transparent adjustments—not hidden replacements.</p></div>
+        </div>
+      </section>`;
+  }
+
+  // ------------------------------------------------------------ Profile
+
+  const weightOf = (d) => overrides.weights?.[d.id] ?? d.weight;
+
+  // The four guardrails the profile applies, in the reader's words rather than
+  // the build's rule ids. Each maps onto a rule or hard filter that already
+  // exists in the feed, so switching one off changes a real score.
+  const GUARDRAILS = [
+    { group: 'rules', key: 'twist_override', copy: 'Resolve formal-device scores downward when the review reveals a twist.' },
+    { group: 'rules', key: 'trap4_land_scale', copy: 'Require institutional or multi-decade stakes for land and labor themes.' },
+    { group: 'rules', key: 'd6_sprawl_without_ambition', copy: 'Penalize long books when the review shows no multi-strand structure.' },
+    { group: 'adjustments', key: 'nonfiction', copy: 'Keep nonfiction below fiction unless provenance is exceptionally strong.' },
+  ];
+
+  const guardrailOn = (g) => overrides[g.group]?.[g.key] !== false;
+
+  // The hard filters, minus the one the guardrails above already name. Listing
+  // nonfiction twice would give a reader two switches for one fact.
+  const penalties = () => (FEED.hardFilters || []).filter((f) => f.id !== 'nonfiction');
+  const penaltyOn = (f) => overrides.adjustments?.[f.id] !== false;
+
+  function draft() {
+    if (!state.draftWeights) {
+      state.draftWeights = Object.fromEntries(FEED.dimensions.map((d) => [d.id, weightOf(d)]));
+    }
+    return state.draftWeights;
+  }
+
+  function draftTotal() {
+    return Object.values(draft()).reduce((n, v) => n + v, 0);
+  }
+
+  // What each band a review can land in is worth, out of ten.
+  //
+  // The weight above says how much a dimension counts; this says what counts as
+  // a good answer within it. Both halves are the reader's, and the second half
+  // is where a disagreement usually lives: "comic" describes a novel the same
+  // way for everyone and is worth 4 to this profile and 10 to somebody who reads
+  // for comedy.
+  //
+  // Closed on arrival, because seven dimensions carry forty-six bands between
+  // them and a screen that opens as forty-six number fields is a spreadsheet. A
+  // band the reader has moved says what it was worth before, and nothing else on
+  // the row is coloured.
+  function bandEditor(d) {
+    const bands = d.bands || [];
+    if (!bands.length) return '';
+    const moved = bands.filter((b) => overrides.bands?.[bandKey(d.id, b.id)] != null).length;
+    return `<details class="bands">
+      <summary>What each band is worth${moved ? ` · ${moved} changed` : ''}</summary>
+      ${bands.map((b) => {
+        const cur = overrides.bands?.[bandKey(d.id, b.id)] ?? b.score;
+        const id = `b-${cssId(d.id)}-${cssId(b.id)}`;
+        return `<div class="band-row">
+          <label for="${id}">${esc(b.label)}${b.descriptiveOnly ? '<span class="band-note">Describes the book; the profile does not rank it.</span>' : ''}</label>
+          <input type="number" id="${id}" min="0" max="10" step="1" value="${cur}"
+            data-band-dim="${esc(d.id)}" data-band-id="${esc(b.id)}"
+            aria-label="What ${esc(b.label)} is worth, out of ten">
+          <span class="band-was">${cur !== b.score ? `was ${b.score}` : ''}</span>
+        </div>`;
+      }).join('')}
+    </details>`;
+  }
+
+  function viewProfile() {
+    const w = draft();
+    const total = draftTotal();
+    const ok = total === 100;
+    const tags = leanCounts(edit(), 3);
+
+    return `
+      ${viewHead({
+        eyebrow: `Profile v${esc(String(FEED.profileRevision))} · Local draft`,
+        title: 'Set the terms of your own taste.',
+        lede: 'The words used to describe a book are shared. What those words are worth is entirely yours.',
+        action: `<button class="btn btn-solid" data-action="save-profile" ${ok ? '' : 'disabled'}
+          aria-describedby="weights-total">Save changes ${ico('check')}</button>`,
+      })}
+
+      <div class="profile-grid">
+        <div class="weights">
+          <div class="weights-head">
+            <div>
+              <p class="eyebrow">Weighted dimensions</p>
+              <h2>What a book is worth</h2>
+            </div>
+            <span class="weights-total" id="weights-total" data-over="${!ok}" role="status">
+              ${total} / 100 points ${ok ? 'total' : '— must total 100'}</span>
+          </div>
+          ${FEED.dimensions.map((d) => `<div class="weight-row">
+            <label class="weight-label" for="w-${esc(d.id)}">${esc(d.name)}<b>${w[d.id]}</b></label>
+            <input type="range" id="w-${esc(d.id)}" min="0" max="40" step="1" value="${w[d.id]}"
+              data-weight="${esc(d.id)}" aria-valuetext="${w[d.id]} of 100 points">
+            ${bandEditor(d)}
+          </div>`).join('')}
+        </div>
+
+        <aside class="summary-rail">
+          <p class="summary-threshold"><b>${threshold().toFixed(1)}</b><span class="label">Recommend threshold</span></p>
+          <hr>
+          <h3>Your profile in one sentence</h3>
+          <p>Historically alive, formally ambitious fiction with controlled prose and a reason to be long.</p>
+          <div class="tags">${tags.map((t) => `<span class="tag">${esc(t.label)}</span>`).join('')}</div>
+        </aside>
+
+        <section class="guardrails profile-guardrails" aria-labelledby="guard-h">
+          <div class="weights-head">
+            <div>
+              <p class="eyebrow">Guardrails</p>
+              <h2 id="guard-h">Rules the profile applies</h2>
+            </div>
+            <span class="weights-total">${GUARDRAILS.filter(guardrailOn).length} active</span>
+          </div>
+          ${GUARDRAILS.map((g, i) => `<div class="guardrail-row">
+            <span id="g-${i}">${esc(g.copy)}</span>
+            <button class="switch" role="switch" aria-checked="${guardrailOn(g)}"
+              aria-labelledby="g-${i}" data-action="guardrail" data-guardrail="${i}"></button>
+          </div>`).join('')}
+        </section>
+
+        <section class="guardrails profile-guardrails" aria-labelledby="pen-h">
+          <div class="weights-head">
+            <div>
+              <p class="eyebrow">What the profile discounts</p>
+              <h2 id="pen-h">Penalties, not exclusions</h2>
+            </div>
+            <span class="weights-total">${penalties().filter(penaltyOn).length} of ${penalties().length} in force</span>
+          </div>
+          <p class="view-lede" style="margin:0 0 6px">A book carrying one of these is still scored and still shown. Switch one off and its points come back.</p>
+          ${penalties().map((f) => `<div class="guardrail-row penalty-row">
+            <span id="p-${esc(f.id)}">${esc(f.label)}<span class="band-note">${f.points} points</span></span>
+            <button class="switch" role="switch" aria-checked="${penaltyOn(f)}"
+              aria-labelledby="p-${esc(f.id)}" data-action="penalty" data-penalty="${esc(f.id)}"></button>
+          </div>`).join('')}
+        </section>
+
+        <div class="profile-extras">
+          <p>Your saves and passes are what the next revision of the profile is written from. Export them as JSON to keep or to feed back in.</p>
+          <button class="btn" data-action="export">Export my verdicts</button>
+        </div>
+      </div>`;
+  }
+
+  // ------------------------------------------------------------ the builder
+
+  // Three questions on one screen. A wizard would be more ceremony than three
+  // questions deserve, and seeing all of them at once is what makes it feel
+  // short. lib/onboard.mjs turns the answers into an override object; this only
+  // asks them.
+  //
+  // It has no slot in the navigation. Nobody arrives here twice: the first-visit
+  // prompt and the return band point at it, the Profile screen keeps everything
+  // it produces, and a permanent seventh nav item for a screen used once would
+  // cost a slot on every other visit.
+  let answers = { reads: 'both', liked: [], disliked: [], satire: false };
+
+  function viewStart() {
+    const chips = (which) => chipsFor(answers.reads).map((c) => {
+      const key = `${c.dim}:${c.band}`;
+      const on = answers[which].includes(key);
+      return `<button class="start-chip" data-action="pick" data-which="${which}" data-key="${esc(key)}" aria-pressed="${on}">${esc(c.label)}</button>`;
+    }).join('');
+
+    const n = answers.liked.length + answers.disliked.length;
+
+    return `
+      ${viewHead({
+        eyebrow: 'Three questions, about two minutes',
+        title: 'Make these scores yours.',
+        lede: 'Every number in this feed is one reader’s taste. Answer what you have an opinion about, skip the rest, and the feed re-ranks against yours instead.',
+      })}
+
+      <div class="start">
+        <section class="start-block">
+          <p class="eyebrow">First, and it does the most</p>
+          <h2>What do you read?</h2>
+          <p>The published profile docks nonfiction 45 points out of 100, which is one reader’s exclusion rather than a fact about books. Nothing below repairs that on its own.</p>
+          <div class="start-chips">${READS.map((r) => `<button class="start-chip start-reads" data-action="reads" data-value="${esc(r.id)}"
+            aria-pressed="${answers.reads === r.id}">${esc(r.label)}<span class="reads-note">${esc(r.note)}</span></button>`).join('')}</div>
+        </section>
+
+        <section class="start-block">
+          <p class="eyebrow">Second</p>
+          <h2>What do you read for?</h2>
+          <p>Anything that makes you want to open a book.</p>
+          <div class="start-chips">${chips('liked')}</div>
+        </section>
+
+        <section class="start-block">
+          <p class="eyebrow">Third, and it matters as much</p>
+          <h2>What puts you off?</h2>
+          <p>A model with nothing to push against ranks everything alike, so this list is worth as much as the one above it.</p>
+          <div class="start-chips">${chips('disliked')}</div>
+          <div class="start-foot">
+            <p>${n ? `${n} answer${n === 1 ? '' : 's'}` : 'Nothing picked yet'}</p>
+            <div class="remind-actions">
+              <button class="start-chip" data-action="satire" aria-pressed="${answers.satire}">I like satire and comic novels</button>
+              <button class="btn btn-solid" data-action="build-profile">Build it ${ico('arrow')}</button>
+            </div>
+          </div>
+        </section>
+
+        <p class="privacy">Nothing here leaves this browser, and every part of it stays editable on the Profile screen afterwards.</p>
+      </div>`;
+  }
+
+  // buildProfile bumps a dimension's weight for each pick beyond the first, and
+  // rewrites two of them outright for a nonfiction reader, so its weights do not
+  // total 100. The Profile screen refuses to save anything that does not, and a
+  // reader who onboards and then opens Profile would land on a total they never
+  // chose with Save already disabled. So the weights are scaled back to exactly
+  // 100 here rather than in lib/onboard.mjs, which has tests and a calibration
+  // suite behind it. Largest remainder, so the rounding does not lose a point.
+  function normalizeWeights(weights) {
+    const ids = FEED.dimensions.map((d) => d.id);
+    const raw = ids.map((id) => weights[id] ?? FEED.dimensions.find((d) => d.id === id).weight);
+    const sum = raw.reduce((a, b) => a + b, 0);
+    if (!sum) return weights;
+    const scaled = raw.map((w) => w / sum * 100);
+    const floors = scaled.map(Math.floor);
+    let left = 100 - floors.reduce((a, b) => a + b, 0);
+    const order = scaled
+      .map((w, i) => ({ i, frac: w - Math.floor(w) }))
+      .sort((a, b) => b.frac - a.frac);
+    for (const { i } of order) { if (left <= 0) break; floors[i]++; left--; }
+    return Object.fromEntries(ids.map((id, i) => [id, floors[i]]));
+  }
+
+  function applyBuiltProfile() {
+    const built = buildProfile(profileForOverrides(), answers);
+    overrides = sync.stamp({ ...built, weights: normalizeWeights(built.weights) });
+    write(OVERRIDES_KEY, overrides);
+    profileVersion++;
+    state.draftWeights = null;
+    setView('foryou');
+    toast('Your profile is in. The feed is ranked by it now.');
+    announce('Profile built. Every score has been recalculated against your answers.');
+    syncNow();
+  }
+
+  // ------------------------------------------------------------ dossier
+
+  let lastFocus = null;
+  let lastFocusKey = null;
+
+  function openDossier(id) {
+    const e = FEED.books.find((x) => x.id === id);
+    if (!e) return;
+    lastFocus = document.activeElement;
+    // A save or a pass made inside the dossier redraws the page behind it, so the
+    // node that opened it is gone by the time we close. The book and the action
+    // it carried are enough to find its replacement.
+    const d = lastFocus?.dataset || {};
+    const cls = lastFocus?.classList?.[0];
+    lastFocusKey = d.id && d.action
+      ? `${cls ? `.${CSS.escape(cls)}` : ''}[data-action="${d.action}"][data-id="${CSS.escape(d.id)}"]`
+      : null;
+    const box = $('dossier');
+    box.innerHTML = dossierHtml(e);
+    box.hidden = false;
+    $('scrim').hidden = false;
+    document.body.classList.add('is-locked');
+    bindJackets(box);
+    box.scrollTop = 0;
+    box.querySelector('.dossier-close')?.focus();
+    analytics.track('book_opened', { bookId: e.id, view: state.view });
+  }
+
+  function closeDossier() {
+    const box = $('dossier');
+    if (box.hidden) return;
+    box.hidden = true;
+    box.innerHTML = '';
+    $('scrim').hidden = true;
+    document.body.classList.remove('is-locked');
+    const back = lastFocus?.isConnected ? lastFocus : (lastFocusKey && document.querySelector(lastFocusKey));
+    back?.focus?.();
+    lastFocus = null;
+    lastFocusKey = null;
+  }
+
+  const dossierOpenId = () => $('dossier').querySelector('[data-dossier-id]')?.dataset.dossierId || null;
+
+  function dossierHtml(e) {
+    const s = scoreOf(e);
+    const b = e.book;
+    const status = scoreStatus(e);
+    const scored = status === 'scored';
+    const rec = recommendedNow(e, s);
+    const on = isSaved(e);
+
+    const facts = [b.bookYear || null, b.pages ? `${b.pages} pages` : null, b.publisher || null]
+      .filter(Boolean).join(' · ');
+
+    const fired = firedDims(e).slice(0, 5);
+    const maxc = Math.max(1, ...fired.map((d) => d.score * d.weight));
+
+    const m = e.mentions.find((x) => (x.standfirst || '').trim()) || e.mentions[0];
+    const tags = reviewTags(e).slice(0, 6);
+
+    const buys = canFindCopy(buyIds(e)) ? RETAILERS.map((r) => {
+      const link = linkFor(r.id, buyIds(e), AFFILIATES);
+      if (!link) return '';
+      return `<a class="buylink" href="${esc(link.url)}" target="_blank" rel="noopener noreferrer"
+        data-action="buy" data-id="${esc(e.id)}" data-retailer="${esc(r.id)}" data-resolution="${esc(link.linkResolution)}">
+        <b>${esc(r.name)}</b><span>Search ↗</span></a>`;
+    }).join('') : '';
+
+    return `<div data-dossier-id="${esc(e.id)}">
+      <button class="dossier-close" data-action="close-dossier" aria-label="Close the dossier">${ico('close')}</button>
+
+      <div class="dossier-head">
+        ${jacket(e)}
+        <div>
+          <p class="dossier-score">
+            ${scored ? `<b>${shownScore(e, s).toFixed(1)}<small>FIT</small></b>` : ''}
+            <span class="dossier-state" data-state="${scored && rec ? 'rec' : 'none'}">${
+              scored ? (rec ? 'Recommended for you' : 'Below your threshold') :
+              status === 'reviewed-unscored' ? 'Reviewed · no score' : 'Awaiting review'}</span>
+          </p>
+          <h2 id="dossier-title">${esc(b.title)}</h2>
+          ${b.author ? `<p class="dossier-author">${esc(b.author)}</p>` : ''}
+          ${facts ? `<p class="dossier-facts">${esc(facts)}</p>` : ''}
+        </div>
+      </div>
+
+      <div class="dossier-actions">
+        <button class="btn ${on ? '' : 'btn-solid'}" data-action="save" data-id="${esc(e.id)}" aria-pressed="${on}">
+          ${ico('bookmark')}<span>${on ? 'On your shelf' : 'Save to shelf'}</span></button>
+        <button class="btn" data-action="pass" data-id="${esc(e.id)}">Pass for now</button>
+      </div>
+
+      <section class="dossier-block">
+        <p class="eyebrow">${scored ? 'The case for it' : 'What is known'}</p>
+        <h3>${esc(caseFor(e, s))}</h3>
+        ${blurbOf(e, 420) ? `<p>${esc(blurbOf(e, 420))}</p>` : ''}
+      </section>
+
+      <section class="dossier-block">
+        <p class="eyebrow">${scored ? 'Transparent scoring' : 'Evidence status'}</p>
+        <span class="dossier-head-note">Profile v${esc(String(FEED.profileRevision))}</span>
+        <h3>${scored ? `Why it earned ${shownScore(e, s).toFixed(1)}` : 'Why there is no score'}</h3>
+        <p>${esc(scoreNarrative(e, s))}</p>
+        ${scored && fired.length ? `<div class="bars">${fired.map((d) => `<div class="bar-row">
+          <span class="bar-name">${esc(d.name)}</span>
+          <span class="bar-track"><span class="bar-fill" style="width:${Math.round(d.score * d.weight / maxc * 100)}%"></span></span>
+          <span class="bar-val">${d.score}</span></div>`).join('')}</div>` : ''}
+        ${tags.length ? `<div class="tags">${tags.map((t) => `<span class="tag">${esc(t.label)}</span>`).join('')}</div>` : ''}
+      </section>
+
+      ${m?.standfirst ? `<section class="dossier-block">
+        <p class="eyebrow">${status === 'awaiting-review' ? 'From the listing' : 'From the review'}</p>
+        <blockquote class="quote">${esc(m.standfirst.length > 300 ? `${m.standfirst.slice(0, 300).replace(/\s+\S*$/, '')}…` : m.standfirst)}
+          <span class="quote-source">${esc(m.source.name)} · ${esc(fmtDate(m.reviewDate))}${m.byline ? ` · ${esc(m.byline)}` : ''}</span>
+        </blockquote>
+        <p><a href="${esc(m.reviewUrl)}" target="_blank" rel="noopener">Read the ${esc(m.source.short)} ${status === 'awaiting-review' ? 'source' : 'review'} ↗</a></p>
+      </section>` : ''}
+
+      ${buys ? `<section class="dossier-block">
+        <p class="eyebrow">Find a copy</p>
+        <div class="buylinks">${buys}</div>
+      </section>` : ''}
+    </div>`;
+  }
+
+  const buyIds = (e) => ({
+    title: e.book.title, author: e.book.author,
+    isbn10: e.book.isbn10, isbn13: e.book.isbn13, asin: e.book.asin,
+  });
+
+  function scoreNarrative(e, s) {
+    const status = scoreStatus(e);
+    if (status === 'reviewed-unscored') {
+      return 'A critical review exists, but it did not supply enough dependable evidence across the seven dimensions to support a number. The book stays visible; the ranking stays blank.';
+    }
+    if (status === 'awaiting-review') {
+      return 'This book is known from a catalogue listing or the author’s own account, not from a critical review. It can be described and saved now, but it will not be ranked until review prose gives the profile something to read.';
+    }
+    const fired = firedDims(e);
+    const names = fired.slice(0, 3).map((d) => lower(d.name));
+    const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0] || 'very little';
+    const thin = e.score?.scoredOnPartialEvidence
+      ? ' The evidence is thin, so treat the number as triage rather than a reading.'
+      : '';
+    const tuned = s.tuned && Math.abs(s.delta) >= 0.3
+      ? ` Your saves move it ${s.delta > 0 ? 'up' : 'down'} to ${outOfTen(s.total).toFixed(1)} from the profile’s own ${outOfTen(s.profileBase).toFixed(1)}.`
+      : '';
+    return `Strong signals for ${list}.${thin}${tuned}`;
   }
 
   // ------------------------------------------------------------ saving
 
-  function toast(message, { error = false, retry = null } = {}) {
+  function toast(message, { error = false, undo = null } = {}) {
     const el = $('toast');
-    el.classList.toggle('is-error', error);
-    el.innerHTML = esc(message) + (retry ? ' <button class="btn" id="toast-retry">Try again</button>' : '');
+    el.innerHTML = `<span>${esc(message)}</span>${undo ? '<button class="btn" id="toast-undo">Undo</button>' : ''}`;
+    el.style.borderColor = error ? 'var(--destructive)' : 'var(--brass)';
     el.hidden = false;
-    if (retry) $('toast-retry').addEventListener('click', () => { el.hidden = true; retry(); });
+    if (undo) $('toast-undo').addEventListener('click', () => { el.hidden = true; undo(); });
     clearTimeout(toastTimer);
-    // An error with something to do about it stays until it is dealt with.
-    if (!retry) toastTimer = setTimeout(() => { el.hidden = true; }, 2600);
+    toastTimer = setTimeout(() => { el.hidden = true; }, undo ? 6000 : 2600);
   }
 
+  const announce = (msg) => { $('announce').textContent = msg; };
+
   // Optimistic: the list changes and the screen redraws first, and only then is
-  // the write attempted. If it throws, the previous list goes back exactly as it
-  // was and the reader is told, with the same action offered again.
-  function commit(next, { onOk, onFail }) {
+  // the write attempted. A failed write puts the previous list back exactly.
+  function commit(next, { onOk, onFail } = {}) {
     const previous = verdicts;
     verdicts = next;
     retune();
@@ -387,1798 +1313,234 @@ import { cleanBlurb } from './lib/blurb.mjs';
     }
   }
 
-  function setSaved(bookId, wantSaved, surface) {
-    const entry = FEED.books.find((x) => x.id === bookId);
-    const next = wantSaved ? saved.save(verdicts, bookId) : saved.unsave(verdicts, bookId);
-    commit(next, {
+  function toggleSave(id) {
+    const e = FEED.books.find((x) => x.id === id);
+    const want = !isSaved(e);
+    commit(want ? saved.save(verdicts, id) : saved.unsave(verdicts, id), {
       onOk: () => {
-        toast(wantSaved ? 'Saved for later.' : 'Removed from saved books.');
-        analytics.track(wantSaved ? 'book_saved' : 'book_unsaved',
-          { bookId, surface, score: entry?.outOfTen ?? undefined });
+        const msg = want ? `Saved: ${e.book.title}.` : `Removed: ${e.book.title}.`;
+        toast(want ? 'Saved for later.' : 'Removed from your shelf.');
+        announce(msg);
+        analytics.track(want ? 'book_saved' : 'book_unsaved', { bookId: id, view: state.view });
       },
-      onFail: () => toast(
-        wantSaved ? 'That book could not be saved.' : 'That book could not be removed.',
-        { error: true, retry: () => setSaved(bookId, wantSaved, surface) }),
+      onFail: () => toast('That could not be written to this browser.', { error: true }),
     });
   }
 
-  // 'passed' shares the verdict store, so it takes the same optimistic path.
-  function setVerdict(bookId, verdict) {
-    const next = saved.setVerdict(verdicts, bookId, verdict);
-    commit(next, {
-      onFail: () => toast('That could not be saved to this browser.', {
-        error: true, retry: () => setVerdict(bookId, verdict),
-      }),
+  // A pass takes a book out of the recommendation views and leaves the archive
+  // record alone. It is undoable, because it is the one action with no control
+  // left on screen afterwards.
+  function passBook(id) {
+    const e = FEED.books.find((x) => x.id === id);
+    const was = saved.verdictOf(verdicts, id);
+    commit(saved.setVerdict(verdicts, id, 'passed'), {
+      onOk: () => {
+        announce(`Passed: ${e.book.title}.`);
+        toast(`Passed on ${e.book.title}.`, {
+          undo: () => commit(saved.setVerdict(verdicts, id, was)),
+        });
+      },
+      onFail: () => toast('That could not be written to this browser.', { error: true }),
     });
   }
 
-  // The bookmark is filled when saved and outlined when not, so the state is
-  // carried by the shape as well as by the label — never by colour alone.
-  function saveButton(e, surface) {
-    const on = saved.isSaved(verdicts, e.id);
-    const label = on ? 'Remove from saved books' : 'Save book';
-    const glyph = on
-      ? '<path d="M4 1h8a1 1 0 0 1 1 1v13l-5-3.5L3 15V2a1 1 0 0 1 1-1z" fill="currentColor"/>'
-      : '<path d="M4 1h8a1 1 0 0 1 1 1v13l-5-3.5L3 15V2a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.5"/>';
-    return `<button class="btn icon-btn js-save${on ? ' is-on' : ''}" data-id="${esc(e.id)}"
-      data-surface="${esc(surface)}" data-want="${on ? 'unsave' : 'save'}"
-      aria-pressed="${on}" aria-label="${label}" title="${label}">
-      <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">${glyph}</svg>
-      <span class="icon-btn-text">${on ? 'Saved' : 'Save'}</span>
-    </button>`;
-  }
-
-  // ------------------------------------------------------------ helpers
-
-  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-
-  const MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
-
-  function reviewTime(e) { return Date.parse(e.lastReviewed || '') || 0; }
-
-  // Book dates are a year, sometimes a month, and sometimes only a guess. Sorting
-  // needs one number; the row says which of the three it is.
-  function bookTime(e) {
-    const y = e.book.bookYear;
-    if (!y) return 0;
-    let month = 6;
-    if (e.book.editionDate) {
-      const m = MONTHS.indexOf(String(e.book.editionDate).split(' ')[0].toLowerCase());
-      if (m >= 0) month = m + 1;
+  function saveProfile() {
+    if (draftTotal() !== 100) return;
+    const w = draft();
+    const next = { ...overrides, weights: { ...overrides.weights } };
+    for (const d of FEED.dimensions) {
+      if (w[d.id] === d.weight) delete next.weights[d.id];
+      else next.weights[d.id] = w[d.id];
     }
-    return y * 100 + month;
-  }
-
-  function fmtDate(iso) {
-    if (!iso) return 'undated';
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return 'undated';
-    return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
-  }
-
-  function relative(iso) {
-    const t = Date.parse(iso || '');
-    if (!t) return '';
-    const days = Math.round((Date.now() - t) / 86400000);
-    if (days <= 0) return 'today';
-    if (days === 1) return 'yesterday';
-    if (days < 30) return `${days}d ago`;
-    if (days < 365) return `${Math.round(days / 30)}mo ago`;
-    return `${Math.round(days / 365)}y ago`;
-  }
-
-  const SORTERS = {
-    reviewDate: reviewTime,
-    bookDate: bookTime,
-    score: (e) => (e.outOfTen == null ? -1 : scoreOf(e).total),
-    title: (e) => (e.book.title || '').toLowerCase(),
-    reviews: (e) => e.reviewCount || 0,
-    none: () => 0,
-  };
-
-  function compare(a, b) {
-    const primary = cmpKey(a, b, state.sort1, state.dir1);
-    if (primary !== 0) return primary;
-    if (state.sort2 === 'none' || state.sort2 === state.sort1) return 0;
-    return cmpKey(a, b, state.sort2, state.dir2);
-  }
-
-  function cmpKey(a, b, key, dir) {
-    const fn = SORTERS[key] || SORTERS.reviewDate;
-    const x = fn(a), y = fn(b);
-    if (x === y) return 0;
-    const asc = typeof x === 'string' ? (x < y ? -1 : 1) : (x < y ? -1 : 1);
-    return dir === 'asc' ? asc : -asc;
-  }
-
-  // ------------------------------------------------------------ filtering
-
-  const identified = (e) => e.identity === 'source-stated' || e.identity === 'catalogue-confirmed';
-  const fictionOk = (e) => e.fiction === 'confirmed' || e.fiction === 'likely';
-
-  // One status test, everywhere. A missing number can mean two very different
-  // things: either no critical review exists yet, or a review exists but supplied
-  // too little reliable evidence for the seven dimensions. Conflating those made
-  // six reviewed books appear on "Ahead of the reviews" and made their rows claim
-  // that no critic had read them. The status is a fact about evidence, never a
-  // judgement on the book.
-  function scoreStatus(e) {
-    const noScore = e.listedOnly || e.score?.band === 'unscored' || e.score?.band === 'unresolved';
-    if (!noScore) return 'scored';
-    if (!e.listedOnly && e.reviewCount > 0) return 'reviewed-unscored';
-    return 'awaiting-review';
-  }
-
-  const isScored = (e) => scoreStatus(e) === 'scored';
-
-  function visible(e) {
-    if (focusedBookId) return e.id === focusedBookId;
-    // Everything reviewed inside the window, scored. The only things held back are
-    // reviews with no book behind them, hard-filtered ones, and — by default —
-    // books the catalogue calls nonfiction.
-    if (!e.book.title) return false;
-    if (state.penalised && !e.score.filters.length) return false;
-    // The feed is the profile's opinion, so a book the profile has no opinion
-    // about does not belong in it - it was 499 rows of "nothing to score" pushing
-    // scored books down the page. Those books are not thrown away: All books
-    // carries every one of them, described rather than judged.
-    const status = scoreStatus(e);
-    // My feed and Collections are the profile's opinion, so a book it cannot score
-    // is not in either. Seeing those rows in a feed of recommendations is what made
-    // the recommender look like it was not working: 499 of 811 rows saying nothing.
-    if (state.view !== 'all' && status !== 'scored') return false;
-    if (state.view === 'all' && state.allScope !== 'any' && state.allScope !== status) return false;
-    if (state.recommendedOnly && !recommendedNow(e, scoreOf(e))) return false;
-    if (state.identity && !identified(e)) return false;
-    if (state.nonfiction && e.fiction === 'nonfiction') return false;
-    if (state.window && e.inWindow === false) return false;
-    if (state.minScore && (e.outOfTen == null ? 0 : outOfTen(scoreOf(e).total)) < state.minScore) return false;
-    if (state.minPages && (!e.book.pages || e.book.pages < state.minPages)) return false;
-    if (state.sources.size && !e.mentions.some((m) => state.sources.has(m.source.id))) return false;
-    if (state.tag && !(e.tags || []).some((t) => t.id === state.tag)) return false;
-    if (state.unseen && saved.verdictOf(verdicts, e.id)) return false;
-    if (state.q) {
-      const hay = [e.book.title, e.book.author, e.book.publisher,
-        ...e.mentions.flatMap((m) => [m.reviewTitle, m.byline, m.source.name, m.standfirst])]
-        .filter(Boolean).join(' ').toLowerCase();
-      if (!state.q.toLowerCase().split(/\s+/).every((w) => hay.includes(w))) return false;
-    }
-    return true;
-  }
-
-  // ------------------------------------------------------------ rendering
-
-  function bookLine(e) {
-    const b = e.book;
-    const bits = [];
-    bits.push(`<span>${esc(e.sources.join(' · '))}</span>`);
-    if (scoreStatus(e) === 'awaiting-review') {
-      bits.push(`<span class="sep">·</span><span>${viaInterview(e) ? 'author interview' : 'catalogue listing'} ${esc(fmtDate(e.lastReviewed))}</span>`);
-    } else {
-      bits.push(`<span class="sep">·</span><span>${e.reviewCount === 1 ? 'reviewed' : `${e.reviewCount} reviews, latest`} ${esc(fmtDate(e.lastReviewed))}</span>`);
-    }
-    if (b.bookYear) {
-      const guess = b.yearSource === 'inferred-from-review';
-      bits.push(`<span class="sep">·</span><span class="${guess ? 'guess' : ''}" title="${esc(yearProvenance(b))}">published ${b.editionDate ? esc(b.editionDate) : b.bookYear}${guess ? '?' : ''}</span>`);
-    } else {
-      bits.push(`<span class="sep">·</span><span class="guess">publication date unknown</span>`);
-    }
-    if (b.pages) bits.push(`<span class="sep">·</span><span>${b.pages} pp.</span>`);
-    else bits.push(`<span class="sep">·</span><span class="guess">pages unknown</span>`);
-    if (b.publisher) bits.push(`<span class="sep">·</span><span>${esc(b.publisher)}</span>`);
-    if (b.translator) bits.push(`<span class="sep">·</span><span>tr. ${esc(b.translator)}</span>`);
-    return bits.join('');
-  }
-
-  function yearProvenance(b) {
-    return {
-      openlibrary: 'First publication year from Open Library.',
-      googlebooks: 'Publication year from Google Books.',
-      'review-metadata': 'Edition date printed in the review.',
-      'inferred-from-review': 'No catalogue record found. Assumed to be the year it was reviewed.',
-    }[b.yearSource] || 'Publication date not established.';
-  }
-
-  // How far to trust the row, in one line rather than a second wall of chips.
-  //
-  // This used to be a row of bordered flags sitting directly above a row of tags
-  // that already carried most of the same words: "book unverified" appeared twice
-  // on every loose extraction. The chips now carry taste and nothing else, and
-  // everything about how much to believe the number is said here, once.
-  //
-  // e.score.notes has to be in this list. Nothing else on the row shows it, and
-  // the profile's amendment on warm endings turns on the note being visible —
-  // three points, flagged on the row rather than buried, is the whole point of
-  // that tier. Burying it here would reverse a decision the profile records.
-  // What an unscored book says about itself.
-  //
-  // It used to say "Nothing in this review spoke to any dimension of the profile,
-  // so it carries no score" - which frames a book as having failed an examination
-  // it was never entered for. Most of these are catalogue and interview entries
-  // with no review behind them: there is nothing to read, so there is nothing to
-  // score, and that is a fact about our evidence rather than about the book.
-  //
-  // So the row says what the book is instead. The describing tags are the same
-  // vocabulary the profile uses, which is the point - a reader can see where a
-  // book sits without a number being invented to rank it.
-  const DESCRIBING = new Set(['period', 'subject', 'form', 'prose', 'tone', 'scale', 'genre']);
-
-  // How we know this book exists. 456 of the 493 come from the New Books Network,
-  // which is the author talking about their own book at length; the rest are
-  // publisher catalogues. Every one has a publisher, and they are overwhelmingly
-  // Oxford, Cambridge, Verso, MIT and California, most published this year.
-  const viaInterview = (e) => e.mentions.some((m) => /^(?:nbn|new-books-network)/i.test(m.source.id));
-
-  function provenance(e) {
-    const bits = [e.book.publisher, e.book.bookYear].filter(Boolean).join(', ');
-    const how = viaInterview(e) ? 'the author\u2019s own account' : 'the publisher\u2019s catalogue';
-    return bits ? `${bits} \u2014 ${how}.` : `From ${how}.`;
-  }
-
-  // What an unscored book says about itself.
-  //
-  // It said "Nothing in this review spoke to any dimension of the profile, so it
-  // carries no score", and then "Listed, not reviewed". Both define a book by what
-  // it lacks, and these books do not lack much: they are new university-press
-  // titles whose authors have been interviewed at length, and the only thing
-  // missing is a critic, who is late rather than absent. So the line leads with
-  // what the book is and where we heard about it. The absent score still has to be
-  // said - otherwise the row looks broken - but it is the quiet half.
-  function unscoredLine(e) {
-    if (e.score.band === 'unresolved') {
-      return `<p class="risk">${esc('No book identified in this review.')}</p>`;
-    }
-    if (scoreStatus(e) === 'reviewed-unscored') {
-      const src = e.sources.length === 1 ? e.sources[0] : e.sources.join(' · ');
-      return `<p class="unscored">`
-        + `<span class="unscored-is">${esc(`${src} reviewed it.`)}</span> `
-        + `<span class="unscored-why">${esc('The available review did not supply enough reliable evidence for the seven taste dimensions, so no number was invented.')}</span>`
-        + `</p>`;
-    }
-    // Scale on its own is not a character: "mid-length" is a page count wearing a
-    // sentence, and it was the only thing 100-odd of these rows had to say.
-    const describing = (e.tags || []).filter((t) => DESCRIBING.has(t.kind));
-    const words = describing.some((t) => t.kind !== 'scale') ? describing.map((t) => t.label) : [];
-    return `<p class="unscored">`
-      + `<span class="unscored-is">${esc(provenance(e))}</span>`
-      + (words.length ? ` <span class="unscored-tags">${esc(words.join(' \u00b7 '))}</span>` : '')
-      + ` <span class="unscored-why">${esc('No critic has reviewed it yet, so there is nothing to score it on.')}</span>`
-      + `</p>`;
-  }
-
-  function caveatLine(e) {
-    const out = [];
-    if (!identified(e)) out.push('book unverified');
-    if (e.fiction === 'unknown') out.push('fiction unverified');
-    if (e.score.scoredOnPartialEvidence) out.push('thin evidence');
-    if (e.inWindow === false) out.push(`outside the ${FEED.windowYears}-year window`);
-    if (e.score.proseFloorApplied) out.push('below the prose floor');
-    for (const n of e.score.notes || []) out.push(n.label);
-    for (const q of e.score.openQuestions || []) out.push(`tests ${q.id}`);
-    return out.length ? `<p class="caveat-line">${esc(out.join(' · '))}</p>` : '';
-  }
-
-  // What the row says about the book.
-  //
-  // This used to be `reading.summary`, which describes how a book sits against the
-  // profile: what it has that the profile wants, what drags, and which confirmed
-  // acquisition it sits nearest. That is a fact about the ranking rather than about
-  // the book, and reading a feed of it tells you nothing about what any of these
-  // books are. The publication's own standfirst does, it is written by someone who
-  // read the thing, and every one of the 283 books in the current archive has one.
-  //
-  // The fit read has not been deleted. It moved into "Why this score", beside the
-  // dimension bars it is built from, which is where the rest of the scoring
-  // diagnostics went in the density pass.
-  //
-  // No model writes this. The sentence belongs to the publication, which is better
-  // provenance than anything generated here, and it keeps the build free of a
-  // model exactly as the README says it is.
-  function describeBook(e) {
-    const m = e.mentions.find((x) => (x.standfirst || '').trim()) || e.mentions.find((x) => (x.excerpt || '').trim());
-    // Cleaned rather than rewritten: the sentence is still the publication's, with
-    // the parts about the podcast rather than about the book taken off. See
-    // lib/blurb.mjs - a third of this archive comes from a podcast feed whose notes
-    // open by restating the citation the row has already printed.
-    const text = cleanBlurb(m?.standfirst || m?.excerpt || '', { title: e.book.title, author: e.book.author });
-    if (!text) return '';
-    let cut = text.length > 320 ? `${text.slice(0, 320).replace(/\s+\S*$/, '')}…` : text;
-    // Several feeds publish a teaser cut mid-word - PW's stop dead at 128
-    // characters. That is the publication's truncation rather than ours, and an
-    // ellipsis says the sentence continues instead of implying it ended there.
-    const clipped = cut !== text;
-    if (!/[.!?…"'’”)]$/.test(cut)) cut += '…';
-    // Clicking the description opens the row, so it carries the cursor and the
-    // hover that say so. It is not a tab stop: the title beside it is a real
-    // button pointing at the same panel, and so is "Why this score", which is two
-    // keyboard routes to the same place already.
-    return `<p class="reading js-open-soft">${esc(cut)}${clipped || text.length < 200 ? ' <span class="reading-more">read on</span>' : ''}</p>`;
-  }
-
-  // The whole standfirst, however long, plus every other publication's line on the
-  // same book. The row shows one of these clipped to 320 characters; opening it is
-  // how you get the rest, which is what clicking a description should do.
-  function fullDescription(e) {
-    const lines = e.mentions
-      .map((m) => ({ src: m.source.short, text: (m.standfirst || m.excerpt || '').trim() }))
-      .filter((x) => x.text);
-    if (!lines.length) return '';
-    return `<h3>${lines.length > 1 ? 'What the publications say' : 'What the publication says'}</h3>
-      ${lines.map((l) => `<p class="reading">${esc(l.text)}<span class="reading-src">${esc(l.src)}</span></p>`).join('')}`;
-  }
-
-  // Every entry in a catalogue has a name on it. Where nothing was extracted and the
-  // catalogue's exact-title match names an author, that name is shown: the row
-  // already says "book unverified", so the caution is on the row rather than in a
-  // blank space where the author should be.
-  const authorOf = (e) => e.book.author || e.book.proposedAuthor || '';
-
-  // Chips carry taste. The seven dimension kinds plus the genre a publication
-  // filed it under are facts about the book; imprint, attention, caveat, question
-  // and rule are facts about the metadata or about our own bookkeeping, and they
-  // were three-quarters of the chips on a row. They live in the detail now.
-  const CHIP_KINDS = new Set(['genre', 'subject', 'period', 'form', 'prose', 'tone', 'scale', 'press']);
-  const chipTags = (e) => (e.tags || []).filter((t) => CHIP_KINDS.has(t.kind));
-  const restTags = (e) => (e.tags || []).filter((t) => !CHIP_KINDS.has(t.kind));
-
-  // The tags the row shows, and every one of them is a way into the rest of the
-  // archive. DESIGN.md always said a row carries the tags that describe the book;
-  // they were only ever drawn inside the expanded detail, so finding another
-  // gothic novel meant opening a book you had already decided against. The seven
-  // dimension kinds plus genre describe the book; imprint, caveat and our own
-  // bookkeeping do not, and stay in the detail under "Also tagged".
-  function rowTags(e) {
-    const tags = (e.tags || []).filter((t) => DESCRIBING.has(t.kind)).slice(0, 6);
-    if (!tags.length) return '';
-    return `<div class="tags row-tags">${tags.map((t) =>
-      `<button class="tag-chip k-${esc(t.kind)}" data-tag="${esc(t.id)}"${t.id === state.tag ? ' aria-pressed="true"' : ''} title="Show every book tagged ${esc(t.label)}">${esc(t.label)}</button>`).join('')}</div>`;
-  }
-
-  function row(e) {
-    const b = e.book;
-    const v = saved.verdictOf(verdicts, e.id);
-    const title = b.title;
-    const status = scoreStatus(e);
-    const noScore = status !== 'scored';
-
-    const s = scoreOf(e);
-    const rec = recommendedNow(e, s);
-    const shown = noScore ? null : outOfTen(s.total);
-    const scoreHtml = noScore
-      ? `<span class="score-state">No<br>score</span><span class="band">${status === 'reviewed-unscored' ? 'reviewed' : 'awaiting review'}</span>`
-      : `<span class="num">${shown}</span><span class="outof">/ 10</span>`;
-
-    return `<li><article class="row" data-id="${esc(e.id)}" data-band="${esc(e.score.band)}" data-score-status="${esc(status)}" data-rec="${rec}">
-      <div class="score">
-        ${scoreHtml}
-        ${rec ? `<button class="rec-mark js-rec" title="Show only recommended">★<span class="sr-only"> Recommended. Show only recommended books.</span></button>` : ''}
-        ${s.tuned && !noScore ? tuneMark(s) : ''}
-      </div>
-      <div>
-        <h3 class="title"><button class="js-open" aria-expanded="false" aria-controls="d-${cssId(e.id)}">${esc(title)}${authorOf(e) ? `<span class="author">${esc(authorOf(e))}</span>` : ''}</button></h3>
-        <p class="meta">${bookLine(e)}</p>
-        ${s.tuned && !noScore ? tuneLine(s) : ''}
-        ${describeBook(e)}
-
-        ${noScore ? unscoredLine(e) : ''}
-        ${rowTags(e)}
-        ${caveatLine(e)}
-        <div class="row-links">
-          <button class="btn js-why" aria-expanded="false" aria-controls="d-${cssId(e.id)}">${noScore ? 'Why no score' : 'Why this score'}</button>
-          <a class="btn" href="${esc(e.mentions[0].reviewUrl)}" target="_blank" rel="noopener">${esc(e.mentions[0].source.short)}${e.reviewCount > 1 ? ` +${e.reviewCount - 1}` : ''}</a>
-          ${findCopyHtml(e, 'feed')}
-        </div>
-        <div class="chooser" id="${chooserId(e, 'feed')}" hidden></div>
-        <div class="detail" id="d-${cssId(e.id)}" hidden></div>
-      </div>
-      <div class="row-actions">
-        ${saveButton(e, 'feed')}
-        <button class="btn js-verdict ${v === 'passed' ? 'is-on' : ''}" data-verdict="passed" aria-pressed="${v === 'passed'}">Pass</button>
-      </div>
-    </article></li>`;
-  }
-
-  const cssId = (s) => String(s).replace(/[^a-z0-9]/gi, '-');
-
-  function detail(e) {
-    const status = scoreStatus(e);
-    const scored = status === 'scored';
-    const ordered = rescore(e.score, profileForOverrides(), overrides);
-    const live = scoreOf(e);
-    const dims = Object.values(ordered.dimensions || e.score.dimensions);
-    const dimHtml = dims.map((d) => `
-      <div class="dim${d.defaulted ? ' is-default' : ''}">
-        <span class="dim-id">${esc(d.dimension)}<br><span style="opacity:.7">×${d.weight}</span></span>
-        <span class="dim-label">${esc(d.name)} — ${esc(d.label)}
-          ${d.why ? `<span class="why">${esc(d.why)}</span>` : ''}
-          ${(d.evidence || []).length ? `<span class="ev">${esc((d.evidence || []).slice(0, 8).join(' · '))}</span>` : ''}
-          <span class="dim-track"><span class="dim-fill" style="width:${d.score * 10}%"></span></span>
-        </span>
-        <span class="dim-score">${d.score}</span>
-      </div>`).join('');
-
-    const activeAdjustments = (e.score.adjustments || []).filter((a) => overrides.adjustments?.[a.id] !== false);
-    const adj = activeAdjustments.map((a) => `<li><span class="pts ${a.points > 0 ? 'plus' : ''}">${a.points > 0 ? '+' : ''}${a.points}</span> ${esc(a.label)} <span style="opacity:.6">${esc((a.evidence || []).slice(0, 4).join(', '))}</span></li>`).join('');
-    const activeFilters = (e.score.filters || []).filter((f) => overrides.adjustments?.[f.id] !== false);
-
-    const b = e.book;
-    const meta = [
-      ['Title', b.title + (b.subtitle ? `: ${b.subtitle}` : '')],
-      ['Author', b.author || 'not extracted'],
-      b.translator ? ['Translator', b.translator] : null,
-      ['Publisher', b.publisher || 'unknown'],
-      ['Pages', b.pages ? String(b.pages) : scored ? 'unknown — D6 fell back to its default' : 'unknown'],
-      ['Published', b.bookYear ? `${b.editionDate || b.bookYear} — ${yearProvenance(b)}` : 'unknown'],
-      ['Fiction', `${e.fiction} — ${e.score.fiction?.why || ''}`],
-      ['Identified by', `${b.extraction.method} (${e.identity})`],
-      b.catalogueNote ? ['Catalogue', b.catalogueNote] : null,
-      (b.alsoReviewed || []).length ? ['Also reviewed', b.alsoReviewed.join('; ')] : null,
-    ].filter(Boolean);
-
-    const mentionRows = e.mentions.map((m) => `<li>
-      <a href="${esc(m.reviewUrl)}" target="_blank" rel="noopener">${esc(m.reviewTitle)}</a>
-      <span style="opacity:.7"> — ${esc(m.source.name)}${m.byline ? `, ${esc(m.byline)}` : ''}, ${esc(fmtDate(m.reviewDate))}</span>
-      <span style="opacity:.5"> · ${esc(m.extraction.method)}</span>
-    </li>`).join('');
-
-    const risk = (e.score.risk || []).slice(0, 3);
-    const rest = restTags(e);
-    const liveRead = live.tuned || live.overridden
-      ? `The published profile scored this ${outOfTen(live.profileBase ?? e.score.total)}. ${live.overridden ? `Your ordering makes that ${outOfTen(live.base)}. ` : ''}${live.tuned ? `Your saves move it ${live.delta > 0 ? 'up' : 'down'} to ${outOfTen(live.total)}.` : ''}`
-      : e.reading?.summary || '';
-    const scoringHtml = scored ? `
-      ${liveRead ? `<h3>How it sits against the profile</h3>
-        <p class="reading">${esc(liveRead)}</p>` : ''}
-      ${risk.length || e.reading?.caveats?.length ? `<h3>How far to trust it</h3>
-        ${risk.map((r) => `<p class="risk">${esc(r)}</p>`).join('')}
-        ${e.reading?.caveats?.length ? `<p class="reading-caveat">${esc(e.reading.caveats.join(' '))}</p>` : ''}` : ''}
-      <h3>How the score was built</h3>
-      <div class="dims">${dimHtml}</div>
-      ${adj ? `<h3>Adjustments</h3><ul class="adjust">${adj}</ul>` : ''}
-      ${(e.score.notes || []).length ? `<h3>Noted, at no cost</h3><ul class="adjust">${e.score.notes.map((n) => `<li><span class="pts" style="color:var(--ink-faint)">0</span> ${esc(n.label)} <span style="opacity:.6">${esc((n.evidence || []).slice(0, 5).join(', '))}</span></li>`).join('')}</ul>` : ''}
-      ${e.score.proseFloorApplied ? `<h3>Prose floor</h3><p style="font-family:var(--mono);font-size:.75rem;margin:0">${esc(FEED.proseFloor.note)}</p>` : ''}
-      ${activeFilters.length ? `<h3>Profile rules fired</h3><ul class="adjust">${activeFilters.map((f) => `<li>${esc(f.label || f.id)} <span style="opacity:.6">${esc((f.evidence || []).slice(0, 5).join(', '))}</span></li>`).join('')}</ul>` : ''}`
-      : `<h3>Why there is no score</h3>
-        <p class="reading">${esc(status === 'reviewed-unscored'
-          ? 'A critical review exists, but it did not provide enough dependable evidence across the seven taste dimensions to support a number. The book stays visible; the ranking stays blank.'
-          : 'This book is known from a catalogue or an author interview, not from a critical review. It can be described and saved now, but it will not be ranked until review prose gives the profile something to read.')}</p>`;
-
-    return `
-      ${fullDescription(e)}
-      <div class="detail-actions">
-        ${e.mentions.map((m) => `<a class="btn" href="${esc(m.reviewUrl)}" target="_blank" rel="noopener">${status === 'awaiting-review' ? 'Open' : 'Read'} the ${esc(m.source.short)} ${status === 'awaiting-review' ? 'source' : 'review'}</a>`).join('')}
-        ${b.openLibraryUrl ? `<a class="btn" href="${esc(b.openLibraryUrl)}" target="_blank" rel="noopener">Catalogue</a>` : ''}
-        ${findCopyHtml(e, 'detail')}
-      </div>
-      <div class="chooser" id="${chooserId(e, 'detail')}" hidden></div>
-
-      ${scoringHtml}
-      <h3>The book</h3>
-      <dl class="kv">${meta.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
-      <h3>${status === 'awaiting-review' ? 'Where this listing came from' : e.reviewCount === 1 ? 'The review' : `The ${e.reviewCount} reviews, scored together`}</h3>
-      <ul class="adjust">${mentionRows}</ul>
-      ${chipTags(e).length ? `<h3>Tagged</h3><div class="tags">${chipTags(e).map((t) => `<button class="tag-chip k-${esc(t.kind)}" data-tag="${esc(t.id)}" title="Show every book tagged ${esc(t.label)}">${esc(t.label)}</button>`).join('')}</div>` : ''}
-      ${rest.length ? `<h3>Also tagged</h3><div class="tags">${rest.map((t) => `<button class="tag-chip k-${esc(t.kind)}" data-tag="${esc(t.id)}" title="Show every book tagged ${esc(t.label)}">${esc(t.label)}</button>`).join('')}</div>` : ''}
-      <p style="font-family:var(--mono);font-size:.6875rem;color:var(--ink-faint);margin:var(--s4) 0 0">
-        ${scored ? 'Scored by keyword against review prose. Treat it as triage, not as a reading of the book.' : 'No score is shown without sufficient critical evidence.'}
-      </p>`;
-  }
-
-  // ------------------------------------------------------------ tuning
-
-  // The delta beside the numeral. Signed and labelled, never colour alone —
-  // the arrow and the number both say which way it went.
-  function tuneMark(s) {
-    const up = s.delta > 0;
-    if (Math.abs(s.delta) < 0.3) return '';
-    // A book you saved is scored against your *other* saves, so a negative mark
-    // on one is not a contradiction — it is the useful case. It says this book
-    // sits apart from the rest of what you keep.
-    const why = s.judged
-      ? `The profile scored this ${outOfTen(s.base)}. Against your other saves it moves ${up ? 'up' : 'down'} — this one ${up ? 'sits with' : 'sits apart from'} the rest of what you keep.`
-      : `The profile scored this ${outOfTen(s.base)}; your saves moved it ${up ? 'up' : 'down'}.`;
-    return `<span class="tune-mark ${up ? 'up' : 'down'}" title="${esc(why)}">
-      ${up ? '▲' : '▼'} ${up ? '+' : '−'}${(Math.abs(s.delta) / 10).toFixed(1)}</span>`;
-  }
-
-  // Why it moved, in the same register as the rest of the row: the reasons the
-  // model actually used, not a claim that it understands the book.
-  function tuneLine(s) {
-    const bits = s.reasons.map((r) => esc(r.label));
-    if (s.nearest) bits.push(`reads like <em>${esc(s.nearest.title)}</em>, which you saved`);
-    if (!bits.length) return '';
-    const from = s.judged ? 'vs your other saves' : 'from your saves';
-    return `<p class="tune-line"><span class="tune-from">${from}</span> ${bits.join(' · ')}</p>`;
-  }
-
-  // ------------------------------------------------------------ retailers
-
-  // DESIGN.md is explicit that detail expands inline and never opens a modal, so
-  // the chooser is a disclosure under the row rather than a sheet over it. It
-  // behaves like a menu regardless: Escape closes it, and focus returns.
-  function chooserHtml(e) {
-    const order = retailerOrder();
-    const options = order.map((r) => {
-      const link = linkFor(r.id, purchaseIdentifiers(e), AFFILIATES);
-      if (!link) return '';
-      return `<li><a class="retailer" href="${esc(link.url)}" target="_blank" rel="noopener noreferrer"
-        data-id="${esc(e.id)}" data-retailer="${esc(r.id)}" data-resolution="${esc(link.linkResolution)}">
-        <span class="retailer-name">${esc(r.name)}</span>
-        <span class="retailer-blurb">${esc(r.blurb)}</span>
-        <span class="retailer-ext" aria-hidden="true">↗</span>
-        <span class="sr-only">(opens in a new tab)</span>
-      </a></li>`;
-    }).join('');
-    return `<div class="chooser-inner">
-      <p class="chooser-note">Four places that may have a copy. This app does not know prices or what is in stock.</p>
-      <ul class="retailers">${options}</ul>
-    </div>`;
-  }
-
-  // The book fields the link builder needs, and nothing else.
-  const purchaseIdentifiers = (e) => ({
-    title: e.book.title, author: e.book.author,
-    isbn10: e.book.isbn10, isbn13: e.book.isbn13, asin: e.book.asin,
-  });
-
-  // Remembering the last retailer is a convenience, not a filter: it moves one
-  // option to the front and all four are always listed.
-  function retailerOrder() {
-    const last = read(RETAILER_KEY, null);
-    const preferred = RETAILERS.find((r) => r.id === last);
-    return preferred ? [preferred, ...RETAILERS.filter((r) => r.id !== last)] : RETAILERS;
-  }
-
-  // A book with no identifier and no title cannot be searched for at all. That is
-  // the only case where the action is withheld, and the row says why rather than
-  // showing a dead control.
-  // Both views stay in the DOM and only one is shown, so a chooser id has to name
-  // its surface as well as its book. Without that the saved screen's button
-  // points aria-controls at the feed's panel, which is hidden, and opening it
-  // does nothing visible.
-  const chooserId = (e, surface) => `c-${surface}-${cssId(e.id)}`;
-
-  function findCopyHtml(e, surface) {
-    if (!canFindCopy(purchaseIdentifiers(e))) {
-      const why = `nofind-${surface}-${cssId(e.id)}`;
-      return `<button class="btn" disabled aria-describedby="${why}">Find a copy</button>
-        <span class="no-find" id="${why}">No title or ISBN was extracted for this book, so there is nothing to search a retailer for.</span>`;
-    }
-    return `<button class="btn js-find" aria-expanded="false" aria-controls="${chooserId(e, surface)}"
-      aria-haspopup="true" data-id="${esc(e.id)}">Find a copy</button>`;
-  }
-
-  // ------------------------------------------------------------ saved books
-
-  // A cover is decoration, so its alt is empty and the initial standing in for a
-  // missing one is hidden from assistive tech — the title is right beside it.
-  // Open Library serves covers from its own host and a request for a book it has
-  // no jacket for can fail late, so the fallback has to survive a broken image
-  // as well as an absent url.
-  function coverHtml(b) {
-    const initial = esc((b.title || '?').trim().slice(0, 1).toUpperCase());
-    const fallback = `<span class="cover cover-none" aria-hidden="true">${initial}</span>`;
-    if (!b.coverUrl) return fallback;
-    return `<img class="cover" src="${esc(b.coverUrl)}" alt="" loading="lazy" width="44" height="66"
-      onerror="this.outerHTML=${esc(JSON.stringify(fallback))}">`;
-  }
-
-  function savedRow(row) {
-    const e = row.entry;
-    const b = e.book;
-    const s = scoreOf(e);
-    const status = scoreStatus(e);
-    const bits = [b.author, b.publisher, b.pages ? `${b.pages} pp.` : null,
-      b.editionDate || b.bookYear || null, b.translator ? `tr. ${b.translator}` : null]
-      .filter(Boolean);
-
-    return `<li><article class="saved-row" data-id="${esc(e.id)}">
-      ${coverHtml(b)}
-      <div class="saved-main">
-        <h3 class="saved-title">${esc(b.title)}</h3>
-        <p class="meta">${bits.length ? esc(bits.join(' · ')) : '<span class="guess">no further detail extracted</span>'}</p>
-        <p class="meta"><span class="guess">saved ${esc(row.savedAt ? relative(row.savedAt) : 'before this list kept dates')}</span></p>
-        ${s.tuned ? tuneLine(s) : ''}
-        <div class="saved-actions">
-          ${findCopyHtml(e, 'saved')}
-          <button class="btn js-save" data-id="${esc(e.id)}" data-surface="saved" data-want="unsave"
-            aria-label="Remove from saved books">Remove</button>
-        </div>
-        <div class="chooser" id="${chooserId(e, 'saved')}" hidden></div>
-      </div>
-      <div class="saved-score">
-        ${status === 'scored'
-          ? `<span class="num">${outOfTen(s.total)}</span><span class="outof">/ 10</span>`
-          : `<span class="saved-score-state">No score</span><span class="outof">${status === 'reviewed-unscored' ? 'reviewed' : 'awaiting review'}</span>`}
-        ${s.tuned && status === 'scored' ? tuneMark(s) : ''}
-      </div>
-    </article></li>`;
-  }
-
-  function renderSaved() {
-    const rows = saved.listSaved(verdicts, FEED.books, state.savedSort);
-    const body = $('saved-body');
-
-    if (!rows.length) {
-      body.innerHTML = `<div class="panel"><h2>Nothing saved yet</h2><p>${esc(saved.EMPTY_COPY)}</p>
-        <button class="btn" id="saved-to-feed">Back to the feed</button></div>`;
-      $('saved-to-feed').addEventListener('click', () => setView('feed'));
-    } else {
-      body.innerHTML = `<ul class="list">${rows.map(savedRow).join('')}</ul>`;
-    }
-
-    // A saved book whose row has dropped out of the current feed is counted here
-    // but cannot be listed, and saying so is better than silently showing fewer.
-    const missing = saved.savedCount(verdicts) - rows.length;
-    $('saved-status').textContent = rows.length
-      ? `${rows.length} saved ${rows.length === 1 ? 'book' : 'books'} · sorted by ${saved.SORTS[state.savedSort].label.toLowerCase()}`
-        + (missing > 0 ? ` · ${missing} more not in the current build` : '')
-      : '';
-    bindSaved();
-  }
-
-  // ------------------------------------------------------------ taste view
-
-  // Acetate Club shows this as a modal on first visit to the crate — three
-  // numbered points explaining that the crate is the engine. Same job here, but
-  // it shows the actual learned model rather than a description of one, and it
-  // is a screen rather than a dialog because this app opens no dialogs.
-  function renderTaste() {
-    const body = $('taste-body');
-    const need = MIN_SIGNAL - (taste?.savedCount ?? 0);
-
-    if (!taste?.ready) {
-      body.innerHTML = `<div class="panel">
-        <h2>Not enough saved to tune anything yet</h2>
-        <p>Your saves are the signal. Save ${need} more ${need === 1 ? 'book' : 'books'} and the feed starts scoring against what you actually kept, on top of the profile rather than instead of it.</p>
-        <button class="btn" id="taste-to-feed">Back to the feed</button></div>`;
-      $('taste-to-feed').addEventListener('click', () => setView('feed'));
-      return;
-    }
-
-    const tagRow = (t, dir) => `<li>
-      <button class="tag-chip k-${esc(t.kind)}" data-tag="${esc(t.id)}">${esc(t.label)}</button>
-      <span class="taste-count">${t.saves} saved${t.passes ? `, ${t.passes} passed` : ''} of ${t.available} in the feed</span>
-      <span class="taste-bar" aria-hidden="true"><span class="taste-fill ${dir}" style="width:${Math.round(Math.abs(t.weight) * 100)}%"></span></span>
-    </li>`;
-
-    const tilt = taste.tilt.map((t) => {
-      if (!t.enough) return `<div class="dim is-default">
-        <span class="dim-id">${esc(t.id)}</span>
-        <span class="dim-label">${esc(t.name || '')} — <span class="guess">too few saves with evidence here (${t.n})</span></span>
-        <span class="dim-score">—</span></div>`;
-      const pct = Math.min(100, Math.abs(t.delta) * 25);
-      return `<div class="dim">
-        <span class="dim-id">${esc(t.id)}</span>
-        <span class="dim-label">${esc(t.name || '')}
-          <span class="why">your saves average ${t.mine.toFixed(1)} where the whole feed averages ${t.field.toFixed(1)}, across ${t.n} saves</span>
-          <span class="dim-track"><span class="dim-fill ${t.delta > 0 ? 'up' : 'down'}" style="width:${pct}%"></span></span>
-        </span>
-        <span class="dim-score">${t.delta > 0 ? '+' : '−'}${Math.abs(t.delta).toFixed(1)}</span></div>`;
-    }).join('');
-
-    const proposal = weightProposal(taste, Object.fromEntries(FEED.dimensions.map((d) => [d.id, d.name])));
-
-    body.innerHTML = `
-      <div class="taste-head">
-        <p class="taste-lede">Your saved list is not just a list. It is the second half of the scoring — the profile says what you said you like, and these say what you actually kept.</p>
-        <p class="taste-sub">${taste.savedCount} saved and ${taste.passedCount} passed, tuning ${esc(String(FEED.books.length))} books by at most ${(MAX_ADJUSTMENT / 10).toFixed(1)} out of ten in either direction. The profile's own number is never overwritten; you can see both on any row, and the toggle in the filters turns this off.</p>
-      </div>
-
-      <h3 class="taste-h">What you save under</h3>
-      ${taste.strongestTags.length
-        ? `<ul class="taste-list">${taste.strongestTags.map((t) => tagRow(t, 'up')).join('')}</ul>`
-        : '<p class="taste-none">No tag has come up often enough yet to read as a preference.</p>'}
-
-      <h3 class="taste-h">What you pass on</h3>
-      ${taste.weakestTags.length
-        ? `<ul class="taste-list">${taste.weakestTags.map((t) => tagRow(t, 'down')).join('')}</ul>`
-        : '<p class="taste-none">Nothing yet. Passing on books teaches this as much as saving them does.</p>'}
-
-      <h3 class="taste-h">Where your saves sit against the field</h3>
-      <div class="dims">${tilt}</div>
-
-      <h3 class="taste-h">What that argues about the profile</h3>
-      ${proposal.length ? `
-        <p class="taste-note">Nothing here has been applied. These are the weight changes your saves argue for; <code>npm run tune</code> prints the same table and then runs the calibration suite against it, so you can see which of the twenty-four fixtures a change would break before deciding.</p>
-        <table class="taste-table">
-          <thead><tr><th>Dimension</th><th>Now</th><th>Argued</th><th>Your saves</th><th>The field</th><th>n</th></tr></thead>
-          <tbody>${proposal.map((p) => `<tr>
-            <td>${esc(p.id)} · ${esc(p.name)}</td>
-            <td class="num">${p.current}</td>
-            <td class="num ${p.delta > 0 ? 'up' : 'down'}">${p.suggested} <span class="taste-count">(${p.delta > 0 ? '+' : ''}${p.delta})</span></td>
-            <td class="num">${p.savedMean}</td>
-            <td class="num">${p.fieldMean}</td>
-            <td class="num">${p.n}</td></tr>`).join('')}</tbody>
-        </table>`
-        : '<p class="taste-none">Your saves do not yet disagree with the profile’s weighting by enough to argue for a change.</p>'}
-
-      <p class="taste-foot">Two things this deliberately will not do. It will not overrule a rule the profile fired — a book penalised as nonfiction cannot be tuned back over the line. And it will not change a weight on its own: the profile is a written document with a calibration suite behind it, and a dozen saves is not enough evidence to edit it silently.</p>`;
-
-    for (const chip of body.querySelectorAll('.tag-chip')) {
-      chip.addEventListener('click', () => {
-        state.tag = chip.dataset.tag;
-        setView('feed');
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      });
-    }
-  }
-
-  // ------------------------------------------------------------ your ordering
-
-  // The profile is one reader's ranking of a shared vocabulary. Every band carries
-  // a label describing the book and a score ranking it, and only the second half is
-  // personal: "comic" describes a novel the same way for everyone and is worth 4 to
-  // this profile and 10 to somebody who reads for comedy.
-  //
-  // This screen is where a second reader disagrees with the ranking. It is the one
-  // place in the app where the reader overrules the profile outright, which is the
-  // opposite of what the Taste screen does: saves are a bounded correction that can
-  // never overrule a rule, and these change what the rules are.
-
-  const RULE_COPY = {
-    twist_override: 'Score a formal device at 3 when the review says it resolves into a twist.',
-    trap4_land_scale: 'Drop the land subject from 10 to 6 when nothing institutional or multi-decade stands behind it.',
-    d6_sprawl_without_ambition: 'Drop a 500-page book below the top band when the review shows no multi-strand structure.',
-    d6_length_without_ambition: 'Drop a 400-page book below its band when the review shows no structural ambition.',
-  };
-
-  const overridesDirty = () => !isEmpty(overrides);
-
-  // The dot that says an ordering of the reader's own is in force. It is in two
-  // places now - the dock menu and the desktop nav - and DESIGN.md's rule is that
-  // an ordering in force is never invisible, so both have to be set together.
-  function markProfile() {
-    const dirty = overridesDirty();
-    const a = $('profile-mark'); if (a) a.hidden = !dirty;
-    const b = $('deskProfileMark'); if (b) b.hidden = !dirty;
-    // The standing sign-in reminder turns on the same fact and comes into force
-    // at the same moment, so it is set here rather than left until the next thing
-    // that happens to repaint the bar. Only the signed-out label is touched: the
-    // signed-in ones carry whether sync is failing, which this does not know.
-    const c = $('account-mark');
-    if (c) {
-      const atRisk = profileAtRisk();
-      c.hidden = !atRisk;
-      if (atRisk) $('account').setAttribute('aria-label', AT_RISK_LABEL);
-    }
-    // And the reminder comes down the moment there is a profile, without waiting
-    // for a reload: it asks for the one thing that just happened.
-    showRemind();
-  }
-
-  function saveOverrides() {
-    // Stamped on every write, because the merge resolves two orderings by which
-    // one the reader touched last. An unstamped copy is one written before sync
-    // existed and loses to any stamped one — see lib/merge-profile.mjs.
-    overrides = sync.stamp(overrides);
+    overrides = sync.stamp(next);
     write(OVERRIDES_KEY, overrides);
     profileVersion++;
-    markProfile();
     render();
+    toast('Profile saved. The feed re-ranked.');
+    announce('Profile saved. Every score has been recalculated.');
     syncNow();
   }
 
+  // A switch and a band score take effect the moment they are changed. Only the
+  // seven weights wait for Save, because only they have to add up to something.
   function setOverride(group, key, value) {
     const next = { ...overrides, [group]: { ...overrides[group] } };
     if (value === null || value === undefined) delete next[group][key];
     else next[group][key] = value;
-    overrides = next;
-    saveOverrides();
-  }
-
-  function resetOverrides() {
-    overrides = { ...EMPTY_OVERRIDES };
-    saveOverrides();
-    renderProfile();
-  }
-
-  function renderProfile() {
-    const P = profileForOverrides();
-    const sum = summarize(overrides, P);
-    const changes = sum.rules.length + sum.bands.length + sum.weights.length + sum.adjustments.length;
-
-    const dims = P.dimensions.map((d) => {
-      const w = overrides.weights[d.id] ?? d.weight;
-      const moved = (d.bands || []).filter((b) => overrides.bands[bandKey(d.id, b.id)] != null).length
-        + (overrides.weights[d.id] != null ? 1 : 0);
-      const bands = (d.bands || []).map((b) => {
-        const cur = overrides.bands[bandKey(d.id, b.id)] ?? b.score;
-        return `<div class="ov-band">
-          <label class="ov-band-label" for="b-${esc(d.id)}-${esc(b.id)}">${esc(b.label)}${b.descriptiveOnly ? '<span class="ov-note">not ranked by the profile</span>' : ''}</label>
-          <input class="ov-num" type="number" min="0" max="10" step="1" id="b-${esc(d.id)}-${esc(b.id)}"
-            data-band-dim="${esc(d.id)}" data-band-id="${esc(b.id)}" value="${cur}"
-            aria-label="What ${esc(b.label)} is worth, out of ten">
-          ${cur !== b.score ? `<span class="ov-was">was ${b.score}</span>` : '<span class="ov-was"></span>'}
-        </div>`;
-      }).join('');
-
-      return `<details class="ov-dim">
-        <summary class="more-toggle">
-          ${esc(d.name)}
-          <span class="more-count">weight ${w}${moved ? ` · ${moved} changed` : ''}</span>
-        </summary>
-        <div class="ov-dim-body">
-          <div class="ov-band ov-weight">
-            <label class="ov-band-label" for="w-${esc(d.id)}">How much this dimension counts</label>
-            <input class="ov-num" type="number" min="0" max="100" step="1" id="w-${esc(d.id)}"
-              data-weight="${esc(d.id)}" value="${w}" aria-label="Weight for ${esc(d.name)}">
-            ${w !== d.weight ? `<span class="ov-was">was ${d.weight}</span>` : '<span class="ov-was"></span>'}
-          </div>
-          ${bands}
-        </div>
-      </details>`;
-    }).join('');
-
-    const ruleRows = Object.entries(RULE_COPY).map(([id, copy]) => `
-      <label class="switch ov-switch">
-        <input type="checkbox" data-rule="${esc(id)}" ${overrides.rules[id] === false ? '' : 'checked'}>
-        <span>${esc(copy)}</span>
-      </label>`).join('');
-
-    const filterRows = (FEED.hardFilters || []).map((f) => `
-      <label class="switch ov-switch">
-        <input type="checkbox" data-adjustment="${esc(f.id)}" ${overrides.adjustments[f.id] === false ? '' : 'checked'}>
-        <span>${esc(f.label)} <span class="ov-note">${f.points} points</span></span>
-      </label>`).join('');
-
-    $('profile-body').innerHTML = `
-      <p class="ov-lede">Every score in the feed is this profile's opinion. The words are shared: "braided", "comic", "independent press" describe a book the same way for anyone. What they are worth is not. Change what they are worth here and the feed re-ranks, with no rebuild.</p>
-      <p class="ov-sub">This is the one screen that overrules the profile. Your saves never do: they move a score by at most ${(MAX_ADJUSTMENT / 10).toFixed(1)} out of ten and cannot touch a rule.</p>
-
-      <div class="ov-status">
-        <p class="status">${changes ? `${changes} change${changes === 1 ? '' : 's'} in force` : 'Nothing changed. The feed is scored exactly as the profile scores it.'}</p>
-        ${changes ? `<button class="btn" id="ov-reset">Reset to the profile</button>` : ''}
-      </div>
-
-      <h3 class="ov-h">What a book is worth</h3>
-      <p class="ov-help">Each dimension holds the bands a review can land in. The number beside a band is what it earns out of ten.</p>
-      ${dims}
-
-      <h3 class="ov-h">Rules the profile applies</h3>
-      <p class="ov-help">These rewrite a score after the band is picked. Switch one off and the band the review actually earned comes back.</p>
-      <div class="toggle-row ov-rules">${ruleRows}</div>
-
-      <h3 class="ov-h">What the profile refuses</h3>
-      <p class="ov-help">Heavy penalties, not exclusions: a book carrying one is still scored and still shown. Switch one off and its points come back. Do you read nonfiction? This is where you say so.</p>
-      <div class="toggle-row ov-rules">${filterRows}</div>`;
-
-    bindProfile();
-  }
-
-  function bindProfile() {
-    const body = $('profile-body');
-    $('ov-reset')?.addEventListener('click', resetOverrides);
-
-    for (const input of body.querySelectorAll('input[type="number"]')) {
-      input.addEventListener('change', () => {
-        const n = Number(input.value);
-        if (!Number.isFinite(n)) return;
-        if (input.dataset.weight) {
-          const d = FEED.dimensions.find((x) => x.id === input.dataset.weight);
-          setOverride('weights', d.id, n === d.weight ? null : n);
-        } else {
-          const d = FEED.dimensions.find((x) => x.id === input.dataset.bandDim);
-          const b = (d.bands || []).find((x) => x.id === input.dataset.bandId);
-          setOverride('bands', bandKey(d.id, b.id), n === b.score ? null : n);
-        }
-        renderProfile();
-      });
-    }
-
-    for (const box of body.querySelectorAll('input[type="checkbox"]')) {
-      box.addEventListener('change', () => {
-        const group = box.dataset.rule ? 'rules' : 'adjustments';
-        const key = box.dataset.rule || box.dataset.adjustment;
-        setOverride(group, key, box.checked ? null : false);
-        renderProfile();
-      });
-    }
-  }
-
-  // ------------------------------------------------------------ build a profile
-
-  // Six questions, one screen. A wizard would be more ceremony than six questions
-  // deserve, and seeing all of them at once is what makes it feel short.
-  let startAnswers = { reads: 'both', liked: [], disliked: [], satire: false };
-
-  function renderStart() {
-    const chips = (which) => chipsFor(startAnswers.reads).map((c) => {
-      const key = `${c.dim}:${c.band}`;
-      const on = startAnswers[which].includes(key);
-      return `<button class="chip start-chip" data-which="${which}" data-key="${esc(key)}" aria-pressed="${on}">${esc(c.label)}</button>`;
-    }).join('');
-
-    const n = startAnswers.liked.length + startAnswers.disliked.length;
-    $('start-body').innerHTML = `
-      <p class="ov-lede">Every score in this feed is one reader's taste, not yours. Three steps, about two minutes, and it ranks against you instead.</p>
-      <ol class="start-steps">
-        <li>Say whether you read fiction, nonfiction or both. This one does the most.</li>
-        <li>Pick what you read for. Anything that makes you want to open a book.</li>
-        <li>Pick what puts you off. This one matters as much: with nothing to push against, the feed ranks everything alike.</li>
-        <li>Tap <strong>Build it</strong>. The feed re-ranks straight away.</li>
-      </ol>
-      <p class="ov-sub">Skip anything you have no opinion about. Nothing here leaves this browser, and every part of it stays editable on the Profile screen afterwards.</p>
-      <p class="ov-help">Built for a phone for now. It will open on a laptop, but a profile lives in the browser that made it, so building one here and opening the site there gets you somebody else's scores rather than your own.</p>
-
-      <h3 class="ov-h">What do you read?</h3>
-      <p class="ov-help">Asked first because it does the most. The published profile docks nonfiction 45 points out of 100, which is one reader's exclusion rather than a fact about books, and nothing you pick below repairs that on its own.</p>
-      <div class="start-chips">${READS.map((r) => `<button class="chip start-reads" data-reads="${esc(r.id)}" aria-pressed="${startAnswers.reads === r.id}">${esc(r.label)}<span class="reads-note">${esc(r.note)}</span></button>`).join('')}</div>
-
-      <h3 class="ov-h">What do you read for?</h3>
-      <p class="ov-help">Pick anything that makes you want to open a book.</p>
-      <div class="start-chips">${chips('liked')}</div>
-
-      <h3 class="ov-h">What puts you off?</h3>
-      <p class="ov-help">This matters as much as the first list. A model with nothing to push against ranks everything alike.</p>
-      <div class="start-chips">${chips('disliked')}</div>
-
-      <h3 class="ov-h">One more thing worth saying outright</h3>
-      <div class="toggle-row ov-rules">
-        <label class="switch ov-switch"><input type="checkbox" id="start-satire" ${startAnswers.satire ? 'checked' : ''}><span>I like satire and comic novels</span></label>
-      </div>
-
-      <div class="ov-status">
-        <p class="status">${n ? `${n} answer${n === 1 ? '' : 's'}` : 'Nothing picked yet'}</p>
-        <button class="btn btn-done" id="start-apply">Build it</button>
-      </div>`;
-
-    for (const chip of $('start-body').querySelectorAll('.start-chip')) {
-      chip.addEventListener('click', () => {
-        const { which, key } = chip.dataset;
-        const list = startAnswers[which];
-        const i = list.indexOf(key);
-        if (i >= 0) list.splice(i, 1); else list.push(key);
-        // A band cannot be both liked and disliked, so picking one side drops
-        // the other rather than letting the two overrides fight.
-        const other = which === 'liked' ? 'disliked' : 'liked';
-        startAnswers[other] = startAnswers[other].filter((k) => k !== key);
-        renderStart();
-      });
-    }
-    for (const b of $('start-body').querySelectorAll('.start-reads')) {
-      b.addEventListener('click', () => {
-        startAnswers.reads = b.dataset.reads;
-        // Switching to fiction drops the subject chips, so any that were picked
-        // have to go with them rather than sit in the profile unseen.
-        const keep = new Set(chipsFor(startAnswers.reads).map((c) => `${c.dim}:${c.band}`));
-        startAnswers.liked = startAnswers.liked.filter((k) => keep.has(k));
-        startAnswers.disliked = startAnswers.disliked.filter((k) => keep.has(k));
-        renderStart();
-      });
-    }
-    $('start-satire').addEventListener('change', (ev) => { startAnswers.satire = ev.target.checked; });
-    $('start-apply').addEventListener('click', () => {
-      overrides = buildProfile(profileForOverrides(), startAnswers);
-      saveOverrides();
-      setView('feed');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      toast('Your profile is in. The feed is ranked by it now, and the Profile screen has every part of it.');
-    });
-  }
-
-  function setView(view, { keepFocus = false } = {}) {
-    if (!keepFocus) focusedBookId = null;
-    state.view = view;
-    savePrefs();
-    $('shelves-section').hidden = view !== 'shelves';
-    $('feed-section').hidden = view !== 'feed';
-    $('all-section').hidden = view !== 'all';
-    $('saved-section').hidden = view !== 'saved';
-    $('taste-section').hidden = view !== 'taste';
-    $('profile-section').hidden = view !== 'profile';
-    $('start-section').hidden = view !== 'start';
-    // The control bar sorts and filters the feed and means nothing on the saved
-    // list, so it goes away rather than sitting there inert. Same for the
-    // recommended tally and any tag filter still applied to the feed.
-    // The control bar sorts and filters a list of books, and All books is one,
-    // so it belongs to both. Only the recommended tally is feed-only: nothing on
-    // All books is recommended, because nothing on it is scored.
-    const listView = view === 'feed' || view === 'all';
-    document.querySelector('.controls').hidden = !listView;
-    document.querySelector('.tally').hidden = view !== 'feed';
-    if (!listView) $('tag-bar').hidden = true;
-    for (const [id, name] of [['view-shelves', 'shelves'], ['view-feed', 'feed'], ['view-all', 'all'], ['view-saved', 'saved'], ['view-taste', 'taste'], ['view-profile', 'profile'], ['view-start', 'start']]) {
-      if (view === name) $(id).setAttribute('aria-current', 'page');
-      else $(id).removeAttribute('aria-current');
-    }
-    // The desktop nav is the same set of views in a second place, so it carries
-    // the same current-page mark rather than a class of its own.
-    for (const b of document.querySelectorAll('#desknav [data-view]')) {
-      if (b.dataset.view === view) b.setAttribute('aria-current', 'page');
-      else b.removeAttribute('aria-current');
-    }
+    overrides = sync.stamp(next);
+    write(OVERRIDES_KEY, overrides);
+    profileVersion++;
     render();
-    if (view === 'saved') {
-      analytics.track('saved_books_viewed',
-        { count: saved.savedCount(verdicts), sort: state.savedSort });
+    syncNow();
+  }
+
+  function toggleGuardrail(i) {
+    const g = GUARDRAILS[i];
+    setOverride(g.group, g.key, guardrailOn(g) ? false : null);
+  }
+
+  function togglePenalty(id) {
+    const f = penalties().find((x) => x.id === id);
+    if (f) setOverride('adjustments', f.id, penaltyOn(f) ? false : null);
+  }
+
+  function setBand(dimId, bandId, value) {
+    const d = FEED.dimensions.find((x) => x.id === dimId);
+    const b = (d?.bands || []).find((x) => x.id === bandId);
+    if (!b) return;
+    const n = Math.max(0, Math.min(10, Math.round(Number(value))));
+    if (!Number.isFinite(n)) return;
+    setOverride('bands', bandKey(dimId, bandId), n === b.score ? null : n);
+  }
+
+  // Every verdict this device holds, resolved against the current build. The
+  // profile is revised by hand from this file, so it carries the title and author
+  // rather than only the ids that mean nothing outside the app.
+  function exportVerdicts() {
+    const byId = new Map(FEED.books.map((e) => [e.id, e]));
+    const rows = Object.entries(verdicts)
+      .filter(([, v]) => v.verdict)
+      .map(([id, v]) => ({
+        id,
+        verdict: v.verdict,
+        savedAt: v.savedAt ?? null,
+        title: byId.get(id)?.book.title ?? null,
+        author: byId.get(id)?.book.author ?? null,
+        score: byId.get(id) && isScored(byId.get(id)) ? shownScore(byId.get(id)) : null,
+      }));
+    const payload = { exportedAt: new Date().toISOString(), profileRevision: FEED.profileRevision, verdicts: rows, overrides };
+    const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'constant-reader-verdicts.json';
+    a.click();
+    URL.revokeObjectURL(url);
+    toast(`Exported ${rows.length} verdict${rows.length === 1 ? '' : 's'}.`);
+  }
+
+  // ------------------------------------------------------------ sync
+
+  const localProfile = () => ({ verdicts, overrides });
+
+  function adoptProfile(merged) {
+    verdicts = merged.verdicts;
+    overrides = { ...EMPTY_OVERRIDES, ...merged.overrides };
+    write(VERDICT_KEY, verdicts);
+    write(OVERRIDES_KEY, overrides);
+    state.draftWeights = null;
+    retune();
+    render();
+  }
+
+  const monogramOf = (u) => {
+    const name = u?.displayName || u?.email || '';
+    const letter = name.trim().charAt(0).toUpperCase();
+    return /[A-Z0-9]/.test(letter) ? letter : '@';
+  };
+
+  function rememberAccount(u) {
+    if (!u) { write(ACCOUNT_KEY, null); return; }
+    write(ACCOUNT_KEY, { name: u.displayName || u.email || 'your account', mono: monogramOf(u) });
+  }
+
+  // `user` is the truth once Firebase has answered; before that, the remembered
+  // account is, and only for a reader who was signed in when they left. Pulled
+  // out because the reminder band and the first-visit prompt both have to ask it
+  // without repainting the chrome.
+  const signedInNow = () => Boolean(user)
+    || (Boolean(read(ACCOUNT_KEY, null)) && read(sync.RETURNING_KEY, false) === true);
+
+  // An ordering of the reader's own, living in one browser and nowhere else. Not
+  // a failure — nothing is broken and nothing has been lost — but the one thing
+  // about this app a reader would be sorry to learn too late, and the only
+  // honest reason to ask a stranger for an account.
+  const profileAtRisk = () => !signedInNow() && !isEmpty(overrides);
+
+  const AT_RISK_LABEL = 'Your profile is saved in this browser only. Sign in with Google to keep it.';
+
+  function showAuth({ failing = false } = {}) {
+    const account = read(ACCOUNT_KEY, null);
+    const signedIn = signedInNow();
+    const name = user ? (user.displayName || user.email || 'your account') : account?.name;
+    const word = signedIn ? 'Sign out' : 'Sign in';
+    // Standing, and deliberately not dismissable: it stops being shown by signing
+    // in, which is the only thing that stops it being true.
+    const atRisk = profileAtRisk();
+
+    $('auth-word').textContent = word;
+    for (const el of $$('[data-auth] > span')) el.textContent = word;
+    for (const el of $$('[data-at-risk]')) el.hidden = !atRisk;
+    $('auth').setAttribute('aria-label', signedIn ? `Signed out of ${name}` : atRisk ? AT_RISK_LABEL : 'Sign in with Google');
+
+    // The dot is a mark; this is the sentence behind it, beside the control that
+    // fixes it. A mark nobody can get an explanation for is worse than no mark.
+    const note = !signedIn
+      ? (atRisk
+        ? 'Your profile and your saved books are in this browser only. Sign in to keep them, and to read the same feed on your other devices.'
+        : 'Saves stay on this device until you sign in.')
+      : failing
+        ? `Signed in as ${name}. Not syncing right now — your books are safe on this device.`
+        : `Signed in as ${name}. Your books sync across your devices.`;
+    $('auth-note').textContent = note;
+    for (const el of $$('[data-auth-note]')) el.textContent = note;
+  }
+
+  async function syncNow() {
+    if (!user) return;
+    if (syncing) { syncQueued = true; return; }
+    syncing = true;
+    try {
+      do {
+        syncQueued = false;
+        const version = profileVersion;
+        const uid = user?.uid;
+        if (!uid) break;
+        try {
+          const merged = await sync.reconcile(uid, localProfile());
+          if (user?.uid !== uid) break;
+          if (profileVersion === version) adoptProfile(merged);
+          else syncQueued = true;
+          showAuth();
+        } catch (err) {
+          showAuth({ failing: true });
+          toast(sync.explain(err), { error: true });
+          break;
+        }
+      } while (syncQueued && user);
+    } finally {
+      syncing = false;
     }
   }
 
-  // ------------------------------------------------------------ shelves
-
-  // The landing view: a few collections drawn from this reader's own weights,
-  // rather than a fixed editorial list. A reader who has pushed prose to the top
-  // of their profile gets prose shelves; the same feed gives someone else period
-  // shelves. lib/shelves.mjs decides what they are; this only draws them.
-
-  function drawnHtml(entry) {
-    const b = entry.book;
-    const j = jacketFor({ id: entry.id, title: b.title, author: b.author });
-    return `<div class="jacket-drawn" data-size="${esc(j.size)}" data-rule="${esc(j.rule)}"
-        style="background:${j.ground.bg};color:${j.ground.ink}">
-      <div class="j-rule j-rule-above" aria-hidden="true"></div>
-      <div class="j-title">${esc(j.title)}</div>
-      <div>
-        <div class="j-rule j-rule-below" aria-hidden="true"></div>
-        <div class="j-author">${esc(j.author)}</div>
-      </div>
-    </div>`;
-  }
-
-  function jacketHtml(entry) {
-    const b = entry.book;
-    if (b.coverUrl) {
-      // Alt is empty and the title sits beside the image in text: a jacket is
-      // decoration for a row that already names the book, and a screen reader
-      // reading the title twice is worse than not describing the picture.
-      return `<div class="jacket"><img src="${esc(b.coverUrl)}" alt="" loading="lazy" decoding="async"></div>`;
-    }
-    return `<div class="jacket">${drawnHtml(entry)}</div>`;
-  }
-
-  // A cover URL can rot between builds - Google rotates volume ids, and this feed
-  // is rebuilt and republished every morning against whatever it finds. A dead
-  // image would leave an empty chamfered box on the shelf, so it falls back to the
-  // jacket the book would have had if it had never had a cover at all.
-  function bindJacketFallback(root, byId) {
-    for (const img of root.querySelectorAll('.jacket img')) {
-      img.addEventListener('error', () => {
-        const carrier = img.closest('[data-card], [data-feature-book]') || img.closest('.card')?.querySelector('[data-card]');
-        const id = carrier?.getAttribute('data-card') || carrier?.getAttribute('data-feature-book');
-        const entry = byId.get(id);
-        if (entry) img.closest('.jacket').innerHTML = drawnHtml(entry);
-      }, { once: true });
-    }
-  }
-
-  function cardHtml(entry) {
-    const s = scoreOf(entry);
-    const b = entry.book;
-    // The same test the lists use. `listedOnly` alone missed the books that do have
-    // a review behind them but scored nothing from it, so a handful of cards on
-    // "Awaiting a review" were showing a number for a book with no score.
-    const noScore = !isScored(entry);
-    const num = noScore ? '' : `<span class="card-score">${outOfTen(s.total).toFixed(1)}</span>`;
-    // "not scored" on a card is a book wearing a label about our own coverage. The
-    // publisher is real information, it is the thing these books have in common,
-    // and Oxford or Verso on a card says more than a missing number does.
-    const note = noScore
-      ? `<span class="card-imprint">${esc(b.publisher || (b.bookYear ? String(b.bookYear) : 'New'))}</span>`
-      : '';
-    return `<div class="card" data-band="${esc(entry.score?.band || '')}">
-      <button class="card-btn" data-card="${esc(entry.id)}" aria-label="${esc(b.title)}${b.author ? `, ${b.author}` : ''} — open book details">
-        ${jacketHtml(entry)}
-      </button>
-      <div class="card-meta">${num}${note}</div>
-      <div class="card-title">${esc(b.title)}</div>
-      <div class="card-author">${esc(b.author || '')}</div>
-    </div>`;
-  }
-
-  // The same shelves over the whole archive rather than over the reader's own
-  // slice of it. Every book here is described and none is scored, so the shelves
-  // are a way to browse past a profile rather than only inside one.
-  function renderAllShelves() {
-    const weights = {};
-    for (const d of FEED.dimensions || []) weights[d.id] = overrides.weights?.[d.id] ?? d.weight;
-    const scope = state.allScope || 'any';
-    const pool = FEED.books.filter((e) => scope === 'any' || scoreStatus(e) === scope);
-    const shelves = buildShelves(pool, { weights }, { only: scope === 'awaiting-review' ? 'unscored' : 'all' });
-    $('all-note').textContent = scope === 'awaiting-review'
-      ? `${pool.length} new books, mostly from the university presses, whose authors have talked about them at length before any critic has. Nothing here is scored — there is no review to score it on — so they are grouped by what they are.`
-      : scope === 'reviewed-unscored'
-        ? `${pool.length} reviewed books with too little dependable evidence for a number. They stay visible and unranked rather than receiving a score made from defaults.`
-        : scope === 'scored'
-          ? `${pool.length} books with enough critical evidence for the profile to score, grouped by what they are.`
-        : `Every book the crawl found, ${pool.length} of them, grouped by what they are rather than by what your profile makes of them.`;
-    drawShelves($('all-shelves'), shelves);
-  }
-
-  function bestPickHtml(entry) {
-    const b = entry.book;
-    const s = scoreOf(entry);
-    const mention = entry.mentions.find((m) => (m.standfirst || '').trim())
-      || entry.mentions.find((m) => (m.excerpt || '').trim());
-    let blurb = cleanBlurb(mention?.standfirst || mention?.excerpt || '', { title: b.title, author: b.author });
-    if (blurb.length > 280) blurb = `${blurb.slice(0, 280).replace(/\s+\S*$/, '')}…`;
-    const fit = s.tuned && s.reasons?.length
-      ? `Your saves moved the live score ${s.delta > 0 ? 'up' : 'down'}: ${s.reasons.map((r) => r.label).join(' · ')}.`
-      : s.overridden
-        ? 'Your ordering puts this first. Open the score to inspect the bands and weights now in force.'
-        : entry.reading?.summary || 'It has the highest live score among the books with enough critical evidence.';
-    return `<article class="best-pick" data-feature-book="${esc(entry.id)}">
-      <div class="best-pick-rule" aria-hidden="true"></div>
-      <p class="best-pick-kicker">Your best pick</p>
-      <button class="best-pick-jacket" data-open-book="${esc(entry.id)}" aria-label="Open ${esc(b.title)} in the feed">
-        ${jacketHtml(entry)}
-      </button>
-      <div class="best-pick-copy">
-        <p class="best-pick-score"><span>${outOfTen(s.total).toFixed(1)}</span> / 10 <em>${recommendedNow(entry, s) ? 'recommended' : 'closest match'}</em></p>
-        <h3><button data-open-book="${esc(entry.id)}">${esc(b.title)}</button></h3>
-        ${authorOf(entry) ? `<p class="best-pick-author">by ${esc(authorOf(entry))}</p>` : ''}
-        ${blurb ? `<p class="best-pick-blurb">${esc(blurb)}</p>` : ''}
-        ${fit ? `<p class="best-pick-fit"><span>${s.tuned || s.overridden ? 'Why it leads now' : 'Profile read'}</span> ${esc(fit)}</p>` : ''}
-        <div class="best-pick-actions">
-          <button class="btn btn-lead" data-open-book="${esc(entry.id)}">Open the score</button>
-          ${saveButton(entry, 'best-pick')}
-        </div>
-      </div>
-    </article>`;
-  }
-
-  function renderShelves() {
-    const body = $('shelves-body');
-    // The build's weights with this reader's re-weightings applied, which is what
-    // makes the shelves theirs rather than the profile author's.
-    const weights = {};
-    for (const d of FEED.dimensions || []) weights[d.id] = overrides.weights?.[d.id] ?? d.weight;
-    const shelves = buildShelves(FEED.books, { weights });
-    const ranked = FEED.books
-      .filter((e) => isScored(e) && e.inWindow !== false && saved.verdictOf(verdicts, e.id) !== 'passed')
-      .map((entry) => ({ entry, score: scoreOf(entry) }))
-      .sort((a, b) => b.score.total - a.score.total || reviewTime(b.entry) - reviewTime(a.entry));
-    const best = ranked.find(({ entry, score }) => recommendedNow(entry, score)) || ranked[0];
-    const feature = $('best-pick');
-    feature.innerHTML = best ? bestPickHtml(best.entry) : '';
-    feature.hidden = !best;
-    if (best) {
-      bindJacketFallback(feature, new Map([[best.entry.id, best.entry]]));
-      bindSaveAndFind(feature);
-      for (const button of feature.querySelectorAll('[data-open-book]')) {
-        button.addEventListener('click', () => openBook(button.dataset.openBook));
-      }
-    }
-    const n = FEED.books.length;
-    if ($('to-all-n')) $('to-all-n').textContent = String(n);
-    $('shelves-note').textContent = shelves.length
-      ? `Drawn from the dimensions your profile weights most heavily. Tap a book to open it in the feed.`
-      : '';
-    if (!shelves.length) {
-      body.innerHTML = `<p class="empty">Nothing to collect yet. <button class="btn" id="shelves-to-feed">Go to the feed</button></p>`;
-      $('shelves-to-feed')?.addEventListener('click', () => setView('feed'));
+  async function doAuth() {
+    if (user) {
+      try { await sync.signOut(); } catch { /* already gone */ }
+      write(sync.RETURNING_KEY, false);
+      rememberAccount(null);
+      user = null;
+      showAuth();
+      render();
+      toast('Signed out. Your books stay on this device.');
       return;
     }
-    drawShelves(body, shelves);
-  }
-
-  // Drawing a set of shelves, wherever they came from. Collections and All books
-  // are the same component over two different archives.
-  function drawShelves(body, shelves) {
-    body.innerHTML = shelves.map((sh) => `<section class="shelf" aria-labelledby="sh-${esc(sh.id)}">
-      <div class="shelf-head">
-        <div>
-          <h3 class="shelf-title" id="sh-${esc(sh.id)}">${esc(sh.title)}</h3>
-          ${sh.note ? `<p class="shelf-note">${esc(sh.note)}</p>` : ''}
-        </div>
-        <span class="shelf-count">${sh.total} book${sh.total === 1 ? '' : 's'}</span>
-      </div>
-      <div class="shelf-track">${sh.books.map(cardHtml).join('')}</div>
-    </section>`).join('');
-
-    // A card is a way into a list, not a second detail view. Tapping one goes to
-    // the row it stands for and opens it, so there is exactly one place a book is
-    // read and the shelf is only ever an index. A book the profile cannot score
-    // has no row in My feed, so it opens in All books instead.
-    bindJacketFallback(body, new Map(FEED.books.map((e) => [e.id, e])));
-
-    for (const btn of body.querySelectorAll('[data-card]')) {
-      btn.addEventListener('click', () => openBook(btn.getAttribute('data-card')));
+    try {
+      user = await sync.signIn();
+      write(sync.RETURNING_KEY, true);
+      rememberAccount(user);
+      showAuth();
+      render();
+      await syncNow();
+      toast('Signed in. Your books are synced.');
+    } catch (err) {
+      user = null;
+      write(sync.RETURNING_KEY, false);
+      rememberAccount(null);
+      showAuth();
+      toast(sync.explain(err), { error: true });
     }
   }
 
-  // Collections are an index. Every route into a book ends at its canonical row,
-  // where the score and evidence expand inline. The status decides whether that
-  // row lives in My feed or the complete archive.
-  function openBook(id) {
-    const entry = FEED.books.find((e) => e.id === id);
-    if (!entry) return;
-    if (!isScored(entry)) {
-      state.allMode = 'list';
-      state.allScope = scoreStatus(entry);
-    }
-    focusedBookId = id;
-    setView(isScored(entry) ? 'feed' : 'all', { keepFocus: true });
-    const article = document.querySelector(`.row[data-id="${CSS.escape(id)}"]`);
-    if (!article) return;
-    article.scrollIntoView({ block: 'center', behavior: 'auto' });
-    if (!article.classList.contains('is-open')) article.querySelector('.js-why')?.click();
-  }
-
-  // ------------------------------------------------------------ grouping
-
-  const SUBJECT_LABELS = {
-    land: 'Land, water, extraction, labour',
-    state_violence: 'State violence, conquest, repression',
-    institution: 'Institutional formation',
-    art_under_state: 'Art under political constraint',
-    faith: 'Faith and belief systems',
-    finance: 'Money and finance',
-    domestic: 'Family, marriage, identity',
-    media_tech: 'Media, tech, internet life',
-    null: 'Subject engine not established',
-  };
-
-  // What is set behind the closed disclosure. Every switch below is either off or
-  // at its default in `state`, so counting departures from the default is exact
-  // rather than a guess, and `window` and `tune` are defaults-on so they count
-  // only when turned off.
-  function hiddenFilterCount() {
-    let n = state.sources.size;
-    if (state.minScore != null) n++;
-    if (state.minPages != null) n++;
-    if (!state.window) n++;
-    if (!state.tune) n++;
-    for (const k of ['nonfiction', 'identity', 'penalised', 'group', 'unseen']) if (state[k]) n++;
-    return n;
-  }
-
-  function render() {
-    closeChooser();
-    const nSaved = saved.savedCount(verdicts);
-    $('savedCount').textContent = nSaved;
-    if ($('deskSaved')) $('deskSaved').textContent = nSaved;
-    const mc = $('more-count');
-    if (mc) { const n = hiddenFilterCount(); mc.textContent = n ? `${n} set` : ''; }
-    // The icons carry whether a control is holding something, so they have to be
-    // refreshed on every render rather than only when one is clicked: clearing a
-    // tag from the feed changes the filter count without touching the toolbar.
-    if (typeof syncTools === 'function') syncTools();
-    if (state.view === 'shelves') { renderShelves(); return; }
-    if (state.view === 'saved') { renderSaved(); return; }
-    if (state.view === 'taste') { renderTaste(); return; }
-    if (state.view === 'profile') { renderProfile(); return; }
-    if (state.view === 'start') { renderStart(); return; }
-
-    const all = FEED.books;
-    const shown = all.filter(visible).sort(compare);
-
-    const active = state.tag ? (FEED.tags || []).find((t) => t.id === state.tag) : null;
-    const focused = focusedBookId ? FEED.books.find((e) => e.id === focusedBookId) : null;
-    $('tag-bar').hidden = !active && !focused;
-    if (focused) {
-      $('tag-bar').innerHTML = `<span class="lab-sm">Opened from Collections</span>
-        <strong>${esc(focused.book.title)}</strong>
-        <button class="btn" id="focus-clear">Back to the ${state.view === 'all' ? 'archive' : 'feed'}</button>`;
-      $('focus-clear').addEventListener('click', () => { focusedBookId = null; render(); });
-    } else if (active) {
-      $('tag-bar').innerHTML = `<span class="lab-sm">${esc(active.kind)}</span>
-        <strong>${esc(active.label)}</strong>
-        <button class="btn" id="tag-clear">Clear</button>`;
-      $('tag-clear').addEventListener('click', () => { state.tag = null; savePrefs(); render(); });
-    }
-
-    const recCount = all.filter((e) => recommendedNow(e, scoreOf(e)) && (!state.window || e.inWindow !== false)).length;
-    $('recCount').textContent = recCount;
-    $('recToggle').setAttribute('aria-pressed', String(state.recommendedOnly));
-
-    // Feed and All books are one list drawn twice. The only differences are which
-    // books are in it - the filter above - and which container it lands in, so the
-    // renderer is shared rather than copied. A second copy would be a second place
-    // for a row to go wrong.
-    const inAll = state.view === 'all';
-    if (inAll) {
-      const asShelves = state.allMode !== 'list';
-      $('all-shelves').hidden = !asShelves;
-      $('all-body').hidden = asShelves;
-      document.querySelector('.controls').hidden = asShelves;
-      $('all-as-shelves').setAttribute('aria-pressed', String(asShelves));
-      $('all-as-list').setAttribute('aria-pressed', String(!asShelves));
-
-      const counts = FEED.books.reduce((out, e) => {
-        out[scoreStatus(e)] = (out[scoreStatus(e)] || 0) + 1;
-        return out;
-      }, {});
-      $('n-any').textContent = FEED.books.length;
-      $('n-scored').textContent = counts.scored || 0;
-      $('n-no-score').textContent = counts['reviewed-unscored'] || 0;
-      $('n-awaiting').textContent = counts['awaiting-review'] || 0;
-      for (const b of document.querySelectorAll('.allbar [data-scope]')) {
-        b.setAttribute('aria-pressed', String(b.dataset.scope === (state.allScope || 'any')));
-      }
-      if (asShelves) { renderAllShelves(); return; }
-    }
-    const body = inAll ? $('all-body') : $('feed-body');
-    if (inAll) {
-      const scope = state.allScope || 'any';
-      const nScored = FEED.books.filter((e) => scoreStatus(e) === 'scored').length;
-      const nReviewedUnscored = FEED.books.filter((e) => scoreStatus(e) === 'reviewed-unscored').length;
-      const nAwaiting = FEED.books.filter((e) => scoreStatus(e) === 'awaiting-review').length;
-      $('all-note').textContent = scope === 'awaiting-review'
-        ? `${nAwaiting} new books known from catalogues or author interviews, before a critical review has arrived. They are described and saveable, but never ranked on invented evidence.`
-        : scope === 'reviewed-unscored'
-          ? `${nReviewedUnscored} books have a critical review but too little dependable evidence for a score. Their reviews are here; their numbers are deliberately blank.`
-          : scope === 'scored'
-            ? `${nScored} books have enough critical evidence for the seven-dimension profile to score. Tap any tag to see the rest of its kind.`
-            : `Every book the crawl found: ${nScored} scored, ${nReviewedUnscored} reviewed without enough scoring evidence, and ${nAwaiting} awaiting a critical review.`;
-    }
-    if (!shown.length) {
-      body.innerHTML = `<div class="panel">
-        <h2>${state.recommendedOnly ? 'Nothing is recommended right now' : 'Nothing matches'}</h2>
-        <p>${state.recommendedOnly
-          ? 'Nothing in the current window scored 7 or above with the book properly identified. That is a real answer rather than an empty screen — the reviews are there, they just are not close enough to the profile. Clear this filter to read the rest.'
-          : 'Every entry was filtered out. Try clearing the window or the publication filters.'}</p>
-        <button class="btn" id="empty-reset">${state.recommendedOnly ? 'Show everything' : 'Reset filters'}</button>
-      </div>`;
-      $('empty-reset').addEventListener('click', () => {
-        if (state.recommendedOnly) { state.recommendedOnly = false; savePrefs(); render(); }
-        else resetFilters();
-      });
-    } else if (state.group) {
-      const groups = new Map();
-      for (const e of shown) {
-        const id = e.score.dimensions.D2.id;
-        const label = SUBJECT_LABELS[id] || SUBJECT_LABELS.null;
-        if (!groups.has(label)) groups.set(label, []);
-        groups.get(label).push(e);
-      }
-      const order = [...groups.entries()].sort((a, b) => b[1].length - a[1].length);
-      body.innerHTML = order.map(([label, items]) =>
-        `<h3 class="group-head">${esc(label)} <span style="opacity:.6">${items.length}</span></h3><ul class="list">${items.map(row).join('')}</ul>`).join('');
-    } else {
-      body.innerHTML = `<ul class="list">${shown.map(row).join('')}</ul>`;
-    }
-
-    const savedCount = saved.savedCount(verdicts);
-    const passedCount = Object.values(verdicts).filter((v) => v.verdict === 'passed').length;
-    const tuning = state.tune && taste?.ready
-      ? ` · tuned by ${taste.savedCount} saves`
-      : state.tune && taste ? ` · ${MIN_SIGNAL - taste.savedCount} more saves until tuning starts` : '';
-    // "236 books, newest reviews" answered none of the questions a reader has on
-    // arriving: 236 out of what, reviewed when, by whom, and does the number
-    // move. The standing facts moved into the menu when the masthead got
-    // crowded, which left the feed with no orientation at all. They belong here,
-    // above the first row, where they are the answer rather than decoration.
-    // State only: how this feed is ordered and what is filtering it right now.
-    // It said "Everything the literary press reviews, scored against your taste"
-    // first, which is what the standing line under it says and what the footer
-    // says again — the same sentence three times down one screen, and the one
-    // place a reader looks to find out what they just changed was the least
-    // useful of the three. What this is belongs to the standing line; what it is
-    // doing at this moment belongs here.
-    const bits = [`${ORDERS[state.order]?.label || 'newest reviews'} first`];
-    if (state.q) bits.push(`matching “${state.q}”`);
-    if (state.recommendedOnly) bits.push('recommended only');
-    if (overridesDirty()) bits.push('your ordering');
-    $('status').textContent = bits.join(' · ');
-
-    // How fresh it is, and that it grows, which is the other half of "236 of
-    // what". Kept apart from the count so the count stays scannable.
-    const note = inAll ? null : $('feed-note');
-    if (note) {
-      const built = FEED.builtAt ? relative(FEED.builtAt) : null;
-      const standing = `Every book the literary press reviewed, published in the last ${FEED.windowYears} years, that the catalogue can confirm is a book. Rebuilt every morning${built ? `, last ${built}` : ''}.`;
-      // The grouping note used to overwrite this line rather than join it, so
-      // the orientation vanished the moment anyone grouped the feed.
-      note.textContent = state.group
-        ? `Grouped by subject engine, the format the profile records as having the best acquisition rate. ${standing}`
-        : standing;
-    }
-
-    updateChipCounts(all);
-    bindRows();
-  }
-
-  const label = (k) => ({ reviewDate: 'latest review date', bookDate: 'book publication date', score: 'fit score', reviews: 'number of reviews', title: 'title', none: '' }[k] || k);
-
-  function updateChipCounts(all) {
-    for (const chip of document.querySelectorAll('#sources .chip')) {
-      const id = chip.dataset.value;
-      const n = all.filter((e) => e.mentions.some((m) => m.source.id === id) && !e.score.filters.length).length;
-      chip.querySelector('.n').textContent = n;
-    }
-  }
-
-  // ------------------------------------------------------------ events
-
-  // The title, the description and "Why this score" all open the same panel, so the
-  // toggle lives in one place and every control on the row reports the same state.
-  // A row that looks like a link and does nothing when clicked is the complaint
-  // this answers: the title was set as a heading and read as one.
-  function toggleRow(article, force) {
-    const panel = article.querySelector('.detail');
-    const why = article.querySelector('.js-why');
-    const open = force ?? (why.getAttribute('aria-expanded') !== 'true');
-    if (open) {
-      const e = FEED.books.find((x) => x.id === article.dataset.id);
-      panel.innerHTML = detail(e);
-      bindSaveAndFind(panel);
-      for (const btn of panel.querySelectorAll('.tag-chip')) {
-        btn.addEventListener('click', () => {
-          focusedBookId = null;
-          state.tag = btn.dataset.tag === state.tag ? null : btn.dataset.tag;
-          savePrefs(); render();
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        });
-      }
-      panel.hidden = false;
-      article.classList.add('is-open');
-      why.textContent = 'Hide the working';
-      openRow = why;
-    } else {
-      panel.hidden = true;
-      article.classList.remove('is-open');
-      const e = FEED.books.find((x) => x.id === article.dataset.id);
-      why.textContent = isScored(e) ? 'Why this score' : 'Why no score';
-      openRow = null;
-    }
-    for (const c of article.querySelectorAll('.js-why, .js-open')) c.setAttribute('aria-expanded', String(open));
-  }
-
-  function bindRows() {
-    for (const btn of document.querySelectorAll('.js-why, .js-open')) {
-      btn.addEventListener('click', () => toggleRow(btn.closest('.row')));
-    }
-    // Mouse convenience only, which is why it is not a tab stop and carries no
-    // role: the two buttons above reach the same panel from the keyboard.
-    for (const p of document.querySelectorAll('.js-open-soft')) {
-      p.addEventListener('click', () => toggleRow(p.closest('.row')));
-    }
-    for (const btn of document.querySelectorAll('.tag-chip')) {
-      btn.addEventListener('click', () => {
-        state.tag = btn.dataset.tag === state.tag ? null : btn.dataset.tag;
-        savePrefs(); render();
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      });
-    }
-    for (const btn of document.querySelectorAll('.js-rec')) {
-      btn.addEventListener('click', () => {
-        state.recommendedOnly = true;
-        savePrefs(); render();
-        document.getElementById('recToggle').focus();
-      });
-    }
-    for (const btn of document.querySelectorAll('.js-verdict')) {
-      btn.addEventListener('click', () => {
-        setVerdict(btn.closest('.row').dataset.id, btn.dataset.verdict);
-      });
-    }
-    bindSaveAndFind(state.view === 'all' ? $('all-body') : $('feed-body'));
-  }
-
-  // Shared by both screens: the same save control and the same chooser appear on
-  // a feed row and a saved row, so they are bound once against whichever
-  // container drew them.
-  function bindSaveAndFind(scope) {
-    for (const btn of scope.querySelectorAll('.js-save')) {
-      btn.addEventListener('click', () => {
-        setSaved(btn.dataset.id, btn.dataset.want === 'save', btn.dataset.surface);
-      });
-    }
-    for (const btn of scope.querySelectorAll('.js-find')) {
-      btn.addEventListener('click', () => toggleChooser(btn));
-    }
-    for (const link of scope.querySelectorAll('.retailer')) {
-      link.addEventListener('click', () => {
-        write(RETAILER_KEY, link.dataset.retailer);
-        analytics.track('retailer_link_opened', {
-          bookId: link.dataset.id,
-          retailer: link.dataset.retailer,
-          linkResolution: link.dataset.resolution,
-        });
-      });
-    }
-  }
-
-  function closeChooser() {
-    if (!openChooser) return;
-    const panel = document.getElementById(openChooser.getAttribute('aria-controls'));
-    if (panel) panel.hidden = true;
-    openChooser.setAttribute('aria-expanded', 'false');
-    openChooser = null;
-  }
-
-  function toggleChooser(btn) {
-    const panel = document.getElementById(btn.getAttribute('aria-controls'));
-    const isOpen = btn.getAttribute('aria-expanded') === 'true';
-    closeChooser();
-    if (isOpen) return;
-    const e = FEED.books.find((x) => x.id === btn.dataset.id);
-    panel.innerHTML = chooserHtml(e);
-    panel.hidden = false;
-    btn.setAttribute('aria-expanded', 'true');
-    openChooser = btn;
-    bindSaveAndFind(panel);
-    analytics.track('retailer_chooser_opened', { bookId: e.id });
-    panel.querySelector('.retailer')?.focus();
-  }
-
-  function bindSaved() {
-    bindSaveAndFind($('saved-body'));
-  }
-
-  function resetFilters() {
-    Object.assign(state, {
-      q: '', minPages: null, minScore: null, sources: new Set(), tag: null,
-      window: true, nonfiction: false, identity: false, penalised: false,
-      recommendedOnly: false, group: false, unseen: false,
-    });
-    // Tuning is not a filter and resetting the filters does not switch it off.
-    $('q').value = ''; $('minPages').value = ''; $('minScore').value = '';
-    $('fWindow').checked = true; $('fNonfiction').checked = false; $('fIdentity').checked = false;
-    $('fPenalised').checked = false; $('fGroup').checked = false; $('fUnseen').checked = false;
-    for (const c of document.querySelectorAll('.chip')) c.setAttribute('aria-pressed', 'false');
-    savePrefs(); render();
-  }
-
-  function savePrefs() {
-    write(PREFS_KEY, { ...state, sources: [...state.sources] });
-  }
-
-  function loadOverrides() {
-    const stored = read(OVERRIDES_KEY, null);
-    if (stored) overrides = { ...EMPTY_OVERRIDES, ...stored };
-    markProfile();
-  }
-
-  function loadPrefs() {
-    const p = read(PREFS_KEY, null);
-    if (!p) return;
-    Object.assign(state, p, { sources: new Set(p.sources || []) });
-    // The former two-way split put every unscored book under "awaiting", even
-    // when a review existed. Keep old browser preferences useful after the split.
-    if (state.allScope === 'reviewed') state.allScope = 'scored';
-    if (state.allScope === 'awaiting') state.allScope = 'awaiting-review';
-    if (!['any', 'scored', 'reviewed-unscored', 'awaiting-review'].includes(state.allScope)) state.allScope = 'any';
-    if (!ORDERS[state.order]) {
-      const match = Object.entries(ORDERS).find(([, o]) => o.sort1 === state.sort1 && o.dir1 === state.dir1);
-      state.order = match ? match[0] : 'latest';
-    }
-    Object.assign(state, ORDERS[state.order]);
-    $('q').value = state.q || '';
-    $('order').value = state.order;
-    $('minPages').value = state.minPages || ''; $('minScore').value = state.minScore || '';
-    $('fWindow').checked = state.window; $('fNonfiction').checked = state.nonfiction;
-    $('fIdentity').checked = state.identity; $('fPenalised').checked = state.penalised;
-    $('fGroup').checked = state.group; $('fUnseen').checked = state.unseen;
-    $('fTune').checked = state.tune !== false;
-  }
-
-  function buildChips() {
-    const used = new Set(FEED.books.flatMap((b) => b.mentions.map((m) => m.source.id)));
-    $('sources').innerHTML = FEED.sources.filter((s) => used.has(s.id))
-      .map((s) => `<button class="chip" data-value="${esc(s.id)}" aria-pressed="${state.sources.has(s.id)}">${esc(s.short)}<span class="n"></span></button>`).join('');
-    for (const [el, set] of [[$('sources'), state.sources]]) {
-      el.addEventListener('click', (ev) => {
-        const chip = ev.target.closest('.chip');
-        if (!chip) return;
-        const v = chip.dataset.value;
-        if (set.has(v)) set.delete(v); else set.add(v);
-        chip.setAttribute('aria-pressed', set.has(v));
-        savePrefs(); render();
-      });
-    }
-  }
-
-  // Nineteen publication chips and seven switches are a settings screen, not a
-  // control bar, and they were the first thing on the page at every width. They
-  // start closed everywhere now; the bar keeps the search and the sort, which is
-  // what actually gets touched. The count in the summary says what is hiding, so
-  // a filter left on is never invisible.
-  // A scroll listener rather than an IntersectionObserver on a sentinel, which is
-  // what this was. The observer is the tidier idea and it silently delivered no
-  // callbacks at all in an embedded webview, not even the initial one every
-  // observer is supposed to fire. A collapsing bar that quietly stops collapsing
-  // is worse than a listener, and rAF throttling makes this cost a class toggle
-  // per frame at most.
-  //
-  // The threshold is a band rather than a point, so a bar sitting exactly on the
-  // line cannot flip back and forth on a one-pixel scroll.
-  // Opening the app should put you at the top of the feed. Browsers restore the
-  // last scroll position on a reload and on a back navigation, which on a
-  // home-screen app means reopening it halfway down yesterday's books with the
-  // bar already collapsed. There are no in-page anchors here for this to fight.
-  function startAtTop() {
-    if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
-    window.scrollTo(0, 0);
-    // Safari restores the position after load rather than before it, so once
-    // more on the next frame.
-    requestAnimationFrame(() => window.scrollTo(0, 0));
-  }
-
-  function bindTopbar() {
-    const bar = document.getElementById('topbar');
-    if (!bar) return;
-    const ON = 90;
-    const OFF = 60;
-    let ticking = false;
-
-    const top = document.getElementById('to-top');
-
-    const apply = () => {
-      ticking = false;
-      const y = window.scrollY;
-      const compact = bar.classList.contains('is-compact');
-      if (!compact && y > ON) bar.classList.add('is-compact');
-      else if (compact && y < OFF) bar.classList.remove('is-compact');
-      // The way back appears at the same moment the top stops being one flick
-      // away, which is the same threshold the bar collapses on.
-      if (top) top.hidden = y <= ON;
-    };
-
-    top?.addEventListener('click', () => {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      document.querySelector('h1')?.focus?.();
-    });
-
-    const schedule = () => {
-      if (ticking) return;
-      ticking = true;
-      requestAnimationFrame(apply);
-    };
-
-    window.addEventListener('scroll', schedule, { passive: true });
-
-    // Belt and braces, because each of these has been seen doing nothing. In one
-    // embedded webview the scroll event never fired at all while window.scrollY
-    // moved from 0 to 1768; in the same view an IntersectionObserver delivered no
-    // callback either, not even the initial one every observer owes you. Either
-    // mechanism alone is a bar that silently stops collapsing, and they both just
-    // call apply(), which is idempotent.
-    if ('IntersectionObserver' in window) {
-      const probe = document.createElement('div');
-      probe.setAttribute('aria-hidden', 'true');
-      probe.style.cssText = 'position:absolute;top:0;left:0;width:1px;height:80px;pointer-events:none;visibility:hidden';
-      document.body.prepend(probe);
-      new IntersectionObserver(schedule, { threshold: [0, 1] }).observe(probe);
-    }
-
-    apply();
-  }
-
-  // The three panels under the toolbar are one at a time. Opening the order
-  // closes the search, because two of them stacked is the vertical space this
-  // layout exists to save, and because only one of them is ever being used.
-  //
-  // A panel holding a value never closes on its own. A query still filtering the
-  // feed, or an order that is not the default, with its control put away is
-  // state the reader cannot see, which is the failure the filter count exists to
-  // avoid. Those keep a dot on their icon instead.
-  const PANELS = [
-    { btn: 'search-toggle', panel: 'panel-search', held: () => Boolean(state.q) },
-    { btn: 'order-toggle', panel: 'panel-order', held: () => state.order !== 'latest' },
-    { btn: 'filters-toggle', panel: 'more', held: () => hiddenFilterCount() > 0 },
-  ];
-
-  function syncTools() {
-    for (const { btn, panel, held } of PANELS) {
-      const b = $(btn);
-      const p = $(panel);
-      if (!b || !p) continue;
-      const open = panel === 'more' ? p.open : !p.hidden;
-      b.setAttribute('aria-expanded', String(open));
-      // The icons are not on screen at desktop widths; their dots would be a
-      // claim about state nobody can see.
-      b.hidden = roomy() && ALWAYS_OPEN.includes(panel);
-      const dot = b.querySelector('.tool-dot');
-      if (dot) dot.hidden = !held();
-    }
-  }
-
-  // On a desktop the search box and the order select are not a panel to be opened
-  // - they are simply on the bar, next to a Filters disclosure that says its own
-  // name. Behind an icon they cost three clicks to reach a checkbox on 1032px of
-  // empty row, which is a phone constraint enforced on a screen that does not
-  // have it. Only `more` still opens and closes there, because the filter grid is
-  // genuinely a lot and nobody needs it open by default.
-  const roomy = () => window.matchMedia('(min-width: 1024px)').matches;
-  const ALWAYS_OPEN = ['panel-search', 'panel-order'];
-
-  // The `hidden` attribute is how these panels are closed, and app.css backs it
-  // with `[hidden] { display: none !important }`. That rule is right - a thing
-  // marked hidden should be hidden - so the fix is to stop marking them, not to
-  // out-shout it from a media query.
-  function applyControlLayout() {
-    for (const id of ALWAYS_OPEN) {
-      const p = $(id);
-      if (p) p.hidden = roomy() ? false : p.hidden;
-    }
-    if (roomy()) document.querySelector('.controls')?.classList.remove('has-panel');
-    syncTools();
-  }
-
-  function openPanel(which) {
-    for (const { btn, panel } of PANELS) {
-      const p = $(panel);
-      if (!p) continue;
-      const on = panel === which;
-      if (panel === 'more') p.open = on;
-      else if (roomy() && ALWAYS_OPEN.includes(panel)) p.hidden = false;
-      else p.hidden = !on;
-      if (on) document.querySelector('.controls')?.classList.add('has-panel');
-    }
-    if (!which) document.querySelector('.controls')?.classList.remove('has-panel');
-    syncTools();
-  }
-
-  function bindTools() {
-    for (const { btn, panel } of PANELS) {
-      const b = $(btn);
-      if (!b) continue;
-      b.addEventListener('click', () => {
-        const p = $(panel);
-        const open = panel === 'more' ? p.open : !p.hidden;
-        openPanel(open ? null : panel);
-        if (!open) p.querySelector('input, select, button')?.focus();
-      });
-    }
-
-    // Escape closes whatever is open and puts focus back on the icon that opened
-    // it, rather than leaving it inside a panel that is no longer there.
-    document.addEventListener('keydown', (ev) => {
-      if (ev.key !== 'Escape') return;
-      const open = PANELS.find(({ panel }) => {
-        const p = $(panel);
-        return p && (panel === 'more' ? p.open : !p.hidden);
-      });
-      if (!open) return;
-      openPanel(null);
-      $(open.btn).focus();
-    });
-
-    $('filters-done')?.addEventListener('click', () => { openPanel(null); $('filters-toggle').focus(); });
-
-    // A window dragged across the breakpoint has to arrive in the right state,
-    // not the state it was in on the other side of it.
-    window.matchMedia('(min-width: 1024px)').addEventListener('change', applyControlLayout);
-    applyControlLayout();
-  }
-
-  // Sections, the theme and the build line: read once, then never again. Behind
-  // the menu they cost one row instead of three.
-  // Exposed so the account control in the top bar can open the same menu rather
-  // than growing a second panel of its own. One place holds the account actions.
-  let openMenu = () => {};
-
-  // ------------------------------------------------------------ return reminder
-
-  // What the prompt leaves behind. A reader who was asked once and came back
-  // without a profile is reading a feed ranked against somebody else's taste,
-  // and the likeliest reason is that they were mid-something and closed the
-  // dialog rather than that they weighed it and declined. So it is said again,
-  // quietly, in the flow rather than over the top of anything.
-  //
-  // Only from the second visit on: `promptSpentBefore` is read at boot, before
-  // bindFirstRun can write the key, so dismissing the dialog does not raise a
-  // banner in its place in the same breath.
-  //
-  // Hiding lasts the visit, in sessionStorage rather than localStorage. A
-  // permanent dismissal would be the third time this reader is asked to make
-  // the same decision, and a reminder they cannot quiet for an afternoon is
-  // the kind that gets the whole site closed.
-  const REMIND_HIDDEN_KEY = 'litfeed:remind-hidden';
-  let promptSpentBefore = false;
-
-  const remindHidden = () => {
-    try { return sessionStorage.getItem(REMIND_HIDDEN_KEY) === '1'; } catch { return false; }
-  };
-
-  function showRemind() {
-    const el = $('remind');
-    if (!el) return;
-    el.hidden = !(promptSpentBefore && !overridesDirty() && !signedInNow() && !remindHidden());
-  }
-
-  function bindRemind() {
-    $('remind-build').addEventListener('click', () => setView('start'));
-    $('remind-hide').addEventListener('click', () => {
-      try { sessionStorage.setItem(REMIND_HIDDEN_KEY, '1'); } catch { /* private mode: it stays up */ }
-      showRemind();
-    });
-    showRemind();
-  }
-
-  // ------------------------------------------------------ the first-visit prompt
+  // ------------------------------------------------------ asking, once and again
 
   // A stranger's first minute is the only one where interrupting them is
   // affordable, and it is also the one where it is warranted: every number on
@@ -2186,40 +1548,68 @@ import { cleanBlurb } from './lib/blurb.mjs';
   // go looking on the Profile screen. So this says it once, offers the two
   // minutes that fix it, and never asks again.
   //
-  // It leads with the profile rather than with the account because the profile
-  // is what a stranger actually gains, and it needs no account at all - see
-  // lib/onboard.mjs. Signing in is offered underneath, for what it really buys:
-  // not losing the thing they are about to build. Asking for a Google identity
-  // twenty seconds in, before they have got anything, is a worse trade for both
-  // sides than asking once they have something to keep.
+  // It leads with the profile rather than the account because the profile is
+  // what a stranger actually gains, and it needs no account at all. Signing in
+  // is offered underneath for what it really buys: not losing the thing they are
+  // about to build.
   const FIRSTRUN_KEY = 'litfeed:firstrun';
   const FIRSTRUN_MS = 20000;
+  const REMIND_HIDDEN_KEY = 'litfeed:remind-hidden';
+  let promptSpentBefore = false;
 
-  function bindFirstRun() {
+  const remindHidden = () => {
+    try { return sessionStorage.getItem(REMIND_HIDDEN_KEY) === '1'; } catch { return false; }
+  };
+
+  // What the prompt leaves behind. A reader asked once who comes back without a
+  // profile is reading a feed ranked against somebody else's taste, and the
+  // likeliest reason is that they were mid-something and closed the dialog
+  // rather than that they weighed it and declined. So it is said again, quietly,
+  // in the flow rather than over the top of anything.
+  function showRemind() {
+    const el = $('remind');
+    if (!el) return;
+    el.hidden = !(promptSpentBefore && isEmpty(overrides) && !signedInNow()
+      && !remindHidden() && state.view !== 'start');
+  }
+
+  function bindOnboarding() {
+    $('remind-build').addEventListener('click', () => setView('start'));
+    $('remind-hide').addEventListener('click', () => {
+      // The visit, not for ever. A permanent dismissal would be the third time
+      // this reader is asked the same question, and a reminder they cannot quiet
+      // for an afternoon is the kind that gets the site closed.
+      try { sessionStorage.setItem(REMIND_HIDDEN_KEY, '1'); } catch { /* private mode: it stays up */ }
+      showRemind();
+    });
+    showRemind();
+
     const dlg = $('firstrun');
     // No <dialog> support, no prompt. A modal faked out of a div is one more way
     // for a first visit to go wrong, and the app is complete without this.
     if (!dlg || typeof dlg.showModal !== 'function') return;
     if (read(FIRSTRUN_KEY, false) === true) return;
     // A reader who already has an ordering of their own, or is already signed in,
-    // has had this conversation. Write the key rather than leaving a timer running
-    // against a prompt that would be wrong to show.
-    if (overridesDirty() || signedInNow()) { write(FIRSTRUN_KEY, true); return; }
+    // has had this conversation.
+    if (!isEmpty(overrides) || signedInNow()) { write(FIRSTRUN_KEY, true); return; }
 
     // Foreground time, not wall clock. A tab opened and left behind three others
     // has read nothing, and a dialog waiting there is an ambush rather than an
-    // offer. Half-second ticks: twenty seconds does not need better resolution,
-    // and the interval stops for good the moment it fires.
+    // offer.
     let ms = 0;
     let last = Date.now();
     let timer = null;
     const stop = () => { clearInterval(timer); timer = null; };
     const spent = () => { write(FIRSTRUN_KEY, true); stop(); };
 
-    // Every exit routes through `close` - the three buttons, Escape, and the
-    // backdrop - so no path can leave the key unwritten and ask a second time.
+    // The key records that the question was asked, not that it was answered, and
+    // it is written the moment the dialog is shown rather than when it closes.
+    // Escape, the backdrop and the three buttons then all cost nothing to get
+    // right, and there is no exit that can leave a reader open to being asked a
+    // second time. Closing writes it too, which is redundant and free — except
+    // where a `close` event never arrives, which is a real browser and the
+    // reason this does not depend on one.
     dlg.addEventListener('close', spent);
-
     document.addEventListener('visibilitychange', () => { last = Date.now(); });
 
     timer = setInterval(() => {
@@ -2231,255 +1621,301 @@ import { cleanBlurb } from './lib/blurb.mjs';
       stop();
       // Twenty seconds is long enough for the reader to have got there on their
       // own, or to be reading the builder already. Either way the offer is moot.
-      if (state.view === 'start' || overridesDirty() || signedInNow()) { spent(); return; }
+      if (state.view === 'start' || !isEmpty(overrides) || signedInNow()) { spent(); return; }
+      spent();
       dlg.showModal();
     }, 500);
 
     $('firstrun-build').addEventListener('click', () => { dlg.close(); setView('start'); });
-
     // Sign in and go, without waiting on the popup or the round trip. The builder
     // is where they were headed, the profile does not need the account to be
     // built, and a sign-in that fails should leave them building rather than
-    // stranded on an error - $('auth') puts its own message in the toast either
-    // way, and the sync that follows carries whatever they have made by then.
-    $('firstrun-signin').addEventListener('click', () => {
-      dlg.close();
-      $('auth').click();
-      setView('start');
-    });
-
+    // stranded on an error.
+    $('firstrun-signin').addEventListener('click', () => { dlg.close(); doAuth(); setView('start'); });
     $('firstrun-later').addEventListener('click', () => dlg.close());
   }
 
-  function bindMenu() {
-    const btn = $('menu-toggle');
-    const panel = $('menu-panel');
-    if (!btn || !panel) return;
-    const set = (open) => {
-      panel.hidden = !open;
-      btn.setAttribute('aria-expanded', String(open));
-    };
-    openMenu = () => { set(true); $('auth')?.focus(); };
-    btn.addEventListener('click', (ev) => { ev.stopPropagation(); set(panel.hidden); });
-    panel.addEventListener('click', (ev) => { if (ev.target.closest('.btn')) set(false); });
+  // ------------------------------------------------------------ navigation
+
+  const VIEWS = {
+    foryou: viewForYou,
+    feed: viewFeed,
+    all: viewAll,
+    saved: viewSaved,
+    taste: viewTaste,
+    profile: viewProfile,
+    start: viewStart,
+  };
+
+  function setView(view) {
+    if (!VIEWS[view]) return;
+    state.view = view;
+    state.openMenu = null;
+    state.limit = ROW_PAGE;
+    state.allLimit = CARD_PAGE;
+    if (view === 'profile') state.draftWeights = null;
+    savePrefs();
+    closeMenuPanel();
+    render();
+    window.scrollTo({ top: 0, behavior: 'auto' });
+    const heading = $('view-root').querySelector('h1');
+    heading?.setAttribute('tabindex', '-1');
+    heading?.focus?.({ preventScroll: true });
+  }
+
+  function syncChrome() {
+    const n = saved.savedCount(verdicts);
+    for (const el of $$('[data-saved-count]')) { el.textContent = String(n); el.dataset.zero = String(n === 0); }
+    for (const btn of $$('.sidenav-item, .menu-item, .bottom-item')) {
+      if (btn.dataset.view === state.view) btn.setAttribute('aria-current', 'page');
+      else btn.removeAttribute('aria-current');
+    }
+    const dot = $$('[data-profile-dot]')[0];
+    if (dot) dot.hidden = isEmpty(overrides);
+    // The reminder and the at-risk mark both turn on whether this reader has an
+    // ordering of their own, so they are set wherever that can have changed
+    // rather than left until the next thing that happens to repaint the chrome.
+    showRemind();
+    showAuth();
+  }
+
+  function render() {
+    computeStats();
+    const root = $('view-root');
+    root.innerHTML = `<div class="view">${VIEWS[state.view]()}</div>`;
+    bindJackets(root);
+    syncChrome();
+    // A dossier left open must show the state the action just produced.
+    const openId = dossierOpenId();
+    if (openId) {
+      const box = $('dossier');
+      const top = box.scrollTop;
+      box.innerHTML = dossierHtml(FEED.books.find((x) => x.id === openId));
+      bindJackets(box);
+      box.scrollTop = top;
+    }
+  }
+
+  function closeMenuPanel() {
+    $('menu-panel').hidden = true;
+    $('menu-toggle').setAttribute('aria-expanded', 'false');
+    $('menu-toggle').querySelector('use').setAttribute('href', '#i-menu');
+  }
+
+  // ------------------------------------------------------------ events
+
+  function actionsFrom(el) {
+    const btn = el.closest('[data-action]');
+    return btn ? { btn, action: btn.dataset.action } : null;
+  }
+
+  function bindGlobal() {
     document.addEventListener('click', (ev) => {
-      if (panel.hidden) return;
-      if (ev.target.closest('.dock')) return;
-      // The account button opens this panel, so the same click must not close it
-      // again on its way back up.
-      if (ev.target.closest('#account')) return;
-      set(false);
-    });
-    document.addEventListener('keydown', (ev) => {
-      if (ev.key === 'Escape' && !panel.hidden) { set(false); btn.focus(); }
-    });
-    set(false);
-  }
+      const nav = ev.target.closest('[data-view]');
+      if (nav && !nav.dataset.action) {
+        ev.preventDefault();
+        setView(nav.dataset.view);
+        return;
+      }
 
-  function bindDisclosure() {
-    const more = document.getElementById('more');
-    more.open = false;
+      const hit = actionsFrom(ev.target);
+      if (!hit) {
+        // An outside click closes an open sort or filter menu, which is what a
+        // menu is expected to do; nothing else on the page is dismissible.
+        if (state.openMenu && !ev.target.closest('[data-pop]')) { state.openMenu = null; render(); }
+        return;
+      }
+      const { btn, action } = hit;
 
-    // The panel is most of the screen when it is open, and the bar it lives in is
-    // sticky, so the summary scrolled away and left no way back out. Three ways
-    // out now: the summary itself, a Done button at the foot of the panel, and
-    // Esc. The bar also stops being sticky while the panel is open, so the page
-    // behind it is not pinned under a control surface.
-    more.addEventListener('toggle', () => {
-      document.querySelector('.controls')?.classList.toggle('is-open', more.open);
-      syncTools();
-    });
-  }
-
-  // A directory of every tag carried by more than one book, so the taxonomy is
-  // browsable rather than only discoverable by spotting a chip on a row.
-  const KIND_ORDER = ['genre', 'subject', 'period', 'form', 'prose', 'tone', 'scale', 'press', 'imprint', 'attention', 'question', 'rule', 'caveat'];
-  function buildTagDirectory() {
-    const shared = (FEED.tags || []).filter((t) => t.count > 1);
-    const byKind = new Map();
-    for (const t of shared) {
-      if (!byKind.has(t.kind)) byKind.set(t.kind, []);
-      byKind.get(t.kind).push(t);
-    }
-    const order = KIND_ORDER.filter((k) => byKind.has(k)).concat([...byKind.keys()].filter((k) => !KIND_ORDER.includes(k)));
-    $('tag-dir').innerHTML = order.map((kind) => `
-      <div class="tag-group">
-        <span class="legend">${esc(kind)}</span>
-        <div class="chips">${byKind.get(kind).map((t) =>
-          `<button class="tag-chip k-${esc(t.kind)}" data-tag="${esc(t.id)}">${esc(t.label)}<span class="n">${t.count}</span></button>`).join('')}</div>
-      </div>`).join('');
-    $('tag-dir').addEventListener('click', (ev) => {
-      const chip = ev.target.closest('.tag-chip');
-      if (!chip) return;
-      state.tag = chip.dataset.tag === state.tag ? null : chip.dataset.tag;
-      savePrefs(); render();
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    });
-  }
-
-  function bindControls() {
-    const rerender = () => { savePrefs(); render(); };
-    let timer;
-    $('q').addEventListener('input', (e) => {
-      state.q = e.target.value.trim();
-      clearTimeout(timer); timer = setTimeout(rerender, 140);
-    });
-    $('order').addEventListener('change', (ev) => {
-      const o = ORDERS[ev.target.value] || ORDERS.latest;
-      Object.assign(state, { order: ev.target.value, ...o });
-      savePrefs(); render();
-    });
-    for (const [id, key] of []) {
-      $(id).addEventListener('change', (e) => { state[key] = e.target.value; rerender(); });
-    }
-    $('minPages').addEventListener('change', (e) => { state.minPages = Number(e.target.value) || null; rerender(); });
-    $('minScore').addEventListener('change', (e) => { state.minScore = Number(e.target.value) || null; rerender(); });
-    $('recToggle').addEventListener('click', () => { state.recommendedOnly = !state.recommendedOnly; rerender(); });
-    for (const [id, key] of [['fWindow', 'window'], ['fNonfiction', 'nonfiction'], ['fIdentity', 'identity'], ['fPenalised', 'penalised'], ['fGroup', 'group'], ['fUnseen', 'unseen']]) {
-      $(id).addEventListener('change', (e) => { state[key] = e.target.checked; rerender(); });
-    }
-    $('reset').addEventListener('click', resetFilters);
-
-    $('export').addEventListener('click', () => {
-      const rows = Object.entries(verdicts).map(([id, record]) => {
-        const { verdict, savedAt } = record;
-        const e = FEED.books.find((x) => x.id === id);
-        return e ? {
-          verdict, savedAt, title: e.book.title, author: e.book.author, year: e.book.bookYear,
-          isbn13: e.book.isbn13, isbn10: e.book.isbn10,
-          pages: e.book.pages, publisher: e.book.publisher,
-          evidenceStatus: scoreStatus(e), score: isScored(e) ? e.score.total : null,
-          dimensions: isScored(e)
-            ? Object.fromEntries(Object.values(e.score.dimensions).map((d) => [d.dimension, d.score]))
-            : {},
-          sources: e.sources, reviews: e.mentions.map((m) => m.reviewUrl),
-        } : { verdict, savedAt, id };
-      });
-      const blob = new Blob([JSON.stringify({ exported: new Date().toISOString(), profileRevision: FEED.profileRevision, verdicts: rows }, null, 2)], { type: 'application/json' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `reading-verdicts-${new Date().toISOString().slice(0, 10)}.json`;
-      a.click();
-      URL.revokeObjectURL(a.href);
+      switch (action) {
+        case 'open': ev.preventDefault(); openDossier(btn.dataset.id); break;
+        case 'close-dossier': closeDossier(); break;
+        case 'save': toggleSave(btn.dataset.id); break;
+        case 'pass': passBook(btn.dataset.id); break;
+        case 'go': setView(btn.dataset.view); break;
+        case 'menu':
+          state.openMenu = state.openMenu === btn.dataset.menu ? null : btn.dataset.menu;
+          render();
+          $$('[data-menu]').find((b) => b.dataset.menu === state.openMenu)?.focus();
+          break;
+        case 'sort': state.sort = btn.dataset.value; state.openMenu = null; savePrefs(); render(); break;
+        case 'scope':
+          if (state.view === 'all') state.allScope = btn.dataset.value;
+          else state.scope = btn.dataset.value;
+          state.openMenu = null; savePrefs(); render();
+          break;
+        case 'toggle': state[btn.dataset.value] = !state[btn.dataset.value]; savePrefs(); render(); break;
+        case 'clear':
+          state.q = ''; state.recommendedOnly = false; state.shortOnly = false;
+          state.scope = 'any'; state.allScope = 'any';
+          savePrefs(); render();
+          break;
+        case 'more-rows': state.limit += ROW_PAGE; render(); break;
+        case 'more-cards': state.allLimit += CARD_PAGE; render(); break;
+        case 'save-profile': saveProfile(); break;
+        case 'guardrail': toggleGuardrail(Number(btn.dataset.guardrail)); break;
+        case 'penalty': togglePenalty(btn.dataset.penalty); break;
+        case 'export': exportVerdicts(); break;
+        case 'build-profile': applyBuiltProfile(); break;
+        case 'reads':
+          answers.reads = btn.dataset.value;
+          // Switching to fiction drops the subject chips, so any that were picked
+          // have to go with them rather than sit in the profile unseen.
+          {
+            const keep = new Set(chipsFor(answers.reads).map((c) => `${c.dim}:${c.band}`));
+            answers.liked = answers.liked.filter((k) => keep.has(k));
+            answers.disliked = answers.disliked.filter((k) => keep.has(k));
+          }
+          render();
+          break;
+        case 'pick': {
+          const { which, key } = btn.dataset;
+          const list = answers[which];
+          const i = list.indexOf(key);
+          if (i >= 0) list.splice(i, 1); else list.push(key);
+          // A band cannot be both liked and disliked, so picking one side drops
+          // the other rather than letting the two overrides fight.
+          const other = which === 'liked' ? 'disliked' : 'liked';
+          answers[other] = answers[other].filter((k) => k !== key);
+          render();
+          break;
+        }
+        case 'satire': answers.satire = !answers.satire; render(); break;
+        case 'buy':
+          write('litfeed:last-retailer', btn.dataset.retailer);
+          analytics.track('retailer_opened', { bookId: btn.dataset.id, retailer: btn.dataset.retailer, resolution: btn.dataset.resolution });
+          break;
+        default: break;
+      }
     });
 
-    $('sources-info').addEventListener('click', () => {
-      const off = FEED.sources.filter((s) => !s.enabled);
-      const on = FEED.sources.filter((s) => s.enabled);
-      alert(`Reading from ${on.length} publications:\n${on.map((s) => `  ${s.name}`).join('\n')}\n\nNot reading from ${off.length}:\n${off.map((s) => `  ${s.name} — ${s.disabledReason}`).join('\n')}`);
+    document.addEventListener('change', (ev) => {
+      const el = ev.target;
+      if (el.dataset?.bandDim) setBand(el.dataset.bandDim, el.dataset.bandId, el.value);
     });
 
-    $('view-feed').addEventListener('click', () => setView('feed'));
-    for (const b of document.querySelectorAll('#desknav [data-view]')) {
-      b.addEventListener('click', () => setView(b.dataset.view));
-    }
-    $('view-shelves').addEventListener('click', () => setView('shelves'));
-    $('view-all').addEventListener('click', () => setView('all'));
-    $('to-all')?.addEventListener('click', () => { state.allMode = 'shelves'; state.allScope = 'any'; setView('all'); });
-    $('all-as-shelves')?.addEventListener('click', () => { state.allMode = 'shelves'; savePrefs(); render(); });
-    $('all-as-list')?.addEventListener('click', () => { state.allMode = 'list'; savePrefs(); render(); });
-    for (const b of document.querySelectorAll('.allbar [data-scope]')) {
-      b.addEventListener('click', () => { state.allScope = b.dataset.scope; savePrefs(); render(); });
-    }
-    $('view-saved').addEventListener('click', () => setView('saved'));
-    $('view-taste').addEventListener('click', () => setView('taste'));
-    $('view-profile').addEventListener('click', () => setView('profile'));
-    $('view-start').addEventListener('click', () => setView('start'));
-    $('go-home').addEventListener('click', () => {
-      setView('feed');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+    // Search filters as the reader types. The field is re-created on every
+    // render, so the caret and the focus are restored by hand.
+    document.addEventListener('input', (ev) => {
+      if (ev.target.id === 'q') {
+        // The whole view redraws, which destroys the field being typed into, so
+        // the caret is carried across by hand rather than snapped to the end —
+        // otherwise editing the middle of a query throws you to the end of it.
+        const at = ev.target.selectionStart;
+        const end = ev.target.selectionEnd;
+        state.q = ev.target.value;
+        state.limit = ROW_PAGE;
+        state.allLimit = CARD_PAGE;
+        render();
+        const field = $('q');
+        if (field) { field.focus(); try { field.setSelectionRange(at, end); } catch { /* not selectable */ } }
+        return;
+      }
+      if (ev.target.dataset.weight) {
+        const w = draft();
+        w[ev.target.dataset.weight] = Number(ev.target.value);
+        // Redrawing on every pixel of a drag would lose the pointer, so only the
+        // two numbers that have to keep up are written directly.
+        const label = ev.target.previousElementSibling?.querySelector('b');
+        if (label) label.textContent = String(w[ev.target.dataset.weight]);
+        ev.target.setAttribute('aria-valuetext', `${w[ev.target.dataset.weight]} of 100 points`);
+        const total = draftTotal();
+        const el = $('weights-total');
+        if (el) {
+          el.textContent = `${total} / 100 points ${total === 100 ? 'total' : '— must total 100'}`;
+          el.dataset.over = String(total !== 100);
+        }
+        const save = document.querySelector('[data-action="save-profile"]');
+        if (save) save.disabled = total !== 100;
+      }
     });
-    $('fTune').addEventListener('change', (ev) => { state.tune = ev.target.checked; rerender(); });
-    $('savedSort').addEventListener('change', (ev) => {
-      state.savedSort = ev.target.value;
-      savePrefs();
-      renderSaved();
-      analytics.track('saved_books_viewed',
-        { count: saved.savedCount(verdicts), sort: state.savedSort });
+
+    $('menu-toggle').addEventListener('click', () => {
+      const panel = $('menu-panel');
+      const open = panel.hidden;
+      panel.hidden = !open;
+      $('menu-toggle').setAttribute('aria-expanded', String(open));
+      $('menu-toggle').querySelector('use').setAttribute('href', open ? '#i-close' : '#i-menu');
     });
+
+    $('auth').addEventListener('click', doAuth);
+    for (const el of $$('[data-auth]')) el.addEventListener('click', doAuth);
+    $('scrim').addEventListener('click', closeDossier);
 
     document.addEventListener('keydown', (ev) => {
-      if (ev.key === '/' && state.view === 'feed' && document.activeElement !== $('q')) { ev.preventDefault(); $('q').focus(); }
-      if (ev.key !== 'Escape') return;
-      // The chooser is the innermost thing open, so it closes first.
-      if (openChooser) { const btn = openChooser; closeChooser(); btn.focus(); return; }
-      if (openRow) { openRow.click(); openRow.focus(); }
+      if (ev.key === 'Escape') {
+        if (!$('dossier').hidden) { closeDossier(); return; }
+        if (state.openMenu) { state.openMenu = null; render(); return; }
+        if (!$('menu-panel').hidden) { closeMenuPanel(); $('menu-toggle').focus(); }
+        return;
+      }
+      // Focus stays inside the dossier while it is open. Tab wraps at both ends.
+      if (ev.key === 'Tab' && !$('dossier').hidden) {
+        const box = $('dossier');
+        const focusable = $$('a[href], button:not([disabled]), input, [tabindex]:not([tabindex="-1"])', box)
+          .filter((el) => el.offsetParent !== null);
+        if (!focusable.length) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (!ev.shiftKey && document.activeElement === last) { ev.preventDefault(); first.focus(); }
+        else if (ev.shiftKey && document.activeElement === first) { ev.preventDefault(); last.focus(); }
+        else if (!box.contains(document.activeElement)) { ev.preventDefault(); first.focus(); }
+      }
     });
+
+    // Firebase takes a round trip to answer. A reader who never signed in loads
+    // nothing at all: watch() returns immediately.
+    sync.watch((u, { authoritative } = {}) => {
+      user = u;
+      if (!u && authoritative) { write(sync.RETURNING_KEY, false); rememberAccount(null); }
+      else if (u) rememberAccount(u);
+      showAuth({ failing: !u && !authoritative });
+      if (u) { syncNow(); render(); }
+    }, { returning: read(sync.RETURNING_KEY, false) === true });
   }
 
   // ------------------------------------------------------------ boot
 
   function skeleton() {
-    $('feed-body').innerHTML = Array.from({ length: 6 }, () => `
-      <div class="skeleton"><div class="sk num"></div>
-      <div><div class="sk line w40"></div><div class="sk line w70"></div><div class="sk line w90"></div></div></div>`).join('');
+    $('view-root').innerHTML = `<div class="view">${Array.from({ length: 4 }, () => `
+      <div class="skeleton"><div class="sk-cover"></div>
+      <div><div class="sk line w40"></div><div class="sk line w90"></div><div class="sk line w70"></div></div></div>`).join('')}</div>`;
   }
 
-  function failure(message, detailText) {
-    $('feed-body').innerHTML = `<div class="panel">
-      <h2>${esc(message)}</h2>
-      <p>${detailText}</p>
-    </div>`;
-    $('status').textContent = message;
+  function failure(message, detail) {
+    $('view-root').innerHTML = `<div class="panel panel-empty"><h2>${esc(message)}</h2><p>${detail}</p></div>`;
   }
 
   async function boot() {
-    initTheme();
     skeleton();
     let res;
     try {
       res = await fetch('data/feed.json', { cache: 'no-cache' });
     } catch {
       failure('The feed could not be loaded',
-        `Opening <code>index.html</code> straight off disk blocks the fetch. Run <code>npm start</code> in <code>apps/lit-feed</code> and use the address it prints.`);
+        'Opening <code>index.html</code> straight off disk blocks the fetch. Serve the folder over HTTP and use the address it prints.');
       return;
     }
-    if (!res.ok) {
-      failure('No feed has been built yet',
-        `Run <code>npm run build</code> in <code>apps/lit-feed</code>. It reads the publications, resolves each review to a book and scores it, then writes <code>web/data/feed.json</code>.`);
-      return;
-    }
+    if (!res.ok) { failure('No feed has been built yet', 'Run the build; it writes <code>data/feed.json</code>.'); return; }
     FEED = await res.json();
-    if (!FEED.books?.length) {
-      failure('The feed is empty',
-        `The build ran but found nothing. Check the source report it printed — a publication may have changed its feed.`);
-      return;
-    }
+    if (!FEED.books?.length) { failure('The feed is empty', 'The build ran but found nothing. Check the source report it printed.'); return; }
 
-    $('built').textContent = `built ${relative(FEED.builtAt)} · ${FEED.books.length} books from ${FEED.books.reduce((n, b) => n + b.reviewCount, 0)} reviews`;
-    // The dock used to carry "54 publications, the last 10 years, scored out of
-    // ten" here, which is the same standing sentence the note above the feed
-    // carries. That was the third copy of it and the last one left.
-    // The footer is the methodology, and only that. Its first sentence used to
-    // restate the standing line above the feed, which is the third copy of one
-    // sentence on a single screen. A reader who has scrolled this far knows what
-    // the app is; what they do not know is how much to trust a number.
-    $('foot-note').innerHTML = `Scored against revision ${FEED.profileRevision} of the reading taste profile; ${FEED.recommendAt} and above is tagged recommended. A score is a keyword reading of review prose, so treat it as triage rather than as a reading of the book — every dimension shows the terms it fired on, which is what makes a wrong score visible as a wrong score. Saving and passing writes to this browser, and to your own Google account if you sign in, which is off unless you ask for it. Export it to feed the next revision of the profile.`;
-
-    startAtTop();
     loadPrefs();
     loadOverrides();
     retune();
-    $('savedSort').value = state.savedSort;
-    buildChips();
-    buildTagDirectory();
-    bindControls();
-    bindDisclosure();
-    bindTopbar();
-    bindTools();
-    bindMenu();
-    bindAuth();
-    // Collections is the landing view. The feed is the app and stays one tap away,
-    // but 874 rows ordered by date is not an opening screen - it is what you scroll
-    // to once you know what you are looking for. A reader who was last on some other
-    // screen is returned to it, because the view is a preference like any other.
-    setView(state.view || 'shelves');
-    // Read before bindFirstRun, which writes this key: the reminder is for the
+
+    $('profile-rev').textContent = String(FEED.profileRevision);
+    $('threshold-line').textContent = `${threshold()}+ is recommended`;
+    $('rebuilt-line').textContent = rebuiltPhrase(FEED.builtAt);
+
+    bindGlobal();
+    showAuth();
+    render();
+
+    // Read before bindOnboarding, which writes this key: the reminder is for the
     // visit after the one that spent the prompt, not for the same one.
     promptSpentBefore = read(FIRSTRUN_KEY, false) === true;
-    // Last, and after setView, so it can see which screen the reader landed on.
-    bindFirstRun();
-    bindRemind();
+    bindOnboarding();
   }
 
   boot();
