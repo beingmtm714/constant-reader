@@ -18,7 +18,7 @@ import { READS, REFUSALS, MIN_PICKS, answersReady, chipsFor, groupedChipsFor, bu
 import * as sync from './lib/sync.mjs';
 import * as push from './lib/push.mjs';
 import { jacketFor } from './lib/jacket.mjs';
-import { cleanBlurb } from './lib/blurb.mjs';
+import { cleanBlurb, bestBlurb } from './lib/blurb.mjs';
 import { coverUrl, coverSrcSet, WIDTHS as COVER } from './lib/cover.mjs';
 import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH_EXAMPLES } from './lib/search.mjs';
 
@@ -115,6 +115,11 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     // a good question.
     sq: '',
     searchLimit: SEARCH_PAGE,
+    // What has actually been searched for, as against what is in the field. The
+    // two differ while a keystroke is settling, and the results on screen belong
+    // to the first of them.
+    sqRun: '',
+    searching: false,
     openMenu: null,
     draftWeights: null,
   };
@@ -597,13 +602,19 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     .replace(/[\u2018\u2019]/g, "'").replace(/[\u201c\u201d]/g, '"')
     .replace(/[^a-z0-9]+/gi, ' ').trim().toLowerCase().slice(0, 120);
 
-  function blurbOf(e, max = 320) {
-    const m = e.mentions.find((x) => (x.standfirst || '').trim()) || e.mentions.find((x) => (x.excerpt || '').trim());
-    const text = cleanBlurb(m?.standfirst || m?.excerpt || '', { title: e.book.title, author: e.book.author });
-    if (!text) return '';
-    if (text.length <= max) return text;
-    return `${text.slice(0, max).replace(/\s+\S*$/, '')}…`;
-  }
+  // The best of the texts on the record, rather than the first one that is not
+  // empty. Two things were wrong with taking the first. A few publications
+  // syndicate their own page furniture inside the description field, so the row
+  // printed a section label, a redacted address and a timestamp. And 588 of the
+  // books carry a publisher's description that was never displayed at all, so a
+  // book whose only standfirst was a masthead said "the reviews of it are
+  // indexed here without a summary" with a good paragraph sitting unused.
+  //
+  // The critic still wins wherever the critic wrote a sentence. Publisher copy
+  // is written to sell and reads like it, so it is the fallback rather than the
+  // preference — and it stays out of the scoring entirely, which is the line
+  // that matters.
+  const blurbOf = (e, max = 320) => bestBlurb(e, { max }).text;
 
   // ------------------------------------------------------------ covers
 
@@ -798,7 +809,7 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
   }
 
   function feedRow(row, i) {
-    const { e, s, note } = row;
+    const { e, s, note, hit } = row;
     const b = e.book;
     const status = scoreStatus(e);
     const scored = status === 'scored';
@@ -815,7 +826,15 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
 
     // Always at least one: tagsFor leads with the fiction/nonfiction label, which
     // every book has whether or not anything else fired.
-    const tags = tagsFor(e).slice(0, 4);
+    //
+    // In a search result the tags the query matched come first and are marked.
+    // They used to be listed again on a line of their own above a different four
+    // tags, and two unlabelled lists side by side read as a contradiction rather
+    // than as an explanation.
+    const all = tagsFor(e);
+    const tags = hit?.size
+      ? [...all.filter((t) => hit.has(t.label)), ...all.filter((t) => !hit.has(t.label))].slice(0, 5)
+      : all.slice(0, 4);
 
     // The whole row opens the book. Tapping a card and having nothing happen is
     // the commonest way this app gets reported broken: the title and the cover
@@ -847,7 +866,7 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
           : 'Known from a catalogue listing alone.')}</p>` : ''}
         ${note ? `<p class="row-match">${ico('search')}<span>${esc(note)}</span></p>` : ''}
         ${tags.length ? `<div class="tags">${tags.map((t) => `<button class="tag" data-action="tag" data-tag="${esc(t.label)}" data-kind="${esc(t.kind)}"
-          aria-label="Show other books tagged ${esc(t.label)}">${esc(t.label)}</button>`).join('')}</div>` : ''}
+          ${hit?.has(t.label) ? 'data-hit="true" ' : ''}aria-label="${hit?.has(t.label) ? `${esc(t.label)}, which your search asked for. ` : ''}Show other books tagged ${esc(t.label)}">${esc(t.label)}</button>`).join('')}</div>` : ''}
         <button class="row-why" data-action="open" data-id="${esc(e.id)}">${ico('sparkles')}${
           !hasProfile() ? 'What this book is'
           : scored ? `Why it’s a ${shownScore(e, s).toFixed(1)}` : 'Why there’s no score'}${ico('arrow')}</button>
@@ -1225,7 +1244,7 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
   const searchIdx = () => (searchIndex ||= buildSearchIndex(FEED.books));
 
   function viewSearch() {
-    const q = state.sq.trim();
+    const q = state.sqRun.trim();
     // Fit is what the reader's own profile makes of a book, and it is passed in
     // only when there is a reader. Without one the ranking is relevance alone —
     // a stranger's search must not be ordered by somebody else's taste, which is
@@ -1251,16 +1270,17 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
         aside: found ? `${found.total} match${found.total === 1 ? '' : 'es'}` : '',
       })}
 
-      <div class="asksearch">
+      <form class="asksearch" id="askform" role="search">
         <label class="sr-only" for="sq">Describe the book you want</label>
-        <div class="asksearch-field">
-          ${ico('search')}
+        <div class="asksearch-field" data-busy="${state.searching}">
+          ${state.searching ? `<span class="asksearch-spin" role="status" aria-label="Searching"></span>` : ico('search')}
           <input type="search" id="sq" value="${esc(state.sq)}" autocomplete="off" spellcheck="false"
+            enterkeyhint="search" aria-busy="${state.searching}"
             placeholder="a contemporary Great American Novel">
-          ${state.sq ? `<button class="asksearch-clear" data-action="clear-search" aria-label="Clear the search">${ico('close')}</button>` : ''}
+          ${state.sq ? `<button type="button" class="asksearch-clear" data-action="clear-search" aria-label="Clear the search">${ico('close')}</button>` : ''}
         </div>
-        <p class="asksearch-note">Plain sentences work. So do lengths, years, “in translation”, and “like <em>Trust</em>”.</p>
-      </div>
+        <p class="asksearch-note">Plain sentences work. So do lengths, years, “in translation”, and “like <em>Trust</em>”. Press return to close the keyboard.</p>
+      </form>
 
       ${!q ? `<div class="asksearch-eg">
         <p class="eyebrow">Try one of these</p>
@@ -1279,8 +1299,65 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
            <button class="btn btn-solid" data-action="clear-search">Start again</button></div>`) : ''}`;
   }
 
+  // Running a search without freezing the field being typed into.
+  //
+  // Two costs, and they are different. The BM25 index is built once over the
+  // whole archive and takes 447ms at 823 books — a visible stall, and it will
+  // grow with the corpus. Each search after that is 17ms. Neither should happen
+  // on the keystroke: the field has to keep up with a thumb.
+  //
+  // So a keystroke only records what was typed and schedules. The scheduler
+  // waits for the typing to settle, puts the spinner up, yields a frame so the
+  // browser can actually paint it — a spinner rendered in the same task as the
+  // work it describes is never seen — and then searches.
+  let searchTimer = null;
+  const SETTLE = 180;
+
+  function queueSearch({ now = false } = {}) {
+    clearTimeout(searchTimer);
+    const run = () => {
+      searchTimer = null;
+      const q = state.sq.trim();
+      if (q === state.sqRun) { setSearching(false); return; }
+      // An index that already exists costs nothing, so the spinner is only put
+      // up for the build. Showing it for 17ms is a flash, which reads as a fault.
+      const heavy = !searchIndex && q;
+      if (heavy) setSearching(true);
+      let ran = false;
+      const go = () => {
+        if (ran) return;
+        ran = true;
+        state.sqRun = q;
+        state.searchLimit = SEARCH_PAGE;
+        state.searching = false;
+        render();
+      };
+      if (!heavy) { go(); return; }
+      // Two frames, so the spinner is painted before the work that blocks the
+      // paint begins. With a timer behind it, because requestAnimationFrame does
+      // not fire in a backgrounded tab — switch away mid-search and the search
+      // would never finish, and switching back would show a spinner over an
+      // empty page for as long as the tab stayed open.
+      requestAnimationFrame(() => requestAnimationFrame(go));
+      setTimeout(go, 120);
+    };
+    if (now) run(); else searchTimer = setTimeout(run, SETTLE);
+  }
+
+  // The field is re-created on every render, so the caret and the focus are put
+  // back by hand — and only while the reader is still in it.
+  function setSearching(on) {
+    if (state.searching === on) return;
+    state.searching = on;
+    const field = $('sq');
+    const at = field?.selectionStart, end = field?.selectionEnd, had = document.activeElement === field;
+    render();
+    const next = $('sq');
+    if (next && had) { next.focus(); try { next.setSelectionRange(at, end); } catch { /* not selectable */ } }
+  }
+
   function searchRow(row, i) {
-    return feedRow({ e: row.e, s: scoreOf(row.e), note: row.why }, i);
+    return feedRow({ e: row.e, s: scoreOf(row.e), note: row.why, hit: new Set(row.matchedTags) }, i);
   }
 
   // What the app understood, in the app's own vocabulary, before any result.
@@ -2533,6 +2610,16 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     // stranded on an error.
     $('firstrun-signin').addEventListener('click', () => { dlg.close(); doAuth(); setView('start'); });
     $('firstrun-later').addEventListener('click', () => dlg.close());
+    // Return runs the search and blurs the field. Blurring is the whole point on
+    // a phone: it is what puts the keyboard away, and until it did, the results
+    // were behind it. `enterkeyhint="search"` labels the key.
+    document.addEventListener('submit', (ev) => {
+      if (ev.target.id !== 'askform') return;
+      ev.preventDefault();
+      $('sq')?.blur();
+      queueSearch({ now: true });
+    });
+
     $('needauth-later').addEventListener('click', () => $('needauth').close());
     // Signing in from the dialog closes it. doAuth is already bound to every
     // [data-auth] control and re-renders on its own.
@@ -2559,6 +2646,8 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     state.limit = ROW_PAGE;
     state.allLimit = CARD_PAGE;
     state.searchLimit = SEARCH_PAGE;
+    clearTimeout(searchTimer);
+    state.searching = false;
     if (view === 'profile') state.draftWeights = null;
     savePrefs();
     closeMenuPanel();
@@ -2709,13 +2798,13 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
         case 'more-rows': state.limit += ROW_PAGE; render(); break;
         case 'more-search': state.searchLimit += SEARCH_PAGE; render(); break;
         case 'clear-search':
-          state.sq = ''; state.searchLimit = SEARCH_PAGE; render();
+          state.sq = ''; state.sqRun = ''; state.searchLimit = SEARCH_PAGE; render();
           $('sq')?.focus();
           announce('Search cleared.');
           break;
         case 'example':
-          state.sq = btn.dataset.q; state.searchLimit = SEARCH_PAGE; render();
-          $('sq')?.focus();
+          state.sq = btn.dataset.q;
+          queueSearch({ now: true });
           break;
         case 'more-cards': state.allLimit += CARD_PAGE; render(); break;
         case 'save-profile': saveProfile(); break;
@@ -2774,13 +2863,8 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     // render, so the caret and the focus are restored by hand.
     document.addEventListener('input', (ev) => {
       if (ev.target.id === 'sq') {
-        const at = ev.target.selectionStart;
-        const end = ev.target.selectionEnd;
         state.sq = ev.target.value;
-        state.searchLimit = SEARCH_PAGE;
-        render();
-        const field = $('sq');
-        if (field) { field.focus(); try { field.setSelectionRange(at, end); } catch { /* not selectable */ } }
+        queueSearch();
         return;
       }
       if (ev.target.id === 'q') {

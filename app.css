@@ -1779,3 +1779,25 @@ button.tag { cursor: pointer; }
 }
 .chip-key-item[data-reads="fiction"]::before { background: var(--oxblood); }
 .chip-key-item[data-reads="nonfiction"]::before { background: var(--lapis-line); }
+
+/* The search field while it is working. The spinner replaces the magnifier
+   rather than sitting beside it, so nothing moves when it appears. */
+.asksearch-spin {
+  flex: none; width: 19px; height: 19px;
+  border: 2px solid var(--hairline-dark);
+  border-top-color: var(--brass);
+  border-radius: 50%;
+  animation: ask-spin 620ms linear infinite;
+}
+@keyframes ask-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .asksearch-spin { animation: none; border-top-color: var(--brass); opacity: .7; }
+}
+.asksearch-field[data-busy="true"] { border-color: var(--brass); }
+
+/* A tag the search asked for. Brass, the same mark the readback panel uses for a
+   band, and it carries the fact in its accessible name as well. */
+.tag[data-hit="true"] {
+  border-color: var(--brass);
+  color: var(--porcelain);
+}
