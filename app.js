@@ -121,6 +121,18 @@ import { cleanBlurb } from './lib/blurb.mjs';
   // full quota both land here, and both mean the save did not happen.
   function persist(key, value) { localStorage.setItem(key, JSON.stringify(value)); }
 
+  function setStatusCard() {
+    const has = hasProfile();
+    $('profile-rev').textContent = has ? String(FEED.profileRevision) : '—';
+    $('profile-rev').parentElement.firstChild.textContent = has ? 'Profile v' : 'No profile yet';
+    if (!has) $('profile-rev').textContent = '';
+    $('threshold-line').textContent = has
+      ? (FEED.recommendShare
+        ? `Top ${Math.round(FEED.recommendShare * 100)}% is recommended`
+        : `${threshold()}+ is recommended`)
+      : `${FEED.books.length} books indexed`;
+  }
+
   function loadPrefs() {
     const p = read(PREFS_KEY, {});
     // Neither `view` nor the two filters are restored, and for one reason: a
@@ -477,6 +489,26 @@ import { cleanBlurb } from './lib/blurb.mjs';
     return `${who}${when}.`;
   }
 
+  // Every row says what the book is, whoever is looking. 27 of the 785 books have
+  // no standfirst anywhere in their mentions — a catalogue listing with a title,
+  // a press and a page count and nothing written about it yet — and those rows
+  // were printing a title and then nothing, which reads as a broken card rather
+  // than as a book nobody has described. This is the sentence they get instead:
+  // provenance and date, which is what is actually known.
+  function describeBook(e, max = 190) {
+    const blurb = blurbOf(e, max);
+    if (blurb) return blurb;
+    const facts = [
+      e.book.publisher || null,
+      e.book.bookYear ? String(e.book.bookYear) : null,
+      e.book.pages ? `${e.book.pages} pages` : null,
+    ].filter(Boolean).join(' · ');
+    const nobody = e.reviewCount > 0
+      ? 'The reviews of it are indexed here without a summary.'
+      : 'Nobody has described it yet — not a critic, and not the author.';
+    return facts ? `${facts}. ${nobody}` : nobody;
+  }
+
   function matchLine(e, s) {
     if (!isScored(e)) {
       return scoreStatus(e) === 'reviewed-unscored'
@@ -686,6 +718,8 @@ import { cleanBlurb } from './lib/blurb.mjs';
       b.pages ? `${b.pages} pp.` : null,
     ].filter(Boolean).join(' · ');
 
+    // Always at least one: tagsFor leads with the fiction/nonfiction label, which
+    // every book has whether or not anything else fired.
     const tags = tagsFor(e).slice(0, 4);
 
     // The whole row opens the book. Tapping a card and having nothing happen is
@@ -712,10 +746,10 @@ import { cleanBlurb } from './lib/blurb.mjs';
         <h3 class="row-title">${esc(b.title)}${
           b.author ? `<span class="row-author">${esc(b.author)}</span>` : ''}</h3>
         <p class="row-meta">${esc(meta)}</p>
-        ${blurbOf(e, 190) ? `<p class="row-blurb">${esc(blurbOf(e, 190))}</p>` : ''}
+        <p class="row-blurb">${esc(describeBook(e, 190))}</p>
         ${!scored && hasProfile() ? `<p class="row-note">${esc(status === 'reviewed-unscored'
-          ? 'Something has been written about this book, but it did not supply enough dependable evidence across the seven dimensions for a number to mean anything.'
-          : 'Known from a catalogue listing alone. Nobody has described it yet — not a critic, and not the author.')}</p>` : ''}
+          ? 'Something has been written about this book, but it did not supply enough dependable evidence across the eight dimensions for a number to mean anything.'
+          : 'Known from a catalogue listing alone.')}</p>` : ''}
         ${tags.length ? `<div class="tags">${tags.map((t) => `<button class="tag" data-action="tag" data-tag="${esc(t.label)}" data-kind="${esc(t.kind)}"
           aria-label="Show other books tagged ${esc(t.label)}">${esc(t.label)}</button>`).join('')}</div>` : ''}
         <button class="row-why" data-action="open" data-id="${esc(e.id)}">${ico('sparkles')}${
@@ -1134,8 +1168,9 @@ import { cleanBlurb } from './lib/blurb.mjs';
         : `<div class="panel panel-empty">
             ${ico('bookmark')}
             <h2>Nothing saved yet</h2>
-            <p>Start with today’s shortlist. One tap keeps a book without interrupting your browse.</p>
-            <button class="btn btn-solid" data-action="go" data-view="foryou">Browse your recommendations ${ico('arrow')}</button>
+            <p>One tap keeps a book without interrupting your browse.</p>
+            <button class="btn btn-solid" data-action="go" data-view="foryou">${
+              hasProfile() ? `Browse your recommendations` : `Browse the archive`} ${ico('arrow')}</button>
           </div>`}`;
   }
 
@@ -2241,6 +2276,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
   }
 
   function render() {
+    setStatusCard();
     computeStats();
     rankAll();
     const root = $('view-root');
@@ -2539,10 +2575,11 @@ import { cleanBlurb } from './lib/blurb.mjs';
     loadOverrides();
     retune();
 
-    $('profile-rev').textContent = String(FEED.profileRevision);
-    $('threshold-line').textContent = FEED.recommendShare
-      ? `Top ${Math.round(FEED.recommendShare * 100)}% is recommended`
-      : `${threshold()}+ is recommended`;
+    // The status card asserts a profile version and a recommend threshold. Both
+    // are true of the build and neither is true of a reader who has not answered
+    // anything, so before there is a profile it reports the archive instead —
+    // which is the thing that does exist.
+    setStatusCard();
     $('rebuilt-line').textContent = rebuiltPhrase(FEED.builtAt);
 
     bindGlobal();
