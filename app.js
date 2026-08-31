@@ -863,20 +863,36 @@ import { cleanBlurb } from './lib/blurb.mjs';
 
   // ------------------------------------------------------------ For you
 
-  function viewForYou() {
-    if (!hasProfile()) {
-      return blankSlate({
-        eyebrow: dateline(),
-        title: 'Your edit, once there is one.',
-        lede: 'This page is the whole point of the app, and it cannot be written until you have said what you like. Nothing here is filled in with anybody else’s taste in the meantime.',
-        becomes: [
-          'One book at the top, chosen for you, with the reasoning shown rather than asserted.',
-          'Four more behind it, and the newest reviews that match what you said.',
-          'A score out of ten on every book, which is a measure of fit with you and means nothing without you.',
-        ],
-      });
+  // Drawn once and kept for the session. A shelf that deals itself a new hand on
+  // every render — and this app re-renders on every save, filter and tag — reads
+  // as a bug rather than as variety, which is the same reason the drawn jackets
+  // are hashed from the book id instead of randomised.
+  let sample = null;
+  function sampleShelf() {
+    if (sample) return sample;
+    const pool = FEED.books.filter((e) => isScored(e) && !passed(e));
+    const picked = [];
+    const taken = new Set();
+    // Sample without replacement from a pool of hundreds; the loop is bounded by
+    // the pool being far larger than what is wanted.
+    while (picked.length < 8 && taken.size < pool.length) {
+      const i = Math.floor(Math.random() * pool.length);
+      if (taken.has(i)) continue;
+      taken.add(i);
+      picked.push(pool[i]);
     }
-    const ranked = edit();
+    sample = picked.map((e) => ({ e, s: scoreOf(e) }));
+    return sample;
+  }
+
+  function viewForYou() {
+    // Without a profile this page shows the app rather than an argument for it:
+    // real books, the real layout, drawn at random. The first-visit prompt
+    // already makes the case for signing in, and a second pitch where the shelf
+    // should be leaves a stranger with nothing to look at. What it does not do
+    // is rank them or score them — a random eight is honestly a random eight,
+    // and calling it an edit would be the borrowed-taste problem again.
+    const ranked = hasProfile() ? edit() : sampleShelf();
     if (!ranked.length) {
       return `${viewHead({ eyebrow: dateline(), title: greeting(), lede: 'Nothing in the current build clears the profile. The archive is still browseable under All books.' })}
         <div class="panel panel-empty"><h2>No edit today</h2>
@@ -897,14 +913,24 @@ import { cleanBlurb } from './lib/blurb.mjs';
       ${viewHead({
         eyebrow: dateline(),
         title: greeting(),
-        lede: `A quiet edit of the books most worth your attention—drawn from ${esc(String(stats.recentReviews))} new reviews, ordered by your taste.`,
+        lede: hasProfile()
+          ? `A quiet edit of the books most worth your attention—drawn from ${esc(String(stats.recentReviews))} new reviews, ordered by your taste.`
+          : `Eight books from the archive, drawn at random. Answer three questions and this page becomes an edit: the same shelf, ordered by what you actually like, with the reasoning shown.`,
       })}
 
       ${spotlight(best)}
 
+      ${hasProfile() ? '' : `<div class="unranked" role="status">
+        <div>
+          <p class="eyebrow">A sample, not a recommendation</p>
+          <p class="unranked-text">Nothing here is chosen for you yet. Reload for a different eight, or tell it what you like and it stops being random.</p>
+        </div>
+        <button class="btn btn-solid" data-action="go" data-view="start">Build your taste profile ${ico('arrow')}</button>
+      </div>`}
+
       <section class="lean" aria-label="What today’s selection leans toward">
         <div class="lean-copy">
-          <p class="eyebrow">Today’s selection leans</p>
+          <p class="eyebrow">${hasProfile() ? 'Today’s selection leans' : 'These eight lean'}</p>
           <p>Toward ${esc(leanPhrase(leans, ranked))}.</p>
         </div>
         <div class="lean-counts">
@@ -915,8 +941,8 @@ import { cleanBlurb } from './lib/blurb.mjs';
       <section aria-labelledby="sel-h">
         <div class="section-head">
           <div>
-            <p class="eyebrow">A considered shelf</p>
-            <h2 id="sel-h">Selected for you</h2>
+            <p class="eyebrow">${hasProfile() ? 'A considered shelf' : 'More from the archive'}</p>
+            <h2 id="sel-h">${hasProfile() ? 'Selected for you' : 'Also on the shelf'}</h2>
           </div>
           <button class="section-head-link" data-action="go" data-view="feed">See the full feed ${ico('arrow')}</button>
         </div>
@@ -957,14 +983,14 @@ import { cleanBlurb } from './lib/blurb.mjs';
         <div class="spotlight-kicker">
           <span class="diamond" aria-hidden="true">◆</span>
           <span>
-            <b>Your best pick</b>
-            <span class="label">Highest fit in today’s edit</span>
+            <b>${hasProfile() ? 'Your best pick' : 'From the archive'}</b>
+            <span class="label">${hasProfile() ? 'Highest fit in today’s edit' : 'Drawn at random until you have a profile'}</span>
           </span>
         </div>
         <h2>${esc(b.title)}</h2>
         ${b.author ? `<p class="spotlight-author">${esc(b.author)}</p>` : ''}
         ${blurbOf(e, 240) ? `<p class="spotlight-blurb">${esc(blurbOf(e, 240))}</p>` : ''}
-        <p class="spotlight-fit">${ico('sparkles')}<span>${esc(caseFor(e, s))}</span></p>
+        <p class="spotlight-fit">${ico('sparkles')}<span>${esc(hasProfile() ? caseFor(e, s) : sourceLine(e))}</span></p>
         <div class="spotlight-actions">
           <button class="btn btn-solid" data-action="open" data-id="${esc(e.id)}">Open the dossier ${ico('arrow')}</button>
           ${saveBtn(e, { label: 'Save for later' })}
@@ -974,7 +1000,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
         <button class="jacket-btn" data-action="open" data-id="${esc(e.id)}" aria-label="Open the dossier for ${esc(b.title)}">
           ${jacket(e)}
         </button>
-        <span class="spotlight-score"><b>${shownScore(e, s).toFixed(1)}</b><span>Your fit</span></span>
+        ${hasProfile() ? `<span class="spotlight-score"><b>${shownScore(e, s).toFixed(1)}</b><span>Your fit</span></span>` : ''}
         <span class="folio">CR / 001</span>
       </div>
     </article>`;
