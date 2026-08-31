@@ -367,6 +367,9 @@ a:hover { text-decoration: underline; }
   color: var(--graphite);
   max-width: 60ch;
 }
+/* Emphasis is a colour here, not a weight: the editorial serif has one weight
+   worth setting and bolding it thickens the page rather than pointing at a word. */
+.view-lede strong { font-weight: 400; color: var(--porcelain); }
 .view-head-aside {
   display: flex; align-items: flex-end; gap: 14px;
   font-family: var(--font-mono); font-size: 9.5px;
@@ -1131,7 +1134,19 @@ input[type="range"]::-moz-range-thumb {
 .start-steps li { margin-top: 5px; }
 .start-steps strong { color: var(--porcelain); font-weight: 400; }
 
-.start-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.start-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+
+/* Eight short lists rather than one long one. The heading is a rule and a label,
+   quiet enough that the chips stay the thing being read. */
+.chip-group { margin-top: 20px; }
+.chip-group:first-of-type { margin-top: 16px; }
+.chip-group-head {
+  display: block;
+  margin: 0;
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--hairline);
+  color: var(--brass);
+}
 .start-chip {
   border: 1px solid var(--hairline-dark);
   border-radius: 2px;
@@ -1154,7 +1169,20 @@ input[type="range"]::-moz-range-thumb {
   gap: 12px; margin-top: 22px; padding-top: 18px;
   border-top: 1px solid var(--hairline);
 }
-.start-foot p { margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted-ink); }
+.start-foot p {
+  display: flex; align-items: center; gap: 7px;
+  margin: 0; font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--muted-ink);
+}
+.start-foot p .ico { width: 13px; height: 13px; }
+
+/* The moment it is enough. A rule turns brass and the count becomes a sentence,
+   so a reader knows they can stop without having to count for themselves. */
+.start-foot[data-ready="true"] { border-top-color: var(--brass); }
+.start-foot[data-ready="true"] p { color: var(--brass); }
+.btn[disabled] { opacity: .45; cursor: not-allowed; }
+.btn[disabled]:hover { border-color: var(--hairline-dark); }
+.btn-solid[disabled]:hover { background: var(--porcelain); border-color: var(--porcelain); }
 
 /* ------------------------------------------------------------ band scores
 

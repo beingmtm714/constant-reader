@@ -14,7 +14,7 @@ import { createAnalytics } from './lib/analytics.mjs';
 import { buildTasteModel, tunedTotal, MIN_SIGNAL, MAX_ADJUSTMENT } from './lib/taste.mjs';
 import { outOfTen, RECOMMEND_AT } from './lib/recommend.mjs';
 import { rescore, isEmpty, bandKey, AVERSION_STRENGTHS, MAX_AVERSIONS, EMPTY as EMPTY_OVERRIDES } from './lib/overrides.mjs';
-import { READS, REFUSALS, chipsFor, buildProfile } from './lib/onboard.mjs';
+import { READS, REFUSALS, MIN_PICKS, answersReady, chipsFor, groupedChipsFor, buildProfile } from './lib/onboard.mjs';
 import * as sync from './lib/sync.mjs';
 import { jacketFor } from './lib/jacket.mjs';
 import { cleanBlurb } from './lib/blurb.mjs';
@@ -1201,19 +1201,26 @@ import { cleanBlurb } from './lib/blurb.mjs';
   let answers = { reads: 'both', liked: [], disliked: [], refused: [], satire: false };
 
   function viewStart() {
-    const chips = (which) => chipsFor(answers.reads).map((c) => {
-      const key = `${c.dim}:${c.band}`;
-      const on = answers[which].includes(key);
-      return `<button class="start-chip" data-action="pick" data-which="${which}" data-key="${esc(key)}" aria-pressed="${on}">${esc(c.label)}</button>`;
-    }).join('');
+    // Grouped under headings in the reader's words. Sixty chips in one run is a
+    // wall nobody reads to the end of; eight short lists can be skimmed and whole
+    // groups skipped by someone who has no opinion about them.
+    const chips = (which) => groupedChipsFor(answers.reads).map((g) => `
+      <div class="chip-group" role="group" aria-labelledby="g-${which}-${esc(cssId(g.dim))}">
+        <p class="label chip-group-head" id="g-${which}-${esc(cssId(g.dim))}">${esc(g.label)}</p>
+        <div class="start-chips">${g.chips.map((c) => {
+          const key = `${c.dim}:${c.band}`;
+          const on = answers[which].includes(key);
+          return `<button class="start-chip" data-action="pick" data-which="${which}" data-key="${esc(key)}" aria-pressed="${on}">${esc(c.label)}</button>`;
+        }).join('')}</div>
+      </div>`).join('');
 
-    const n = answers.liked.length + answers.disliked.length;
+    const ready = answersReady(answers);
 
     return `
       ${viewHead({
         eyebrow: 'Three questions, about two minutes',
         title: 'Make these scores yours.',
-        lede: 'Every number in this feed is one reader’s taste. Answer what you have an opinion about, skip the rest, and the feed re-ranks against yours instead.',
+        lede: `Every number in this feed is one reader’s taste. Pick <strong>${MIN_PICKS}</strong> or more — at least one of them something that puts you off — and the feed re-ranks against yours instead. You can sharpen it any time afterwards on the Profile screen.`,
       })}
 
       <div class="start">
@@ -1229,14 +1236,14 @@ import { cleanBlurb } from './lib/blurb.mjs';
           <p class="eyebrow">Second</p>
           <h2>What do you read for?</h2>
           <p>Anything that makes you want to open a book.</p>
-          <div class="start-chips">${chips('liked')}</div>
+          ${chips('liked')}
         </section>
 
         <section class="start-block">
           <p class="eyebrow">Third, and it matters as much</p>
           <h2>What puts you off?</h2>
           <p>A model with nothing to push against ranks everything alike, so this list is worth as much as the one above it.</p>
-          <div class="start-chips">${chips('disliked')}</div>
+          ${chips('disliked')}
         </section>
 
         <section class="start-block">
@@ -1245,11 +1252,15 @@ import { cleanBlurb } from './lib/blurb.mjs';
           <p>Different from the list above. A dislike is weighed against everything else a book has going for it; this is the thing that closes the book whatever else is true, so it comes off the score at full force.</p>
           <div class="start-chips">${REFUSALS.map((r) => `<button class="start-chip" data-action="refuse"
             data-key="${esc(r.key)}" aria-pressed="${answers.refused.includes(r.key)}">${esc(r.label)}</button>`).join('')}</div>
-          <div class="start-foot">
-            <p>${n ? `${n} answer${n === 1 ? '' : 's'}` : 'Nothing picked yet'}</p>
+          <div class="start-foot" data-ready="${ready.ready}">
+            <p>${ready.ready
+              ? `${ico('check')}Ready — ${ready.picks} answers is enough to re-rank the feed`
+              : ready.needPicks
+                ? `${ready.picks} of ${MIN_PICKS}${ready.needDislikes ? ', and one thing that puts you off' : ''}`
+                : 'One more: something that puts you off'}</p>
             <div class="remind-actions">
               <button class="start-chip" data-action="satire" aria-pressed="${answers.satire}">I like satire and comic novels</button>
-              <button class="btn btn-solid" data-action="build-profile">Build it ${ico('arrow')}</button>
+              <button class="btn btn-solid" data-action="build-profile" ${ready.ready ? '' : 'disabled'}>Build it ${ico('arrow')}</button>
             </div>
           </div>
         </section>
@@ -1281,6 +1292,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
   }
 
   function applyBuiltProfile() {
+    if (!answersReady(answers).ready) return;
     const built = buildProfile(profileForOverrides(), answers);
     overrides = sync.stamp({ ...built, weights: normalizeWeights(built.weights) });
     write(OVERRIDES_KEY, overrides);
