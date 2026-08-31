@@ -1635,3 +1635,99 @@ button.tag { cursor: pointer; }
   .unranked { padding: 12px 13px; }
   .unranked .btn { width: 100%; justify-content: center; }
 }
+
+/* ------------------------------------------------------------ Search */
+
+/* The field is the page, so it is set at display size rather than as a control
+   in a toolbar. Everything under it explains what was understood; nothing under
+   it decorates. */
+.asksearch { margin-top: 20px; }
+.asksearch-field {
+  display: flex; align-items: center; gap: 12px; min-width: 0;
+  border: 1px solid var(--hairline-dark);
+  border-radius: 2px;
+  background: #1d302e;
+  padding: 0 16px;
+  min-height: 60px;
+  transition: border-color var(--fast) var(--ease);
+}
+.asksearch-field:focus-within { border-color: var(--brass); }
+.asksearch-field .ico { flex: none; width: 19px; height: 19px; color: var(--brass); }
+.asksearch-field input {
+  flex: 1 1 0; min-width: 0; width: 100%;
+  background: none; border: 0; outline: none;
+  font-family: var(--font-text); font-size: 19px; line-height: 1.3; color: var(--ink);
+  padding: 14px 0;
+}
+.asksearch-field input::placeholder { color: var(--muted-ink); }
+.asksearch-field input::-webkit-search-cancel-button { display: none; }
+.asksearch-clear {
+  flex: none; display: grid; place-items: center;
+  width: 34px; height: 34px; border-radius: 2px;
+  color: var(--muted-ink);
+}
+.asksearch-clear:hover { color: var(--porcelain); }
+.asksearch-note {
+  margin: 9px 0 0;
+  font-family: var(--font-ui); font-size: 12.5px; color: var(--muted-ink);
+}
+.asksearch-note em { font-style: italic; color: var(--graphite); }
+
+.asksearch-eg { margin-top: 26px; }
+.asksearch-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 11px; }
+.asksearch-chips .chip {
+  border: 1px solid var(--hairline-dark);
+  border-radius: 2px;
+  padding: 10px 14px;
+  min-height: 44px;
+  font-family: var(--font-text); font-size: 14px;
+  color: var(--graphite);
+  text-align: left;
+  transition: border-color var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+.asksearch-chips .chip:hover { border-color: var(--brass); color: var(--porcelain); }
+.asksearch-limit {
+  margin: 20px 0 0; max-width: 68ch;
+  font-size: 13.5px; line-height: 1.55; color: var(--muted-ink);
+}
+
+/* What the query was read as. Three kinds of thing, told apart by the rule down
+   their left edge rather than by three background colours: a band the scorer
+   assigned, a requirement, and a word taken literally. */
+.readback {
+  margin-top: 22px; padding: 15px 16px;
+  border: 1px solid var(--hairline); border-radius: var(--radius);
+  background: #ffffff08;
+}
+.rb-items { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+.rb-item {
+  display: inline-flex; align-items: center;
+  padding: 5px 10px 5px 9px;
+  border: 1px solid var(--hairline-dark);
+  border-left: 2px solid var(--graphite);
+  border-radius: 0 2px 2px 0;
+  font-family: var(--font-ui); font-size: 12px; color: var(--ink);
+}
+.rb-item[data-kind="tag"] { border-left-color: var(--brass); }
+.rb-item[data-kind="facet"] { border-left-color: var(--oxblood); }
+.rb-item[data-kind="ref"] { border-left-color: var(--oxblood); }
+.rb-item[data-kind="word"] { border-left-color: var(--graphite); font-family: var(--font-mono); font-size: 11px; }
+.rb-item b { font-weight: 400; color: var(--porcelain); }
+.readback-note { margin: 11px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--muted-ink); max-width: 68ch; }
+.readback[data-state="empty"] p:last-child { margin: 8px 0 0; font-size: 13.5px; color: var(--graphite); max-width: 68ch; }
+
+/* Why this row is in this answer. Sits under the blurb because it is a fact
+   about the search, not about the book. */
+.row-match {
+  display: flex; align-items: flex-start; gap: 7px;
+  margin: 9px 0 0;
+  font-family: var(--font-ui); font-size: 12.5px; line-height: 1.45; color: var(--graphite);
+}
+.row-match .ico { flex: none; width: 13px; height: 13px; margin-top: 2px; color: var(--brass); }
+
+@media (max-width: 767px) {
+  .asksearch-field { min-height: 54px; padding: 0 13px; }
+  .asksearch-field input { font-size: 17px; padding: 12px 0; }
+  .asksearch-chips .chip { width: 100%; }
+  .readback { padding: 13px; }
+}

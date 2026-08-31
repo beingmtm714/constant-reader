@@ -19,6 +19,7 @@ import * as sync from './lib/sync.mjs';
 import * as push from './lib/push.mjs';
 import { jacketFor } from './lib/jacket.mjs';
 import { cleanBlurb } from './lib/blurb.mjs';
+import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH_EXAMPLES } from './lib/search.mjs';
 
 (() => {
   'use strict';
@@ -44,6 +45,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
   // How many rows or cards a section previews before the reader asks for more.
   const ROW_PAGE = 14;
   const CARD_PAGE = 16;
+  const SEARCH_PAGE = 12;
 
   let FEED = null;
   let verdicts = saved.migrate(read(VERDICT_KEY, {}));
@@ -105,6 +107,13 @@ import { cleanBlurb } from './lib/blurb.mjs';
     kind: 'any',
     limit: ROW_PAGE,
     allLimit: CARD_PAGE,
+    // The natural-language query, kept apart from `q`. They are different
+    // questions: `q` narrows a list you are already looking at, `sq` asks the
+    // archive one. Sharing a field would mean typing "funny books about work"
+    // into the feed's filter and getting nothing, which is the wrong answer to
+    // a good question.
+    sq: '',
+    searchLimit: SEARCH_PAGE,
     openMenu: null,
     draftWeights: null,
   };
@@ -703,7 +712,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
   }
 
   function feedRow(row, i) {
-    const { e, s } = row;
+    const { e, s, note } = row;
     const b = e.book;
     const status = scoreStatus(e);
     const scored = status === 'scored';
@@ -750,6 +759,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
         ${!scored && hasProfile() ? `<p class="row-note">${esc(status === 'reviewed-unscored'
           ? 'Something has been written about this book, but it did not supply enough dependable evidence across the eight dimensions for a number to mean anything.'
           : 'Known from a catalogue listing alone.')}</p>` : ''}
+        ${note ? `<p class="row-match">${ico('search')}<span>${esc(note)}</span></p>` : ''}
         ${tags.length ? `<div class="tags">${tags.map((t) => `<button class="tag" data-action="tag" data-tag="${esc(t.label)}" data-kind="${esc(t.kind)}"
           aria-label="Show other books tagged ${esc(t.label)}">${esc(t.label)}</button>`).join('')}</div>` : ''}
         <button class="row-why" data-action="open" data-id="${esc(e.id)}">${ico('sparkles')}${
@@ -1092,6 +1102,101 @@ import { cleanBlurb } from './lib/blurb.mjs';
         : `<div class="panel panel-empty"><h2>Nothing matches</h2>
            <p>No reviewed book answers that search under the filters now set.</p>
            <button class="btn btn-solid" data-action="clear">Clear the filters</button></div>`}`;
+  }
+
+  // ------------------------------------------------------------ Search
+
+  // Built on first use and kept for the session. The index is derived entirely
+  // from the feed already in memory, so it costs a loop and nothing on the wire.
+  let searchIndex = null;
+  const searchIdx = () => (searchIndex ||= buildSearchIndex(FEED.books));
+
+  function viewSearch() {
+    const q = state.sq.trim();
+    // Fit is what the reader's own profile makes of a book, and it is passed in
+    // only when there is a reader. Without one the ranking is relevance alone —
+    // a stranger's search must not be ordered by somebody else's taste, which is
+    // the same rule the feed and the shelf already follow.
+    const found = q
+      ? runSearch(q, FEED.books.filter((e) => !passed(e)), {
+        index: searchIdx(),
+        dimensions: FEED.dimensions,
+        fitOf: hasProfile() ? (e) => (isScored(e) ? shownScore(e) : null) : () => null,
+        limit: 200,
+      })
+      : null;
+
+    const rows = found ? found.results.slice(0, state.searchLimit) : [];
+
+    return `
+      ${viewHead({
+        eyebrow: 'Ask in your own words',
+        title: 'Search',
+        lede: hasProfile()
+          ? `Describe the book you want. Where two books answer equally well, your profile decides the order.`
+          : `Describe the book you want. This reads ${esc(String(FEED.books.length))} books the press has written about, and nothing outside them.`,
+        aside: found ? `${found.total} match${found.total === 1 ? '' : 'es'}` : '',
+      })}
+
+      <div class="asksearch">
+        <label class="sr-only" for="sq">Describe the book you want</label>
+        <div class="asksearch-field">
+          ${ico('search')}
+          <input type="search" id="sq" value="${esc(state.sq)}" autocomplete="off" spellcheck="false"
+            placeholder="a contemporary Great American Novel">
+          ${state.sq ? `<button class="asksearch-clear" data-action="clear-search" aria-label="Clear the search">${ico('close')}</button>` : ''}
+        </div>
+        <p class="asksearch-note">Plain sentences work. So do lengths, years, “in translation”, and “like <em>Trust</em>”.</p>
+      </div>
+
+      ${!q ? `<div class="asksearch-eg">
+        <p class="eyebrow">Try one of these</p>
+        <div class="asksearch-chips">${SEARCH_EXAMPLES.map((x) =>
+          `<button class="chip" data-action="example" data-q="${esc(x)}">${esc(x)}</button>`).join('')}</div>
+        <p class="asksearch-limit">This reads the ${esc(String(FEED.books.length))} books in the archive and nothing outside it. It matches on what critics and publishers wrote about a book, so a request shaped like a kind of book is answered well and a request shaped like a private feeling is answered poorly.</p>
+      </div>` : readback(found)}
+
+      ${q ? (rows.length
+        ? `<ul class="rows">${rows.map(searchRow).join('')}</ul>${
+          rows.length < found.results.length
+            ? `<button class="btn btn-block" data-action="more-search">Show ${Math.min(SEARCH_PAGE, found.results.length - rows.length)} more of ${found.results.length}</button>`
+            : ''}`
+        : `<div class="panel panel-empty"><h2>Nothing in the archive answers that</h2>
+           <p>No book here matched on band, text or length. A narrower request usually does better than a longer one: try the subject on its own, or a title you want something like.</p>
+           <button class="btn btn-solid" data-action="clear-search">Start again</button></div>`) : ''}`;
+  }
+
+  function searchRow(row, i) {
+    return feedRow({ e: row.e, s: scoreOf(row.e), note: row.why }, i);
+  }
+
+  // What the app understood, in the app's own vocabulary, before any result.
+  //
+  // A search that silently reinterprets the question is the thing that sends
+  // people back to a chatbot: they cannot tell a thin archive from a
+  // misunderstanding. This says which bands it went looking for, which words it
+  // kept, and what it treated as a requirement — so a wrong answer is a legible
+  // wrong answer and the reader knows which word to change.
+  function readback(found) {
+    if (!found) return '';
+    const q = found.query;
+    const bits = [];
+    if (found.reference) {
+      bits.push(`<span class="rb-item" data-kind="ref">nearest to <b>${esc(found.reference.book?.title || '')}</b></span>`);
+    }
+    for (const t of q.tags) bits.push(`<span class="rb-item" data-kind="tag">${esc(t.label)}</span>`);
+    for (const f of q.echo) bits.push(`<span class="rb-item" data-kind="facet">${esc(f)}</span>`);
+    for (const t of q.typed || []) bits.push(`<span class="rb-item" data-kind="word">“${esc(t)}”</span>`);
+
+    if (!bits.length) {
+      return `<div class="readback" data-state="empty"><p class="eyebrow">What this read</p>
+        <p>Nothing in that query matched a subject, a shape or a length this archive records, so it was matched on the review text alone.</p></div>`;
+    }
+    return `<div class="readback">
+      <p class="eyebrow">What this read</p>
+      <div class="rb-items">${bits.join('')}</div>
+      ${found.reference ? '' : `<p class="readback-note">Bands come from what critics said about each book. Words are matched against the review and the publisher’s description.</p>`}
+    </div>`;
   }
 
   // ------------------------------------------------------------ All books
@@ -2235,6 +2340,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
 
   const VIEWS = {
     foryou: viewForYou,
+    search: viewSearch,
     feed: viewFeed,
     all: viewAll,
     saved: viewSaved,
@@ -2249,6 +2355,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
     state.openMenu = null;
     state.limit = ROW_PAGE;
     state.allLimit = CARD_PAGE;
+    state.searchLimit = SEARCH_PAGE;
     if (view === 'profile') state.draftWeights = null;
     savePrefs();
     closeMenuPanel();
@@ -2397,6 +2504,16 @@ import { cleanBlurb } from './lib/blurb.mjs';
           savePrefs(); render();
           break;
         case 'more-rows': state.limit += ROW_PAGE; render(); break;
+        case 'more-search': state.searchLimit += SEARCH_PAGE; render(); break;
+        case 'clear-search':
+          state.sq = ''; state.searchLimit = SEARCH_PAGE; render();
+          $('sq')?.focus();
+          announce('Search cleared.');
+          break;
+        case 'example':
+          state.sq = btn.dataset.q; state.searchLimit = SEARCH_PAGE; render();
+          $('sq')?.focus();
+          break;
         case 'more-cards': state.allLimit += CARD_PAGE; render(); break;
         case 'save-profile': saveProfile(); break;
         case 'roundup': toggleRoundup(); break;
@@ -2453,6 +2570,16 @@ import { cleanBlurb } from './lib/blurb.mjs';
     // Search filters as the reader types. The field is re-created on every
     // render, so the caret and the focus are restored by hand.
     document.addEventListener('input', (ev) => {
+      if (ev.target.id === 'sq') {
+        const at = ev.target.selectionStart;
+        const end = ev.target.selectionEnd;
+        state.sq = ev.target.value;
+        state.searchLimit = SEARCH_PAGE;
+        render();
+        const field = $('sq');
+        if (field) { field.focus(); try { field.setSelectionRange(at, end); } catch { /* not selectable */ } }
+        return;
+      }
       if (ev.target.id === 'q') {
         // The whole view redraws, which destroys the field being typed into, so
         // the caret is carried across by hand rather than snapped to the end —
