@@ -3,6 +3,6 @@
   <rect x="67" y="67" width="378" height="378" rx="26" fill="#744451"/>
   <rect x="67" y="67" width="378" height="378" rx="26" fill="none" stroke="#b69a62" stroke-width="6"/>
   <rect x="85" y="85" width="342" height="342" rx="15" fill="none" stroke="#eee9dd" stroke-opacity=".42" stroke-width="3"/>
-  <text x="260" y="256" fill="#eee9dd" font-family="Didot, 'Bodoni 72', 'Bodoni MT', Georgia, serif" font-size="159" text-anchor="end">C</text>
-  <text x="252" y="410" fill="#eee9dd" font-family="Didot, 'Bodoni 72', 'Bodoni MT', Georgia, serif" font-size="159" text-anchor="start">R</text>
+  <text x="254" y="237" fill="#eee9dd" font-family="Didot, 'Bodoni 72', 'Bodoni MT', Georgia, serif" font-size="159" text-anchor="end">C</text>
+  <text x="246" y="391" fill="#eee9dd" font-family="Didot, 'Bodoni 72', 'Bodoni MT', Georgia, serif" font-size="159" text-anchor="start">R</text>
 </svg>
