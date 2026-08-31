@@ -307,7 +307,7 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
   // "nothing matched" but "your prose weighting is the reason". So each
   // dimension is zeroed in turn and the top twenty recounted; the dimension
   // whose removal lets the most new books in is the one doing the excluding.
-  // Brute force over seven dimensions and eight hundred books, which at this
+  // Brute force over eight dimensions and eight hundred books, which at this
   // size is a loop rather than an algorithm.
   function starvingDimension() {
     const books = FEED.books.filter(isScored);
@@ -360,12 +360,22 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     let fromReviews = 0;
     let fromAccount = 0;
     const cutoff = Date.now() - 30 * 86400000;
+    // How far back the archive actually reaches, counted rather than declared.
+    // The profile sets a five-year window and the app used to say the feed held
+    // it; the feed held thirteen months. The back-catalogue crawl fills that in
+    // over weeks, so this is the one honest way to say it — the sentence gets
+    // truer on its own every morning and nobody has to remember to edit it.
+    let earliest = Infinity;
     for (const e of books) {
       byStatus[scoreStatus(e)]++;
       if (scoreStatus(e) === 'scored') {
         if (readFrom(e) === 'author-account') fromAccount++; else fromReviews++;
       }
-      for (const m of e.mentions) if ((Date.parse(m.reviewDate || '') || 0) >= cutoff) recentReviews++;
+      for (const m of e.mentions) {
+        const t = Date.parse(m.reviewDate || '') || 0;
+        if (t >= cutoff) recentReviews++;
+        if (t && t < earliest) earliest = t;
+      }
     }
     stats = {
       total: books.length,
@@ -376,6 +386,9 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
       fromReviews,
       fromAccount,
       recentReviews,
+      reachesBack: Number.isFinite(earliest)
+        ? new Date(earliest).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+        : null,
     };
   }
 
@@ -431,7 +444,7 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
   // The classification first, then whatever the review actually said.
   const tagsFor = (e) => [...formTags(e), ...(e.tags || []).filter((t) => REVIEW_TAGS.has(t.kind))];
 
-  // Five of the seven dimensions read the review for what the book is like. The
+  // Six of the eight dimensions read the review for what the book is like. The
   // other two read the catalogue: D6 is a page count and D7 is a publisher.
   //
   // A book where only those two fired has a score built from nothing a critic
@@ -1078,7 +1091,7 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
         title: 'Review feed',
         lede: hasProfile()
           ? `${esc(String(stats.placed))} titles the profile can place: ${esc(String(stats.fromReviews))} read from reviews and ${esc(String(stats.fromAccount))} from the author’s own account, plus ${esc(String(stats.unscored))} where the evidence was not strong enough for a reliable number.`
-          : `Every book the literary press has written about in the last ${esc(String(FEED.windowYears))} years — ${esc(String(stats.fromReviews))} of them read from reviews and ${esc(String(stats.fromAccount))} from the author’s own account of the book.`,
+          : `Every book the literary press has written about since ${esc(stats.reachesBack || 'the archive opened')} — ${esc(String(stats.fromReviews))} of them read from reviews and ${esc(String(stats.fromAccount))} from the author’s own account of the book.`,
         aside: `${shown.length} previewed · ${rows.length} ${hasProfile() ? 'placed' : 'in the archive'}`,
       })}
 
@@ -1153,7 +1166,7 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
         <p class="eyebrow">Try one of these</p>
         <div class="asksearch-chips">${SEARCH_EXAMPLES.map((x) =>
           `<button class="chip" data-action="example" data-q="${esc(x)}">${esc(x)}</button>`).join('')}</div>
-        <p class="asksearch-limit">This reads the ${esc(String(FEED.books.length))} books in the archive and nothing outside it. It matches on what critics and publishers wrote about a book, so a request shaped like a kind of book is answered well and a request shaped like a private feeling is answered poorly.</p>
+        <p class="asksearch-limit">Every match comes from what a critic or a publisher wrote about the book. Ask for a family saga in translation and it finds one; ask for something that feels like early Denis Johnson and it is guessing.</p>
       </div>` : readback(found)}
 
       ${q ? (rows.length
@@ -1162,7 +1175,7 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
             ? `<button class="btn btn-block" data-action="more-search">Show ${Math.min(SEARCH_PAGE, found.results.length - rows.length)} more of ${found.results.length}</button>`
             : ''}`
         : `<div class="panel panel-empty"><h2>Nothing in the archive answers that</h2>
-           <p>No book here matched on band, text or length. A narrower request usually does better than a longer one: try the subject on its own, or a title you want something like.</p>
+           <p>No book here matched on a band, on the text, or on length. Try the subject on its own, or name a book you want something like.</p>
            <button class="btn btn-solid" data-action="clear-search">Start again</button></div>`) : ''}`;
   }
 
@@ -1190,12 +1203,12 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
 
     if (!bits.length) {
       return `<div class="readback" data-state="empty"><p class="eyebrow">What this read</p>
-        <p>Nothing in that query matched a subject, a shape or a length this archive records, so it was matched on the review text alone.</p></div>`;
+        <p>Nothing in that query named a subject, a shape or a length this archive records, so it went looking in the review text alone.</p></div>`;
     }
     return `<div class="readback">
       <p class="eyebrow">What this read</p>
       <div class="rb-items">${bits.join('')}</div>
-      ${found.reference ? '' : `<p class="readback-note">Bands come from what critics said about each book. Words are matched against the review and the publisher’s description.</p>`}
+      ${found.reference ? '' : `<p class="readback-note">Bands come from what critics said about each book. Words come from the review and the publisher’s description.</p>`}
     </div>`;
   }
 
@@ -1448,8 +1461,8 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
   // way for everyone and is worth 4 to this profile and 10 to somebody who reads
   // for comedy.
   //
-  // Closed on arrival, because seven dimensions carry forty-six bands between
-  // them and a screen that opens as forty-six number fields is a spreadsheet. A
+  // Closed on arrival, because eight dimensions carry eighty-four bands between
+  // them and a screen that opens as eighty-four number fields is a spreadsheet. A
   // band the reader has moved says what it was worth before, and nothing else on
   // the row is coloured.
   function bandEditor(d) {
@@ -1925,13 +1938,13 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
   function scoreNarrative(e, s) {
     const status = scoreStatus(e);
     if (status === 'reviewed-unscored') {
-      return 'Something has been written about this book, but it did not supply enough dependable evidence across the seven dimensions to support a number. The book stays visible; the ranking stays blank.';
+      return 'Something has been written about this book, but it did not supply enough dependable evidence across the eight dimensions to support a number. The book stays visible; the ranking stays blank.';
     }
     if (status === 'awaiting-review') {
       return 'This book is known from a catalogue listing alone — nobody has described it, not a critic and not the author. It can be found and saved now, and it will be placed as soon as anyone writes about it.';
     }
     // A score with nothing from the review behind it needs saying outright, not
-    // softening: two of the seven dimensions read the catalogue rather than the
+    // softening: two of the eight dimensions read the catalogue rather than the
     // prose, and a book where only those fired has been ranked on its length and
     // its publisher.
     if (!readTheReview(e)) {
