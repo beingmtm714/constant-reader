@@ -19,7 +19,7 @@ import * as sync from './lib/sync.mjs';
 import * as push from './lib/push.mjs';
 import { jacketFor } from './lib/jacket.mjs';
 import { cleanBlurb, bestBlurb } from './lib/blurb.mjs';
-import { coverUrl, coverSrcSet, WIDTHS as COVER } from './lib/cover.mjs';
+import { coverFor } from './lib/cover.mjs';
 import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH_EXAMPLES } from './lib/search.mjs';
 
 (() => {
@@ -315,7 +315,20 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
   // whose removal lets the most new books in is the one doing the excluding.
   // Brute force over eight dimensions and eight hundred books, which at this
   // size is a loop rather than an algorithm.
+  // The answer only changes when the reader's weights do, and the Taste screen
+  // re-renders on every save, filter and tag. Nine rescoring passes over every
+  // scored book is 160ms at 823 books and 1.1s at the size the back catalogue is
+  // heading for — paid on each of those renders, for a number that had not moved.
+  // `profileVersion` already counts every change that could move it.
+  let starving = { at: -1, value: null };
   function starvingDimension() {
+    if (starving.at === profileVersion) return starving.value;
+    const value = computeStarvingDimension();
+    starving = { at: profileVersion, value };
+    return value;
+  }
+
+  function computeStarvingDimension() {
     const books = FEED.books.filter(isScored);
     if (books.length < 20) return null;
     // The weight has to be zeroed in the overrides rather than in the profile:
@@ -643,12 +656,12 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
   // serve a thumbnail unless asked otherwise and neither was being asked. The
   // archive card draws at 222 CSS pixels — 444 on a retina screen — and was
   // being handed Google's 128px default. Nothing errored; it just looked soft.
-  function jacket(e, width = COVER.card) {
+  function jacket(e, slot = 'card') {
     if (!e.book.coverUrl) return `<div class="jacket">${drawnJacket(e)}</div>`;
-    const src = coverUrl(e.book.coverUrl, width);
-    const set = coverSrcSet(e.book.coverUrl, width);
+    const c = coverFor(e.book.coverUrl, slot);
+    if (!c) return `<div class="jacket">${drawnJacket(e)}</div>`;
     return `<div class="jacket" data-jacket="${esc(e.id)}">
-      <img src="${esc(src)}"${set ? ` srcset="${esc(set)}"` : ''} width="${width}" height="${Math.round(width * 1.5)}"
+      <img src="${esc(c.src)}"${c.srcset ? ` srcset="${esc(c.srcset)}" sizes="${esc(c.sizes)}"` : ''}
         alt="" loading="lazy" decoding="async">
     </div>`;
   }
@@ -786,7 +799,7 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
       data-action="open" role="button" tabindex="0" aria-label="Open the dossier for ${esc(e.book.title)}">
       <button class="card-cover" data-action="open" data-id="${esc(e.id)}"
         aria-label="Open the dossier for ${esc(e.book.title)}">
-        ${jacket(e, COVER.card)}
+        ${jacket(e, 'card')}
         ${scoreBadge(e, s)}
         <span class="card-peek" aria-hidden="true">${ico('arrow')}View dossier</span>
       </button>
@@ -843,7 +856,7 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     // because the handler takes the nearest [data-action] and theirs is nearer.
     return `<li><article class="feed-row" data-family="${i % 4}" data-id="${esc(e.id)}"
       data-action="open" role="button" tabindex="0" aria-label="Open the dossier for ${esc(b.title)}">
-      <span class="row-cover">${jacket(e, COVER.row)}</span>
+      <span class="row-cover">${jacket(e, 'row')}</span>
       <div class="row-score">
         ${!hasProfile()
           ? `<span class="row-num" data-state="none">Not scored yet</span>`
@@ -1174,7 +1187,7 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
       </div>
       <div class="spotlight-cover">
         <button class="jacket-btn" data-action="open" data-id="${esc(e.id)}" aria-label="Open the dossier for ${esc(b.title)}">
-          ${jacket(e, COVER.spotlight)}
+          ${jacket(e, 'spotlight')}
         </button>
         ${hasProfile() ? `<span class="spotlight-score"><b>${shownScore(e, s).toFixed(1)}</b><span>Your fit</span></span>` : ''}
         <span class="folio">CR / 001</span>
@@ -2102,7 +2115,7 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
       <button class="dossier-close" data-action="close-dossier" aria-label="Close the dossier">${ico('close')}</button>
 
       <div class="dossier-head">
-        ${jacket(e, COVER.dossier)}
+        ${jacket(e, 'dossier')}
         <div>
           <p class="dossier-score">
             ${!hasProfile()
@@ -2373,6 +2386,11 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     write(VERDICT_KEY, verdicts);
     write(OVERRIDES_KEY, overrides);
     state.draftWeights = null;
+    // A sync replaces the weights, so it is a profile change like any other.
+    // This was the one path that changed them without saying so, which cost
+    // nothing while everything recomputed on every render and would have shown
+    // a stale answer the moment anything was cached against the version.
+    profileVersion++;
     retune();
     render();
   }
