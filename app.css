@@ -1594,3 +1594,44 @@ button.tag { cursor: pointer; }
 
 /* "/ 10" sat against the numeral's tail at the display face's tightest size. */
 @media (max-width: 767px) { .row-num small { margin-left: 3px; } }
+
+/* ------------------------------------------------- the app before anyone owns it */
+
+.blank-slate { margin-top: 18px; }
+.blank-slate h2 {
+  font-family: var(--font-display); font-weight: 400; font-size: 25px; line-height: 1.15;
+  color: var(--porcelain); margin: 8px 0 0;
+}
+.blank-list {
+  margin: 16px 0 0; padding: 0; list-style: none;
+  display: grid; gap: 11px; max-width: 62ch;
+}
+.blank-list li {
+  position: relative; padding-left: 20px;
+  font-size: 15px; line-height: 1.55; color: #ffffffd6;
+}
+.blank-list li::before {
+  content: ""; position: absolute; left: 0; top: .62em;
+  width: 7px; height: 1px; background: var(--brass);
+}
+.blank-acts { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+.blank-note { margin-top: 14px; max-width: 62ch; }
+
+/* The note above the two lists that stops a chronological order being read as a
+   recommendation. */
+.unranked {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 14px;
+  margin-top: 14px; padding: 14px 16px;
+  border: 1px solid var(--hairline); border-radius: var(--radius);
+  background: #ffffff08;
+}
+.unranked-text { margin: 5px 0 0; font-size: 13.5px; line-height: 1.5; color: var(--graphite); max-width: 68ch; }
+.unranked .btn { flex: none; }
+
+@media (max-width: 767px) {
+  .blank-slate h2 { font-size: 21px; }
+  .blank-acts .btn { flex: 1 1 100%; justify-content: center; }
+  .unranked { padding: 12px 13px; }
+  .unranked .btn { width: 100%; justify-content: center; }
+}

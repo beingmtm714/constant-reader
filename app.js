@@ -465,6 +465,18 @@ import { cleanBlurb } from './lib/blurb.mjs';
     (x, y) => `Strong on ${lower(x)}, and ${lower(y)} does not let it down.`,
   ];
 
+  // What can honestly be said about a book to someone the app knows nothing
+  // about: where it came from and when. A fact about the book rather than a
+  // claim about the reader.
+  function sourceLine(e) {
+    const who = e.reviewCount > 0
+      ? `Reviewed by ${e.sources[0] || 'the press'}`
+      : fromAuthor(e) ? 'The author’s own account of it'
+      : `Listed by ${e.book.publisher || 'its publisher'}`;
+    const when = e.book.bookYear ? `, ${e.book.bookYear}` : '';
+    return `${who}${when}.`;
+  }
+
   function matchLine(e, s) {
     if (!isScored(e)) {
       return scoreStatus(e) === 'reviewed-unscored'
@@ -584,6 +596,10 @@ import { cleanBlurb } from './lib/blurb.mjs';
 
   function sortPool(pool, sort) {
     const rows = pool.slice();
+    // Without a profile there is no fit to sort by, and falling back to it
+    // silently would order a stranger's first screen by a stranger's taste. The
+    // neutral answer to "what is here" is what arrived most recently.
+    if (!hasProfile() && (!sort || sort === 'fit')) sort = 'latest';
     if (sort === 'latest') return rows.sort((a, b) => reviewTime(b.e) - reviewTime(a.e));
     if (sort === 'title') return rows.sort((a, b) =>
       (a.e.book.title || '').localeCompare(b.e.book.title || ''));
@@ -617,6 +633,10 @@ import { cleanBlurb } from './lib/blurb.mjs';
   }
 
   function scoreBadge(e, s) {
+    // A number on a cover is the strongest claim the interface makes. It is a
+    // fit score, so before there is anyone to fit it is simply absent — not
+    // zero, not a placeholder digit.
+    if (!hasProfile()) return '';
     const status = scoreStatus(e);
     if (status === 'scored') return `<span class="card-score">${shownScore(e, s).toFixed(1)}</span>`;
     return `<span class="card-score" data-state="none">${status === 'reviewed-unscored' ? 'No score' : 'Not described'}</span>`;
@@ -640,7 +660,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
         <div class="tags card-tags">${formTags(e).map((t) =>
           `<button class="tag" data-action="tag" data-tag="${esc(t.label)}" data-kind="form"
             aria-label="Show other books tagged ${esc(t.label)}">${esc(t.label)}</button>`).join('')}</div>
-        <p class="card-why">${ico('sparkles')}<span>${esc(matchLine(e, s))}</span></p>
+        <p class="card-why">${ico('sparkles')}<span>${esc(hasProfile() ? matchLine(e, s) : sourceLine(e))}</span></p>
       </div>
       <div class="card-foot">${bookmarkBtn(e)}</div>
     </article>`;
@@ -677,13 +697,15 @@ import { cleanBlurb } from './lib/blurb.mjs';
       data-action="open" role="button" tabindex="0" aria-label="Open the dossier for ${esc(b.title)}">
       <span class="row-cover">${jacket(e)}</span>
       <div class="row-score">
-        ${scored
+        ${!hasProfile()
+          ? `<span class="row-num" data-state="none">Not scored yet</span>`
+          : scored
           ? `<span class="row-num">${shownScore(e, s).toFixed(1)}<small>/ 10</small></span>`
           : `<span class="row-num" data-state="none">No score</span>`}
-        ${scored && rec ? `<span class="row-rec">${ico('sparkles')}Recommended</span>` : ''}
-        ${scored && !readTheReview(e) ? `<span class="row-rec" data-state="thin">Length and press only</span>`
-          : scored && fromAuthor(e) ? `<span class="row-rec" data-state="thin">From the author’s account</span>` : ''}
-        ${status === 'reviewed-unscored' ? `<span class="row-rec" data-state="thin">Evidence too thin</span>` : ''}
+        ${hasProfile() && scored && rec ? `<span class="row-rec">${ico('sparkles')}Recommended</span>` : ''}
+        ${hasProfile() && scored && !readTheReview(e) ? `<span class="row-rec" data-state="thin">Length and press only</span>`
+          : hasProfile() && scored && fromAuthor(e) ? `<span class="row-rec" data-state="thin">From the author’s account</span>` : ''}
+        ${hasProfile() && status === 'reviewed-unscored' ? `<span class="row-rec" data-state="thin">Evidence too thin</span>` : ''}
         ${status === 'awaiting-review' ? `<span class="row-rec" data-state="thin">Not yet described</span>` : ''}
       </div>
       <div class="row-main">
@@ -691,19 +713,40 @@ import { cleanBlurb } from './lib/blurb.mjs';
           b.author ? `<span class="row-author">${esc(b.author)}</span>` : ''}</h3>
         <p class="row-meta">${esc(meta)}</p>
         ${blurbOf(e, 190) ? `<p class="row-blurb">${esc(blurbOf(e, 190))}</p>` : ''}
-        ${!scored ? `<p class="row-note">${esc(status === 'reviewed-unscored'
+        ${!scored && hasProfile() ? `<p class="row-note">${esc(status === 'reviewed-unscored'
           ? 'Something has been written about this book, but it did not supply enough dependable evidence across the seven dimensions for a number to mean anything.'
           : 'Known from a catalogue listing alone. Nobody has described it yet — not a critic, and not the author.')}</p>` : ''}
         ${tags.length ? `<div class="tags">${tags.map((t) => `<button class="tag" data-action="tag" data-tag="${esc(t.label)}" data-kind="${esc(t.kind)}"
           aria-label="Show other books tagged ${esc(t.label)}">${esc(t.label)}</button>`).join('')}</div>` : ''}
         <button class="row-why" data-action="open" data-id="${esc(e.id)}">${ico('sparkles')}${
-          scored ? `Why it’s a ${shownScore(e, s).toFixed(1)}` : 'Why there’s no score'}${ico('arrow')}</button>
+          !hasProfile() ? 'What this book is'
+          : scored ? `Why it’s a ${shownScore(e, s).toFixed(1)}` : 'Why there’s no score'}${ico('arrow')}</button>
       </div>
       <div class="row-actions">
         ${saveBtn(e, { block: true })}
         <button class="btn btn-quiet" data-action="pass" data-id="${esc(e.id)}">Pass</button>
       </div>
     </article></li>`;
+  }
+
+  // What a personalised screen says before there is anyone to personalise it
+  // for: what it becomes, in the specific rather than the abstract, and the one
+  // action that gets there. No borrowed numbers, no sample of somebody else's
+  // shelf dressed up as a preview.
+  function blankSlate({ eyebrow, title, lede, becomes }) {
+    return `
+      ${viewHead({ eyebrow, title, lede })}
+      <section class="panel blank-slate" aria-labelledby="bs-h">
+        <p class="eyebrow">Not built yet</p>
+        <h2 id="bs-h">Once you have answered, this page holds:</h2>
+        <ul class="blank-list">${becomes.map((b) => `<li>${b}</li>`).join('')}</ul>
+        <div class="blank-acts">
+          <button class="btn btn-solid" data-action="go" data-view="start">Build your taste profile ${ico('arrow')}</button>
+          <button class="btn" data-auth><span>Sign in</span></button>
+        </div>
+        <p class="privacy blank-note">Two minutes, and it stays in this browser unless you sign in. ${
+          FEED.books.length} books are already here to browse under All books — those are a record of what the press reviewed, not an opinion about you.</p>
+      </section>`;
   }
 
   function viewHead({ eyebrow, title, lede, aside = '', action = '' }) {
@@ -743,8 +786,25 @@ import { cleanBlurb } from './lib/blurb.mjs';
     </div>`;
   }
 
+  // Above the two browsable lists, before there is a profile. It is doing one
+  // job: making sure nobody reads this order as a recommendation. The archive is
+  // worth browsing on its own — that is why the lists are not gated — but the
+  // ordering is chronological and says so rather than letting a reader assume
+  // the top of the page means anything.
+  function unrankedNote() {
+    if (hasProfile()) return '';
+    return `<div class="unranked" role="status">
+      <div>
+        <p class="eyebrow">Newest first</p>
+        <p class="unranked-text">These are in the order the press reviewed them. Nothing here is ranked for you and no book carries a score, because a score in this app measures fit with a particular reader and there is not one yet.</p>
+      </div>
+      <button class="btn btn-solid" data-action="go" data-view="start">Build your taste profile ${ico('arrow')}</button>
+    </div>`;
+  }
+
   function toolbar({ scopes, scope, showRecommended = true }) {
-    const sortLabel = SORTS.find((x) => x.id === state.sort)?.label || 'Best fit for me';
+    const effective = (!hasProfile() && state.sort === 'fit') ? 'latest' : state.sort;
+    const sortLabel = SORTS.find((x) => x.id === effective)?.label || 'Newest reviews';
     return `<div class="toolbar" data-toolbar>
       <div class="search">
         ${ico('search')}
@@ -767,7 +827,8 @@ import { cleanBlurb } from './lib/blurb.mjs';
   function sortMenu() {
     return `<div class="menu-pop" role="menu" data-pop>
       <span class="label">Order</span>
-      ${SORTS.map((o) => `<button class="menu-opt" role="menuitemradio" aria-checked="${state.sort === o.id}"
+      ${SORTS.filter((o) => o.id !== 'fit' || hasProfile()).map((o) => `<button class="menu-opt" role="menuitemradio"
+        aria-checked="${state.sort === o.id || (!hasProfile() && state.sort === 'fit' && o.id === 'latest')}"
         data-action="sort" data-value="${o.id}">${ico('check')}<span>${esc(o.label)}</span></button>`).join('')}
     </div>`;
   }
@@ -775,7 +836,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
   function filterMenu(scopes, scope, showRecommended) {
     return `<div class="menu-pop" role="menu" data-pop>
       <div class="menu-pop-group">
-        ${showRecommended ? `<button class="menu-opt" role="menuitemcheckbox" aria-checked="${state.recommendedOnly}"
+        ${showRecommended && hasProfile() ? `<button class="menu-opt" role="menuitemcheckbox" aria-checked="${state.recommendedOnly}"
           data-action="toggle" data-value="recommendedOnly">${ico('check')}<span>Recommended only (${threshold()}+)</span></button>` : ''}
         <button class="menu-opt" role="menuitemcheckbox" aria-checked="${state.shortOnly}"
           data-action="toggle" data-value="shortOnly">${ico('check')}<span>Under 300 pages</span></button>
@@ -803,6 +864,18 @@ import { cleanBlurb } from './lib/blurb.mjs';
   // ------------------------------------------------------------ For you
 
   function viewForYou() {
+    if (!hasProfile()) {
+      return blankSlate({
+        eyebrow: dateline(),
+        title: 'Your edit, once there is one.',
+        lede: 'This page is the whole point of the app, and it cannot be written until you have said what you like. Nothing here is filled in with anybody else’s taste in the meantime.',
+        becomes: [
+          'One book at the top, chosen for you, with the reasoning shown rather than asserted.',
+          'Four more behind it, and the newest reviews that match what you said.',
+          'A score out of ten on every book, which is a measure of fit with you and means nothing without you.',
+        ],
+      });
+    }
     const ranked = edit();
     if (!ranked.length) {
       return `${viewHead({ eyebrow: dateline(), title: greeting(), lede: 'Nothing in the current build clears the profile. The archive is still browseable under All books.' })}
@@ -933,11 +1006,13 @@ import { cleanBlurb } from './lib/blurb.mjs';
       ${viewHead({
         eyebrow: 'Your live edit',
         title: 'Review feed',
-        lede: `${esc(String(stats.placed))} titles the profile can place: ${esc(String(stats.fromReviews))} read from reviews and ${esc(String(stats.fromAccount))} from the author’s own account, plus ${esc(String(stats.unscored))} where the evidence was not strong enough for a reliable number.`,
-        aside: `${shown.length} previewed · ${rows.length} placed`,
+        lede: hasProfile()
+          ? `${esc(String(stats.placed))} titles the profile can place: ${esc(String(stats.fromReviews))} read from reviews and ${esc(String(stats.fromAccount))} from the author’s own account, plus ${esc(String(stats.unscored))} where the evidence was not strong enough for a reliable number.`
+          : `Every book the literary press has written about in the last ${esc(String(FEED.windowYears))} years — ${esc(String(stats.fromReviews))} of them read from reviews and ${esc(String(stats.fromAccount))} from the author’s own account of the book.`,
+        aside: `${shown.length} previewed · ${rows.length} ${hasProfile() ? 'placed' : 'in the archive'}`,
       })}
 
-      <div class="coverage">
+      ${hasProfile() ? `<div class="coverage">
         <p class="eyebrow">Where the scores come from</p>
         <div class="coverage-figs">
           <span class="coverage-fig"><b>${stats.fromReviews}</b><span>read from reviews</span></span>
@@ -946,9 +1021,10 @@ import { cleanBlurb } from './lib/blurb.mjs';
           <span class="coverage-sep" aria-hidden="true">|</span>
           <span class="coverage-fig"><b>${stats.unscored}</b><span>evidence too thin</span></span>
         </div>
-      </div>
+      </div>` : ''}
 
       ${toolbar({ scopes: SCOPES, scope: state.scope })}
+      ${unrankedNote()}
       ${tagBanner(rows.length)}
 
       ${rows.length
@@ -982,7 +1058,9 @@ import { cleanBlurb } from './lib/blurb.mjs';
       ${viewHead({
         eyebrow: 'The complete catalogue',
         title: 'Every book, clearly accounted for.',
-        lede: `The full ${esc(String(stats.total))}-book archive—placed and unplaced—without making absence look like a verdict.`,
+        lede: hasProfile()
+          ? `The full ${esc(String(stats.total))}-book archive—placed and unplaced—without making absence look like a verdict.`
+          : `The full ${esc(String(stats.total))}-book archive, as the press left it. Browse it freely; nothing here is filtered by anybody's taste.`,
         aside: `${shown.length} previewed · ${rows.length} total`,
       })}
 
@@ -1001,6 +1079,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
       </div>
 
       ${toolbar({ scopes: ALL_SCOPES, scope: state.allScope, showRecommended: false })}
+      ${unrankedNote()}
       ${tagBanner(rows.length)}
 
       ${rows.length
@@ -1073,6 +1152,18 @@ import { cleanBlurb } from './lib/blurb.mjs';
   const CHIP_LABELS = new Map(chipsFor('both').map((c) => [`${c.dim}:${c.band}`, c.label]));
 
   function viewTaste() {
+    if (!hasProfile()) {
+      return blankSlate({
+        eyebrow: 'Learning from your choices',
+        title: 'Your taste, made legible.',
+        lede: 'What this screen reads is your own answers and your own saves. With neither, there is nothing to show and nothing worth inventing.',
+        becomes: [
+          'The words you picked to describe what you like, each one removable.',
+          'Which dimensions your feed is actually weighing, and by how much.',
+          'How far your saves have moved the ranking, and which single preference is narrowing your list the most.',
+        ],
+      });
+    }
     const savedN = taste?.savedCount ?? saved.savedCount(verdicts);
     const need = Math.max(0, MIN_SIGNAL - savedN);
     const dims = FEED.dimensions
@@ -1282,6 +1373,18 @@ import { cleanBlurb } from './lib/blurb.mjs';
   }
 
   function viewProfile() {
+    if (!hasProfile()) {
+      return blankSlate({
+        eyebrow: 'The numbers behind your feed',
+        title: 'Set the terms of your own taste.',
+        lede: 'The weights on this screen decide every score in the app. They are supposed to be yours, and until you answer they belong to the reader this was built for.',
+        becomes: [
+          'Eight weighted dimensions totalling a hundred points, all of them yours to move.',
+          'The words used to describe a book, and what each one is worth to you.',
+          'Guardrails and vetoes: rules that take points off, or take a book out.',
+        ],
+      });
+    }
     const w = draft();
     const total = draftTotal();
     const ok = total === 100;
@@ -1580,12 +1683,14 @@ import { cleanBlurb } from './lib/blurb.mjs';
         ${jacket(e)}
         <div>
           <p class="dossier-score">
-            ${scored ? `<b>${shownScore(e, s).toFixed(1)}<small>FIT</small></b>` : ''}
+            ${!hasProfile()
+              ? `<span class="dossier-state" data-state="none">${esc(sourceLine(e))}</span>`
+              : `${scored ? `<b>${shownScore(e, s).toFixed(1)}<small>FIT</small></b>` : ''}
             <span class="dossier-state" data-state="${scored && rec ? 'rec' : 'none'}">${
               scored ? (rec ? 'Recommended for you' : 'Below your threshold') :
               status === 'reviewed-unscored' ? 'Described · no score' : 'Not yet described'}</span>
             ${scored && !readTheReview(e) ? '<span class="dossier-state" data-state="none">Length and press only</span>'
-              : scored && fromAuthor(e) ? '<span class="dossier-state" data-state="none">From the author’s account</span>' : ''}
+              : scored && fromAuthor(e) ? '<span class="dossier-state" data-state="none">From the author’s account</span>' : ''}`}
           </p>
           <h2 id="dossier-title">${esc(b.title)}</h2>
           ${b.author ? `<p class="dossier-author">${esc(b.author)}</p>` : ''}
@@ -1600,12 +1705,18 @@ import { cleanBlurb } from './lib/blurb.mjs';
       </div>
 
       <section class="dossier-block">
-        <p class="eyebrow">${scored ? 'The case for it' : 'What is known'}</p>
-        <h3>${esc(caseFor(e, s))}</h3>
+        <p class="eyebrow">${!hasProfile() ? 'What this book is' : scored ? 'The case for it' : 'What is known'}</p>
+        ${hasProfile() ? `<h3>${esc(caseFor(e, s))}</h3>` : ''}
         ${blurbOf(e, 420) ? `<p>${esc(blurbOf(e, 420))}</p>` : ''}
       </section>
 
-      <section class="dossier-block">
+      ${!hasProfile() ? `<section class="dossier-block">
+        <p class="eyebrow">How this book is described</p>
+        ${tags.length ? `<div class="tags">${tags.map((t) => `<button class="tag" data-action="tag" data-tag="${esc(t.label)}" data-kind="${esc(t.kind)}"
+          aria-label="Show other books tagged ${esc(t.label)}">${esc(t.label)}</button>`).join('')}</div>` : ''}
+        <p style="margin-top:14px">These words come from what was written about the book. Answer three questions and they become a score: what each one is worth is the part that is yours.</p>
+        <button class="btn btn-solid" style="margin-top:14px" data-action="go" data-view="start">Build your taste profile ${ico('arrow')}</button>
+      </section>` : `<section class="dossier-block">
         <p class="eyebrow">${scored ? 'Transparent scoring' : 'Evidence status'}</p>
         <span class="dossier-head-note">Profile v${esc(String(FEED.profileRevision))}</span>
         <h3>${scored ? `Why it earned ${shownScore(e, s).toFixed(1)}` : 'Why there is no score'}</h3>
@@ -1622,7 +1733,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
           <span class="bar-val">${d.score}</span></div>`).join('')}</div>` : ''}
         ${tags.length ? `<div class="tags">${tags.map((t) => `<button class="tag" data-action="tag" data-tag="${esc(t.label)}" data-kind="${esc(t.kind)}"
           aria-label="Show other books tagged ${esc(t.label)}">${esc(t.label)}</button>`).join('')}</div>` : ''}
-      </section>
+      </section>`}
 
       ${m?.standfirst ? `<section class="dossier-block">
         <p class="eyebrow">${e.reviewCount > 0 ? 'From the review' : fromAuthor(e) ? 'From the author’s account' : 'From the listing'}</p>
@@ -1866,6 +1977,19 @@ import { cleanBlurb } from './lib/blurb.mjs';
   // about this app a reader would be sorry to learn too late, and the only
   // honest reason to ask a stranger for an account.
   const profileAtRisk = () => !signedInNow() && !isEmpty(overrides);
+
+  // Whether this reader has said anything about themselves yet. Everything that
+  // claims to be about them is gated on it.
+  //
+  // The app ships with one real reader's profile — weights, bands, the lot —
+  // because a scorer needs numbers to run and those are the numbers it was built
+  // and calibrated against. That is defensible for the build and indefensible
+  // for a stranger: a first visit was showing somebody else's taste under the
+  // heading "For you", their weights on a screen called Profile, and a number
+  // out of ten that measured fit to a person the reader has never met. The books
+  // are a public archive and stay browsable. The opinions are not, until there
+  // is somebody to have them.
+  const hasProfile = () => !isEmpty(overrides);
 
   const AT_RISK_LABEL = 'Your profile is saved in this browser only. Sign in with Google to keep it.';
 
