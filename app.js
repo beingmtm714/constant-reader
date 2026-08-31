@@ -16,6 +16,7 @@ import { outOfTen, RECOMMEND_AT } from './lib/recommend.mjs';
 import { rescore, isEmpty, bandKey, AVERSION_STRENGTHS, MAX_AVERSIONS, EMPTY as EMPTY_OVERRIDES } from './lib/overrides.mjs';
 import { READS, REFUSALS, MIN_PICKS, answersReady, chipsFor, groupedChipsFor, buildProfile } from './lib/onboard.mjs';
 import * as sync from './lib/sync.mjs';
+import * as push from './lib/push.mjs';
 import { jacketFor } from './lib/jacket.mjs';
 import { cleanBlurb } from './lib/blurb.mjs';
 
@@ -30,6 +31,12 @@ import { cleanBlurb } from './lib/blurb.mjs';
   const OVERRIDES_KEY = 'litfeed:overrides';
   const EVENTS_KEY = 'litfeed:events';
   const ACCOUNT_KEY = 'litfeed:account';
+  // The onboarding answers themselves, kept after they have been turned into
+  // weights. buildProfile is one-way — a set of picks becomes a set of numbers
+  // and the picks are gone — so without this a reader can never see what they
+  // said, let alone change one word of it. Everything they can edit afterwards
+  // depends on this being written down.
+  const ANSWERS_KEY = 'litfeed:answers';
 
   // No affiliate programme has been approved, so every outbound link goes clean.
   const AFFILIATES = {};
@@ -68,6 +75,12 @@ import { cleanBlurb } from './lib/blurb.mjs';
     { id: 'reviewed-unscored', label: 'Described · no score' },
   ];
 
+  const KINDS = [
+    { id: 'any', label: 'Both' },
+    { id: 'fiction', label: 'Fiction only' },
+    { id: 'nonfiction', label: 'Nonfiction only' },
+  ];
+
   const ALL_SCOPES = [
     { id: 'any', label: 'Everything in the archive' },
     { id: 'scored', label: 'Scored' },
@@ -83,6 +96,13 @@ import { cleanBlurb } from './lib/blurb.mjs';
     allScope: 'any',
     recommendedOnly: false,
     shortOnly: false,
+    // The tag being followed, as its label. A tag is the same word wherever it
+    // appears, so following one from a row in the feed and following it from a
+    // card in the archive land on the same set.
+    tag: null,
+    // 'any', 'fiction' or 'nonfiction'. Separate from `scope`, which is about
+    // how much is known about a book rather than what kind of book it is.
+    kind: 'any',
     limit: ROW_PAGE,
     allLimit: CARD_PAGE,
     openMenu: null,
@@ -103,14 +123,26 @@ import { cleanBlurb } from './lib/blurb.mjs';
 
   function loadPrefs() {
     const p = read(PREFS_KEY, {});
-    for (const k of ['view', 'sort', 'scope', 'allScope']) if (p[k]) state[k] = p[k];
+    // Neither `view` nor the two filters are restored, and for one reason: a
+    // link to this app has to open the app. Somebody sent the address, or it was
+    // tapped on a Home Screen, and what they get has to be the front of it —
+    // not the Profile screen because that is where the last session happened to
+    // end. The same goes for `tag` and `kind`: opening tomorrow inside a filter
+    // set last week is an empty feed with no visible cause.
+    //
+    // What does persist is how a reader likes a list arranged — the sort and the
+    // scope — because those describe a preference rather than a position.
+    for (const k of ['sort', 'scope', 'allScope']) if (p[k]) state[k] = p[k];
     if (typeof p.recommendedOnly === 'boolean') state.recommendedOnly = p.recommendedOnly;
     if (typeof p.shortOnly === 'boolean') state.shortOnly = p.shortOnly;
     if (!VIEWS[state.view]) state.view = 'foryou';
   }
   function savePrefs() {
+    // `view`, `tag` and `kind` are deliberately absent — see loadPrefs. Writing
+    // them here and ignoring them there would be worse than not writing them:
+    // the file would claim to remember something the app does not.
     write(PREFS_KEY, {
-      view: state.view, sort: state.sort, scope: state.scope, allScope: state.allScope,
+      sort: state.sort, scope: state.scope, allScope: state.allScope,
       recommendedOnly: state.recommendedOnly, shortOnly: state.shortOnly,
     });
   }
@@ -528,6 +560,20 @@ import { cleanBlurb } from './lib/blurb.mjs';
 
   // ------------------------------------------------------------ filtering
 
+  // Fiction, nonfiction, or no opinion. `likely` counts as fiction: the label on
+  // the card already says "Fiction, probably", and a reader who filters to
+  // fiction wants those rather than a shorter list and no explanation.
+  function isKind(e, kind) {
+    if (kind === 'any') return true;
+    if (kind === 'fiction') return e.fiction === 'confirmed' || e.fiction === 'likely';
+    return e.fiction === 'nonfiction';
+  }
+
+  // Tags are matched by label rather than by kind and label together, because a
+  // reader following "land & labour" means the words, not the dimension they
+  // happen to hang off.
+  const hasTag = (e, tag) => !tag || tagsFor(e).some((t) => t.label === tag);
+
   function matches(e, q) {
     if (!q) return true;
     const hay = [e.book.title, e.book.author, e.book.publisher,
@@ -579,7 +625,8 @@ import { cleanBlurb } from './lib/blurb.mjs';
   function card(row, i) {
     const { e, s } = row;
     const status = scoreStatus(e);
-    return `<article class="card" data-family="${i % 4}">
+    return `<article class="card" data-family="${i % 4}" data-id="${esc(e.id)}"
+      data-action="open" role="button" tabindex="0" aria-label="Open the dossier for ${esc(e.book.title)}">
       <button class="card-cover" data-action="open" data-id="${esc(e.id)}"
         aria-label="Open the dossier for ${esc(e.book.title)}">
         ${jacket(e)}
@@ -591,7 +638,8 @@ import { cleanBlurb } from './lib/blurb.mjs';
         <button class="card-title" data-action="open" data-id="${esc(e.id)}">${esc(e.book.title)}</button>
         ${e.book.author ? `<p class="card-author">${esc(e.book.author)}</p>` : ''}
         <div class="tags card-tags">${formTags(e).map((t) =>
-          `<span class="tag" data-kind="form">${esc(t.label)}</span>`).join('')}</div>
+          `<button class="tag" data-action="tag" data-tag="${esc(t.label)}" data-kind="form"
+            aria-label="Show other books tagged ${esc(t.label)}">${esc(t.label)}</button>`).join('')}</div>
         <p class="card-why">${ico('sparkles')}<span>${esc(matchLine(e, s))}</span></p>
       </div>
       <div class="card-foot">${bookmarkBtn(e)}</div>
@@ -620,9 +668,14 @@ import { cleanBlurb } from './lib/blurb.mjs';
 
     const tags = tagsFor(e).slice(0, 4);
 
-    return `<li><article class="feed-row" data-family="${i % 4}" data-id="${esc(e.id)}">
-      <button class="row-cover" data-action="open" data-id="${esc(e.id)}"
-        aria-label="Open the dossier for ${esc(b.title)}">${jacket(e)}</button>
+    // The whole row opens the book. Tapping a card and having nothing happen is
+    // the commonest way this app gets reported broken: the title and the cover
+    // were buttons and the other eighty per cent of the row was not, which on a
+    // phone is most of what a thumb lands on. The controls inside it still win,
+    // because the handler takes the nearest [data-action] and theirs is nearer.
+    return `<li><article class="feed-row" data-family="${i % 4}" data-id="${esc(e.id)}"
+      data-action="open" role="button" tabindex="0" aria-label="Open the dossier for ${esc(b.title)}">
+      <span class="row-cover">${jacket(e)}</span>
       <div class="row-score">
         ${scored
           ? `<span class="row-num">${shownScore(e, s).toFixed(1)}<small>/ 10</small></span>`
@@ -634,14 +687,15 @@ import { cleanBlurb } from './lib/blurb.mjs';
         ${status === 'awaiting-review' ? `<span class="row-rec" data-state="thin">Not yet described</span>` : ''}
       </div>
       <div class="row-main">
-        <h3 class="row-title"><button data-action="open" data-id="${esc(e.id)}">${esc(b.title)}${
-          b.author ? `<span class="row-author">${esc(b.author)}</span>` : ''}</button></h3>
+        <h3 class="row-title">${esc(b.title)}${
+          b.author ? `<span class="row-author">${esc(b.author)}</span>` : ''}</h3>
         <p class="row-meta">${esc(meta)}</p>
         ${blurbOf(e, 190) ? `<p class="row-blurb">${esc(blurbOf(e, 190))}</p>` : ''}
         ${!scored ? `<p class="row-note">${esc(status === 'reviewed-unscored'
           ? 'Something has been written about this book, but it did not supply enough dependable evidence across the seven dimensions for a number to mean anything.'
           : 'Known from a catalogue listing alone. Nobody has described it yet — not a critic, and not the author.')}</p>` : ''}
-        ${tags.length ? `<div class="tags">${tags.map((t) => `<span class="tag" data-kind="${esc(t.kind)}">${esc(t.label)}</span>`).join('')}</div>` : ''}
+        ${tags.length ? `<div class="tags">${tags.map((t) => `<button class="tag" data-action="tag" data-tag="${esc(t.label)}" data-kind="${esc(t.kind)}"
+          aria-label="Show other books tagged ${esc(t.label)}">${esc(t.label)}</button>`).join('')}</div>` : ''}
         <button class="row-why" data-action="open" data-id="${esc(e.id)}">${ico('sparkles')}${
           scored ? `Why it’s a ${shownScore(e, s).toFixed(1)}` : 'Why there’s no score'}${ico('arrow')}</button>
       </div>
@@ -661,6 +715,32 @@ import { cleanBlurb } from './lib/blurb.mjs';
       </div>
       ${aside || action ? `<div class="view-head-aside">${aside ? `<span>${esc(aside)}</span>` : ''}${action}</div>` : ''}
     </header>`;
+  }
+
+  // Shown while a tag is being followed, and it has two jobs: say what is being
+  // filtered, since a feed that suddenly holds nine books needs to explain
+  // itself, and offer the way out of the reader's own opinion. Following a tag
+  // in My feed shows the books this profile likes; a reader chasing a subject
+  // usually wants everything written about it, including what the profile scored
+  // badly, so the archive is one tap away and says how many more are in it.
+  function tagBanner(shownHere) {
+    if (!state.tag) return '';
+    const inArchive = FEED.books.filter((e) => hasTag(e, state.tag) && isKind(e, state.kind)).length;
+    const elsewhere = Math.max(0, inArchive - shownHere);
+    return `<div class="tag-banner" role="status">
+      <div class="tag-banner-main">
+        <p class="eyebrow">Following a tag</p>
+        <h2>${esc(state.tag)}</h2>
+        <p class="tag-banner-count">${shownHere} ${shownHere === 1 ? 'book' : 'books'} here${
+          state.view !== 'all' && elsewhere ? ` · ${elsewhere} more in the archive the profile scores lower` : ''}</p>
+      </div>
+      <div class="tag-banner-acts">
+        ${state.view !== 'all'
+          ? `<button class="btn" data-action="tag-all">See every book tagged this ${ico('arrow')}</button>`
+          : ''}
+        <button class="btn btn-quiet" data-action="clear-tag">Clear</button>
+      </div>
+    </div>`;
   }
 
   function toolbar({ scopes, scope, showRecommended = true }) {
@@ -699,6 +779,11 @@ import { cleanBlurb } from './lib/blurb.mjs';
           data-action="toggle" data-value="recommendedOnly">${ico('check')}<span>Recommended only (${threshold()}+)</span></button>` : ''}
         <button class="menu-opt" role="menuitemcheckbox" aria-checked="${state.shortOnly}"
           data-action="toggle" data-value="shortOnly">${ico('check')}<span>Under 300 pages</span></button>
+      </div>
+      <div class="menu-pop-group">
+        <span class="label">Fiction or nonfiction</span>
+        ${KINDS.map((o) => `<button class="menu-opt" role="menuitemradio" aria-checked="${state.kind === o.id}"
+          data-action="kind" data-value="${o.id}">${ico('check')}<span>${esc(o.label)}</span></button>`).join('')}
       </div>
       <div class="menu-pop-group">
         <span class="label">Which books</span>
@@ -834,6 +919,8 @@ import { cleanBlurb } from './lib/blurb.mjs';
         if (passed(e)) return false;
         if (state.scope !== 'any' && st !== state.scope) return false;
         if (state.shortOnly && !(e.book.pages && e.book.pages < 300)) return false;
+        if (!isKind(e, state.kind)) return false;
+        if (!hasTag(e, state.tag)) return false;
         return matches(e, state.q);
       })
       .map((e) => ({ e, s: scoreOf(e) }))
@@ -862,6 +949,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
       </div>
 
       ${toolbar({ scopes: SCOPES, scope: state.scope })}
+      ${tagBanner(rows.length)}
 
       ${rows.length
         ? `<ul class="rows">${shown.map(feedRow).join('')}</ul>${moreBtn(shown.length, rows.length, 'more-rows')}`
@@ -878,6 +966,8 @@ import { cleanBlurb } from './lib/blurb.mjs';
         const st = scoreStatus(e);
         if (state.allScope !== 'any' && st !== state.allScope) return false;
         if (state.shortOnly && !(e.book.pages && e.book.pages < 300)) return false;
+        if (!isKind(e, state.kind)) return false;
+        if (!hasTag(e, state.tag)) return false;
         return matches(e, state.q);
       })
       .map((e) => ({ e, s: scoreOf(e) }));
@@ -911,6 +1001,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
       </div>
 
       ${toolbar({ scopes: ALL_SCOPES, scope: state.allScope, showRecommended: false })}
+      ${tagBanner(rows.length)}
 
       ${rows.length
         ? `${shelf(shown)}${moreBtn(shown.length, rows.length, 'more-cards')}`
@@ -944,6 +1035,42 @@ import { cleanBlurb } from './lib/blurb.mjs';
   }
 
   // ------------------------------------------------------------ Taste
+
+  // What the reader actually said, and the way back into it. Taste used to show
+  // only the consequences — bars, a calibration dial, a dimension doing the most
+  // excluding — with no sign that any of it came from a list of words someone
+  // once picked, and no way to pick differently. The numbers are downstream of
+  // these chips, so the chips are what belong on this screen.
+  function answerEditor() {
+    const chips = [
+      ...answers.liked.map((key) => ({ key, which: 'liked' })),
+      ...answers.disliked.map((key) => ({ key, which: 'disliked' })),
+    ];
+    const label = (key) => CHIP_LABELS.get(key) || key.split(':')[1]?.replace(/_/g, ' ') || key;
+
+    return `<section class="panel answers" aria-labelledby="answers-h">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">In your own words</p>
+          <h2 id="answers-h">${chips.length ? 'What you told it you like' : 'You have not said what you like yet'}</h2>
+        </div>
+        <button class="btn" data-action="go" data-view="start">${chips.length ? 'Add or change' : 'Answer three questions'} ${ico('arrow')}</button>
+      </div>
+      ${chips.length
+        ? `<p class="answers-note">Every weight on the Profile screen was calculated from these. Remove one and the scores move.</p>
+           <div class="tags answers-tags">${chips.map(({ key, which }) => `
+             <button class="tag" data-state="${which}" data-action="unpick" data-key="${esc(key)}"
+               aria-label="Remove ${esc(label(key))} from what you ${which === 'liked' ? 'like' : 'avoid'}">
+               ${which === 'disliked' ? '<span aria-hidden="true">✕ </span>' : ''}${esc(label(key))}
+               <span class="tag-x" aria-hidden="true">×</span>
+             </button>`).join('')}</div>`
+        : `<p class="answers-note">The feed is ranked by one reader's profile until you do. It takes about two minutes.</p>`}
+    </section>`;
+  }
+
+  // Chip keys are stored as `D2:land`; the words a reader recognises live in
+  // onboard.mjs. This is the one lookup between them.
+  const CHIP_LABELS = new Map(chipsFor('both').map((c) => [`${c.dim}:${c.band}`, c.label]));
 
   function viewTaste() {
     const savedN = taste?.savedCount ?? saved.savedCount(verdicts);
@@ -990,6 +1117,8 @@ import { cleanBlurb } from './lib/blurb.mjs';
           </div>
         </div>
       </div>
+
+      ${answerEditor()}
 
       ${(() => {
         const w = starvingDimension();
@@ -1086,6 +1215,72 @@ import { cleanBlurb } from './lib/blurb.mjs';
     </details>`;
   }
 
+  // The weekly roundup. Most of this is the honest no: on an iPhone this works
+  // only for a web app that has been added to the Home Screen, which is Apple's
+  // rule and not something a button here can talk its way past. So a reader in a
+  // Safari tab is told how to install it rather than shown a control that would
+  // fail, and a reader who has turned it down in the browser is told where that
+  // decision now lives, because this page cannot ask twice.
+  function roundupCard() {
+    const stop = push.blocker();
+    const on = !stop && push.state() === 'on' && roundupOn;
+    const body = {
+      'needs-install': 'Add Constant Reader to your Home Screen first — the Share button, then <b>Add to Home Screen</b>. Open it from there and this becomes a button.',
+      unsupported: 'This browser cannot do notifications. Everything else works as it always did.',
+      denied: 'Notifications are switched off for this app in your browser or system settings, so this cannot ask again from here.',
+    }[stop];
+    return `<div class="roundup" data-state="${on ? 'on' : 'off'}">
+      <h3>Weekly roundup</h3>
+      ${body
+        ? `<p class="privacy">${body}</p>`
+        : !signedInNow()
+          ? '<p class="privacy">Sign in first. The roundup is sent to your devices, so it needs an account to know which ones are yours.</p>'
+          : `<p class="privacy">${on
+              ? 'On. One notification a week, Monday morning, only when something new clears your threshold.'
+              : 'One notification a week, Monday morning, naming what is new for you. Nothing else is ever sent.'}</p>
+             <button class="btn ${on ? 'btn-ghost' : 'btn-solid'}" data-action="roundup">${on ? 'Turn off' : 'Turn on notifications'}</button>`}
+    </div>`;
+  }
+
+  // Whether this device is subscribed. Read once at start and kept here so the
+  // card can render on the first paint rather than flickering through "off".
+  let roundupOn = false;
+
+  async function toggleRoundup() {
+    if (!user) { toast('Sign in first so the roundup knows which devices are yours.'); return; }
+    try {
+      if (roundupOn) {
+        const gone = await push.disable();
+        if (gone) await sync.forgetDevice(user.uid, await push.deviceId(gone.endpoint));
+        roundupOn = false;
+        render();
+        toast('Weekly roundup off.');
+        return;
+      }
+      const sub = await push.enable();
+      await sync.saveDevice(user.uid, await push.deviceId(sub.endpoint), sub);
+      roundupOn = true;
+      render();
+      toast('Weekly roundup on. The next one is Monday.');
+    } catch (err) {
+      roundupOn = false;
+      render();
+      toast(explainPush(err), { error: true });
+    }
+  }
+
+  // The browser's own words for these are "denied" and "default", which tell a
+  // reader nothing about what to do next.
+  function explainPush(err) {
+    const code = err?.code || '';
+    if (code === 'push/denied') return 'Your browser refused notifications for this app. It can be changed in its settings, not from here.';
+    if (code === 'push/default') return 'Notifications were not allowed, so nothing was turned on.';
+    if (code === 'push/needs-install') return 'Add the app to your Home Screen first, then open it from there.';
+    if (code === 'push/unsupported') return 'This browser cannot do notifications.';
+    if (code === 'permission-denied') return 'The server refused to record this device. Nothing else changed.';
+    return 'Could not turn the roundup on. Nothing else changed.';
+  }
+
   function viewProfile() {
     const w = draft();
     const total = draftTotal();
@@ -1094,7 +1289,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
 
     return `
       ${viewHead({
-        eyebrow: `Profile v${esc(String(FEED.profileRevision))} · Local draft`,
+        eyebrow: 'The numbers behind your feed',
         title: 'Set the terms of your own taste.',
         lede: 'The words used to describe a book are shared. What those words are worth is entirely yours.',
         action: `<button class="btn btn-solid" data-action="save-profile" ${ok ? '' : 'disabled'}
@@ -1125,6 +1320,8 @@ import { cleanBlurb } from './lib/blurb.mjs';
           <h3>Your profile in one sentence</h3>
           <p>Historically alive, formally ambitious fiction with controlled prose and a reason to be long.</p>
           <div class="tags">${tags.map((t) => `<span class="tag" data-kind="${esc(t.kind)}">${esc(t.label)}</span>`).join('')}</div>
+          <hr>
+          ${roundupCard()}
         </aside>
 
         <section class="guardrails profile-guardrails" aria-labelledby="guard-h">
@@ -1198,7 +1395,10 @@ import { cleanBlurb } from './lib/blurb.mjs';
   // prompt and the return band point at it, the Profile screen keeps everything
   // it produces, and a permanent seventh nav item for a screen used once would
   // cost a slot on every other visit.
-  let answers = { reads: 'both', liked: [], disliked: [], refused: [], satire: false };
+  let answers = {
+    reads: 'both', liked: [], disliked: [], refused: [], satire: false,
+    ...read(ANSWERS_KEY, {}),
+  };
 
   function viewStart() {
     // Grouped under headings in the reader's words. Sixty chips in one run is a
@@ -1296,6 +1496,7 @@ import { cleanBlurb } from './lib/blurb.mjs';
     const built = buildProfile(profileForOverrides(), answers);
     overrides = sync.stamp({ ...built, weights: normalizeWeights(built.weights) });
     write(OVERRIDES_KEY, overrides);
+    write(ANSWERS_KEY, answers);
     profileVersion++;
     state.draftWeights = null;
     setView('foryou');
@@ -1419,7 +1620,8 @@ import { cleanBlurb } from './lib/blurb.mjs';
           <span class="bar-name">${esc(d.name)}</span>
           <span class="bar-track"><span class="bar-fill" style="width:${Math.round(d.score * d.weight / maxc * 100)}%"></span></span>
           <span class="bar-val">${d.score}</span></div>`).join('')}</div>` : ''}
-        ${tags.length ? `<div class="tags">${tags.map((t) => `<span class="tag" data-kind="${esc(t.kind)}">${esc(t.label)}</span>`).join('')}</div>` : ''}
+        ${tags.length ? `<div class="tags">${tags.map((t) => `<button class="tag" data-action="tag" data-tag="${esc(t.label)}" data-kind="${esc(t.kind)}"
+          aria-label="Show other books tagged ${esc(t.label)}">${esc(t.label)}</button>`).join('')}</div>` : ''}
       </section>
 
       ${m?.standfirst ? `<section class="dossier-block">
@@ -1949,6 +2151,53 @@ import { cleanBlurb } from './lib/blurb.mjs';
           $$('[data-menu]').find((b) => b.dataset.menu === state.openMenu)?.focus();
           break;
         case 'sort': state.sort = btn.dataset.value; state.openMenu = null; savePrefs(); render(); break;
+        case 'kind': state.kind = btn.dataset.value; state.openMenu = null; savePrefs(); render(); break;
+        case 'tag': {
+          state.tag = btn.dataset.tag;
+          closeDossier();
+          // For you is an edit rather than a list — a spotlight and four picks —
+          // so there is nothing there for a filter to act on. Following a tag
+          // from it means going to the list where the answer can be shown.
+          if (state.view === 'foryou' || state.view === 'saved' || state.view === 'taste' || state.view === 'profile') {
+            setView('feed');
+          } else {
+            render();
+          }
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          announce(`Filtered to books tagged ${state.tag}.`);
+          break;
+        }
+        case 'tag-all':
+          // Everything with this tag, not only what scored well: the scope goes
+          // back to the whole archive, because a reader asking for every book on
+          // a subject is asking past their own profile on purpose.
+          state.allScope = 'any';
+          setView('all');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          break;
+        case 'clear-tag': state.tag = null; render(); announce('Tag filter cleared.'); break;
+        case 'unpick': {
+          const key = btn.dataset.key;
+          answers.liked = answers.liked.filter((k) => k !== key);
+          answers.disliked = answers.disliked.filter((k) => k !== key);
+          write(ANSWERS_KEY, answers);
+          // Rebuilding rather than subtracting: the weights are a function of the
+          // whole set of answers, so taking one out by hand would leave numbers
+          // that no set of picks would ever have produced.
+          if (answersReady(answers).ready) {
+            const built = buildProfile(profileForOverrides(), answers);
+            overrides = sync.stamp({ ...built, weights: normalizeWeights(built.weights) });
+            write(OVERRIDES_KEY, overrides);
+            profileVersion++;
+            state.draftWeights = null;
+            syncNow();
+            toast('Removed. Every score has been recalculated.');
+          } else {
+            toast('Removed. Too few left to build a profile — add some back.');
+          }
+          render();
+          break;
+        }
         case 'scope':
           if (state.view === 'all') state.allScope = btn.dataset.value;
           else state.scope = btn.dataset.value;
@@ -1957,12 +2206,14 @@ import { cleanBlurb } from './lib/blurb.mjs';
         case 'toggle': state[btn.dataset.value] = !state[btn.dataset.value]; savePrefs(); render(); break;
         case 'clear':
           state.q = ''; state.recommendedOnly = false; state.shortOnly = false;
+          state.tag = null; state.kind = 'any';
           state.scope = 'any'; state.allScope = 'any';
           savePrefs(); render();
           break;
         case 'more-rows': state.limit += ROW_PAGE; render(); break;
         case 'more-cards': state.allLimit += CARD_PAGE; render(); break;
         case 'save-profile': saveProfile(); break;
+        case 'roundup': toggleRoundup(); break;
         case 'guardrail': toggleGuardrail(Number(btn.dataset.guardrail)); break;
         case 'penalty': togglePenalty(btn.dataset.penalty); break;
         case 'export': exportVerdicts(); break;
@@ -2093,6 +2344,12 @@ import { cleanBlurb } from './lib/blurb.mjs';
 
     // Firebase takes a round trip to answer. A reader who never signed in loads
     // nothing at all: watch() returns immediately.
+    // Whether this device already holds a subscription, asked once. It touches
+    // no network and loads no SDK — the answer is in the browser's own service
+    // worker registration — so it costs a reader who has never turned this on
+    // nothing at all.
+    push.current().then((sub) => { if (sub) { roundupOn = true; render(); } }).catch(() => {});
+
     sync.watch((u, { authoritative } = {}) => {
       user = u;
       if (!u && authoritative) { write(sync.RETURNING_KEY, false); rememberAccount(null); }

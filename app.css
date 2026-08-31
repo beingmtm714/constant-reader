@@ -821,10 +821,6 @@ button.tag:hover { border-color: var(--brass); color: var(--porcelain); }
 @media (max-width: 767px) {
   /* The coverage line has to stay one line under the label; at 390px that means
      a smaller numeral rather than a second row per figure. */
-  .coverage { flex-direction: column; align-items: flex-start; gap: 9px; }
-  .coverage-figs { flex-wrap: nowrap; gap: 9px; }
-  .coverage-fig b { font-size: 19px; }
-  .coverage-fig span { font-size: 12.5px; }
 
   .tool-btn { padding: 0 12px; }
   .tool-btn > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
@@ -1459,3 +1455,142 @@ body.is-locked { overflow: hidden; }
 @media (min-width: 1440px) {
   .pane { margin-left: var(--sidebar-w); }
 }
+
+
+/* The weekly roundup card in the profile rail. It is mostly prose, because most
+   of what it has to say is why it cannot run here yet. */
+.roundup h3 { margin: 0 0 .4rem; }
+.roundup .btn { margin-top: .7rem; width: 100%; }
+.roundup[data-state="on"] h3::after {
+  content: "";
+  display: inline-block;
+  width: .42rem; height: .42rem;
+  margin-left: .45rem;
+  vertical-align: middle;
+  border-radius: 50%;
+  background: var(--brass);
+}
+
+
+/* ------------------------------------------- following a tag, and the answers */
+
+.tag-banner {
+  display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between;
+  gap: 14px;
+  margin: 14px 0 0;
+  padding: 14px 16px;
+  border: 1px solid var(--brass);
+  border-radius: var(--radius);
+  background: #b69a621a;
+}
+.tag-banner h2 {
+  font-family: var(--font-display); font-weight: 400; font-size: 26px; line-height: 1.1;
+  color: var(--porcelain); margin: 4px 0 0;
+}
+.tag-banner-count { margin: 6px 0 0; font-size: 13.5px; color: var(--graphite); }
+.tag-banner-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* A tag now goes somewhere, so it has to look like it does. The cursor and the
+   hover were already right for a button; what was missing is that the resting
+   state read as a label. */
+button.tag { cursor: pointer; }
+.answers-note { margin: 10px 0 0; font-size: 14px; line-height: 1.55; color: var(--graphite); max-width: 62ch; }
+.answers-tags { margin-top: 14px; gap: 8px; }
+.answers-tags .tag { padding-right: 8px; }
+.answers-tags .tag[data-state="disliked"] { border-color: #c3899466; color: var(--oxblood); }
+.tag-x { margin-left: 7px; opacity: .55; font-size: 15px; line-height: 1; }
+.answers-tags .tag:hover .tag-x { opacity: 1; }
+
+/* --------------------------------------------------------- density on a phone */
+
+/* The row carried a desktop rhythm onto a 390px screen: full-bleed padding, a
+   blurb at full length, four tags wrapping onto two lines and two stacked
+   full-width buttons. Nine or ten vertical centimetres for one book means a
+   thumb scrolls past three books a screen and none of them look distinct. */
+@media (max-width: 767px) {
+  .feed-row { padding: 13px; gap: 12px; grid-template-columns: 52px 1fr; }
+  .rows { gap: 12px; }
+  .row-title { font-size: 24px; line-height: 1.12; }
+  .row-author { font-size: 15px; }
+  .row-meta { font-size: 11.5px; letter-spacing: .04em; }
+  .row-blurb {
+    margin-top: 8px; font-size: 14px; line-height: 1.45;
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .row-num { font-size: 26px; }
+  .row-score { padding-top: 8px; gap: 3px 8px; }
+
+  /* One row of tags, not two. The rest are still on the book's own page, and a
+     tag strip that wraps is a strip nobody reads to the end of. */
+  .tags { margin-top: 9px; gap: 5px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .tags::-webkit-scrollbar { display: none; }
+  .tags .tag { flex: none; }
+  .answers-tags { flex-wrap: wrap; overflow: visible; }
+
+  /* Save and Pass side by side. Two stacked full-width buttons is 100px of
+     furniture under every single book. */
+  .row-actions { flex-direction: row; gap: 8px; margin-top: 12px; }
+  .row-actions .btn { flex: 1; min-height: 42px; }
+  .row-why { margin-top: 10px; }
+
+  .tag-banner { padding: 12px 13px; }
+  .tag-banner h2 { font-size: 22px; }
+}
+
+/* The masthead of a view, on a phone. A five-line lede above a methodology strip
+   above a toolbar is a full screen of preamble before the first book, every time
+   the feed is opened. The heading stays whole — it is the one thing that says
+   where you are — and the sentence under it is trimmed to its first two lines,
+   which is where it stops saying anything a returning reader needs. */
+@media (max-width: 767px) {
+  .view-head h1 { font-size: 38px; line-height: 1.04; }
+  .view-head .view-lede {
+    font-size: 15px; line-height: 1.45; margin-top: 8px;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .view-head { padding-bottom: 12px; }
+  .view-head-aside, .view-head .aside { font-size: 11px; }
+}
+
+/* The coverage strip on a phone. These rules live at the end of the file on
+   purpose: the mobile block near the top is written *before* the base .coverage
+   rules, so every one of these was being overridden by a later rule of equal
+   specificity and the strip kept its three-row column no matter what was set. */
+@media (max-width: 767px) {
+  .coverage { flex-direction: row; align-items: center; gap: 8px; padding: 10px 12px; }
+  .coverage .eyebrow, .coverage-sep { display: none; }
+  .coverage-figs { flex-wrap: nowrap; gap: 10px; width: 100%; justify-content: space-between; }
+  .coverage-fig { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
+  .coverage-fig b { font-size: 17px; line-height: 1; }
+  .coverage-fig span { font-size: 10.5px; line-height: 1.2; }
+}
+
+/* The score column, on a phone, and why it moved.
+   Below 1024 the layout puts the number under the cover — in a column 52px wide.
+   The number fits. "RECOMMENDED" does not, and neither does "FROM THE AUTHOR'S
+   ACCOUNT", so the badges spilled sideways across the title and stacked into
+   four ragged lines underneath. The column is the wrong container for a label
+   whose length is set by an English sentence.
+   So on a phone the score and its badges become one full-width strip under the
+   cover and the title, where they have the whole row to sit on. */
+@media (max-width: 767px) {
+  /* The cover runs down the left across both text rows; the score leads the text
+     column and the title follows it. Putting the strip last instead pushed the
+     number below the tags, which buried the one thing the row exists to say. */
+  .row-cover { grid-column: 1; grid-row: 1 / span 2; }
+  .row-score {
+    grid-column: 2; grid-row: 1;
+    display: flex; flex-direction: row; flex-wrap: wrap;
+    align-items: baseline; gap: 3px 9px;
+    padding-top: 0; min-width: 0;
+  }
+  .row-main { grid-column: 2; grid-row: 2; }
+  .row-actions { grid-column: 1 / -1; grid-row: 3; }
+  /* The badges were sized to a narrow column and wrapped mid-phrase. On one
+     line they can say what they are without breaking. */
+  .row-rec { white-space: nowrap; font-size: 10.5px; }
+  .row-num { font-size: 27px; }
+}
+
+/* "/ 10" sat against the numeral's tail at the display face's tightest size. */
+@media (max-width: 767px) { .row-num small { margin-left: 3px; } }
