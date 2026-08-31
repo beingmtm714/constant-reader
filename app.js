@@ -2057,6 +2057,15 @@ import { cleanBlurb } from './lib/blurb.mjs';
       $('menu-toggle').querySelector('use').setAttribute('href', open ? '#i-close' : '#i-menu');
     });
 
+    // Google's window is opened from inside the click, and a browser only allows
+    // that from a gesture — a click that first waits for a script to download is
+    // a click the popup blocker eats. `pointerdown` fires before it and is still
+    // the reader reaching for the button, so nothing is fetched for anyone who
+    // never does. Signed in, the button signs out and needs none of this.
+    const warmAuth = () => { if (!signedInNow()) sync.warm().catch(() => {}); };
+    for (const el of [$('auth'), $('firstrun-signin'), ...$$('[data-auth]')]) {
+      el.addEventListener('pointerdown', warmAuth, { passive: true });
+    }
     $('auth').addEventListener('click', doAuth);
     for (const el of $$('[data-auth]')) el.addEventListener('click', doAuth);
     $('scrim').addEventListener('click', closeDossier);
