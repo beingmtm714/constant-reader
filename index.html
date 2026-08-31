@@ -150,6 +150,18 @@
 <div class="scrim" id="scrim" hidden></div>
 <div class="dossier" id="dossier" role="dialog" aria-modal="true" aria-labelledby="dossier-title" hidden></div>
 
+<dialog class="firstrun" id="needauth" aria-labelledby="needauth-title">
+  <p class="eyebrow">This one needs an account</p>
+  <h2 id="needauth-title">Sign in to keep it.</h2>
+  <p class="firstrun-body" id="needauth-why">Everything you have done so far is held in this browser and nowhere else.</p>
+  <p class="firstrun-body">Signing in with Google creates the account if you do not have one. There is no separate form and no password to choose.</p>
+  <div class="firstrun-actions">
+    <button class="btn btn-solid" id="needauth-signin" data-auth autofocus>Continue with Google</button>
+    <button class="btn btn-quiet" id="needauth-later">Not now</button>
+  </div>
+  <p class="privacy">Your books and your profile stay on this device either way. Signing in copies them to your account so the same feed opens on your phone.</p>
+</dialog>
+
 <dialog class="firstrun" id="firstrun" aria-labelledby="firstrun-title">
   <p class="eyebrow">Before you go further</p>
   <h2 id="firstrun-title">These scores aren’t yours yet.</h2>

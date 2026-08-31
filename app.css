@@ -23,6 +23,10 @@
   --petrol-deep: #213a37;
   --petrol: #315149;
   --lapis: #3b4e67;
+  /* Lapis raised until it reads as a line rather than a shadow. The ground
+     version is a card fill and disappears at 2px on this paper; this is the one
+     that carries the nonfiction rule on the taste chips. */
+  --lapis-line: #7d97bd;
   --olive-jade: #505a43;
   --muted: #354944;
   --hairline: #c4bdae2e;
@@ -1731,3 +1735,47 @@ button.tag { cursor: pointer; }
   .asksearch-chips .chip { width: 100%; }
   .readback { padding: 13px; }
 }
+
+/* A card says what the book is. Before this it carried a title, an author and
+   "Fiction, probably", which is the one fact the cover already gives. */
+.card-blurb {
+  margin: 9px 0 0;
+  font-family: var(--font-text); font-size: 13.5px; line-height: 1.5;
+  color: var(--graphite);
+}
+.card-tags { margin-top: 10px; }
+
+/* For you offers no sort, so its toolbar is a field and one button rather than
+   a field and two. */
+.toolbar[data-nosort="true"] { grid-template-columns: 1fr auto; }
+.tool-count {
+  min-width: 17px; height: 17px; padding: 0 4px; margin-left: 2px;
+  display: inline-grid; place-items: center;
+  border-radius: 9px;
+  background: var(--oxblood-rich);
+  color: var(--porcelain);
+  font-family: var(--font-mono); font-size: 9.5px; font-style: normal; line-height: 1;
+}
+
+/* Fiction and nonfiction chips, told apart on the taste screen. The rule is on
+   the left edge rather than in the fill: a chip is a control with a pressed
+   state, and colouring the whole thing would put the two meanings in the same
+   channel. The word is in every chip's accessible name as well, because state
+   is never colour alone. */
+.start-chip[data-reads] { border-left-width: 2px; }
+.start-chip[data-reads="fiction"] { border-left-color: var(--oxblood); }
+.start-chip[data-reads="nonfiction"] { border-left-color: var(--lapis-line); }
+.start-chip[data-reads="both"] { border-left-color: var(--hairline-dark); }
+
+.chip-key {
+  display: flex; flex-wrap: wrap; gap: 14px;
+  margin: 12px 0 0;
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--muted-ink);
+}
+.chip-key-item { display: inline-flex; align-items: center; gap: 6px; }
+.chip-key-item::before {
+  content: ""; width: 2px; height: 12px; background: var(--hairline-dark);
+}
+.chip-key-item[data-reads="fiction"]::before { background: var(--oxblood); }
+.chip-key-item[data-reads="nonfiction"]::before { background: var(--lapis-line); }

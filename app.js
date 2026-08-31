@@ -19,6 +19,7 @@ import * as sync from './lib/sync.mjs';
 import * as push from './lib/push.mjs';
 import { jacketFor } from './lib/jacket.mjs';
 import { cleanBlurb } from './lib/blurb.mjs';
+import { coverUrl, coverSrcSet, WIDTHS as COVER } from './lib/cover.mjs';
 import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH_EXAMPLES } from './lib/search.mjs';
 
 (() => {
@@ -397,8 +398,24 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
   function edit() {
     return FEED.books
       .filter((e) => isScored(e) && e.inWindow !== false && !passed(e))
+      .filter(inFilters)
       .map((e) => ({ e, s: scoreOf(e) }))
       .sort((a, b) => b.s.total - a.s.total || reviewTime(b.e) - reviewTime(a.e));
+  }
+
+  // The one filter test the three ranked views share. For you had none of it:
+  // a reader who set "fiction only" on the feed, went to the front page and
+  // found nonfiction at the top had no way to tell whether the filter had failed
+  // or the page simply did not have one.
+  //
+  // Scope is deliberately absent. It asks how much is known about a book, and
+  // For you only ever holds scored books, so the control would be a menu whose
+  // options do nothing.
+  function inFilters(e) {
+    if (state.shortOnly && !(e.book.pages && e.book.pages < 300)) return false;
+    if (!isKind(e, state.kind)) return false;
+    if (!hasTag(e, state.tag)) return false;
+    return matches(e, state.q);
   }
 
   const reviewTime = (e) => Date.parse(e.lastReviewed || '') || 0;
@@ -432,6 +449,17 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
 
   // The catalogue's own word, where it is narrower than fiction or nonfiction.
   const SPECIFIC = new Set(['Poetry', 'Comics', 'Mystery & thriller', 'SF, fantasy & horror', 'Religion']);
+
+  // What a card carries: what kind of book it is first, because that is the thing
+  // a reader sorts by at a glance, then whatever the reviews actually said about
+  // it. A card showing only "Fiction, probably" was showing the one fact the
+  // reader could already see from the cover.
+  function cardTags(e) {
+    const form = formTags(e);
+    const seen = new Set(form.map((t) => t.label));
+    const read = tagsFor(e).filter((t) => !seen.has(t.label) && REVIEW_TAGS.has(t.kind));
+    return [...form, ...read].slice(0, 5);
+  }
 
   function formTags(e) {
     const out = [{ kind: 'form', label: FORM[e.fiction] || FORM.unknown }];
@@ -561,6 +589,14 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     return `Strong signals for ${list} ${strength} your profile.`;
   }
 
+  // Two texts are the same text for this purpose when they differ only by the
+  // trimming one of them has had: blurbOf runs cleanBlurb over it and cuts it at
+  // a word boundary with an ellipsis, so a string compare would call them
+  // different and print both.
+  const normalizeQuote = (t) => String(t || '')
+    .replace(/[\u2018\u2019]/g, "'").replace(/[\u201c\u201d]/g, '"')
+    .replace(/[^a-z0-9]+/gi, ' ').trim().toLowerCase().slice(0, 120);
+
   function blurbOf(e, max = 320) {
     const m = e.mentions.find((x) => (x.standfirst || '').trim()) || e.mentions.find((x) => (x.excerpt || '').trim());
     const text = cleanBlurb(m?.standfirst || m?.excerpt || '', { title: e.book.title, author: e.book.author });
@@ -592,14 +628,36 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     return h >>> 0;
   }
 
-  function jacket(e) {
+  // Every jacket says how wide it is about to be drawn, because both cover hosts
+  // serve a thumbnail unless asked otherwise and neither was being asked. The
+  // archive card draws at 222 CSS pixels — 444 on a retina screen — and was
+  // being handed Google's 128px default. Nothing errored; it just looked soft.
+  function jacket(e, width = COVER.card) {
     if (!e.book.coverUrl) return `<div class="jacket">${drawnJacket(e)}</div>`;
+    const src = coverUrl(e.book.coverUrl, width);
+    const set = coverSrcSet(e.book.coverUrl, width);
     return `<div class="jacket" data-jacket="${esc(e.id)}">
-      <img src="${esc(e.book.coverUrl)}" alt="" loading="lazy" decoding="async">
+      <img src="${esc(src)}"${set ? ` srcset="${esc(set)}"` : ''} width="${width}" height="${Math.round(width * 1.5)}"
+        alt="" loading="lazy" decoding="async">
     </div>`;
   }
 
+  // One observer for the whole app: it arms a cover's timeout at the moment the
+  // browser decides to fetch it, which is the only moment a stopwatch on that
+  // fetch means anything. `rootMargin` matches roughly what the lazy loader
+  // itself uses, so the timer starts with the request rather than after it.
+  const coverWatch = typeof IntersectionObserver === 'function'
+    ? new IntersectionObserver((entries, obs) => {
+      for (const en of entries) {
+        if (!en.isIntersecting) continue;
+        en.target.__armCover?.();
+        obs.unobserve(en.target);
+      }
+    }, { rootMargin: '400px' })
+    : null;
+
   function bindJackets(root) {
+    const observer = coverWatch;
     const swap = (img) => {
       const box = img.closest('.jacket');
       if (!box) return;
@@ -613,14 +671,28 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
       // finished-and-empty state is tested as well as listened for.
       if (img.complete && img.naturalWidth === 0) { swap(img); continue; }
       img.addEventListener('error', () => swap(img), { once: true });
+
       // A request that never resolves leaves an empty ground where a jacket
       // should be, which reads the same as a broken one. Covers come from hosts
       // this app does not control, so a slow or unreachable one falls back too.
       // Ten seconds, not two: a slow connection should still get the real jacket.
-      // Past that the request is not arriving and an empty ground is the worse
-      // of the two failures.
-      const t = setTimeout(() => { if (!img.complete || !img.naturalWidth) swap(img); }, 10000);
-      img.addEventListener('load', () => clearTimeout(t), { once: true });
+      //
+      // The clock starts when the browser starts fetching, and not before. These
+      // images are `loading="lazy"`, so one below the fold is not requested at
+      // all until it is scrolled near — and a timer armed at render was counting
+      // that deliberate wait as a failure. Ten seconds after any page load, seven
+      // of the eight covers on the front page were being thrown away and replaced
+      // with drawn jackets, for hosts that were answering in 300ms. Nothing
+      // errored, and it read as an app that simply had no cover art.
+      let timer = null;
+      const arm = () => {
+        if (timer || img.complete) return;
+        timer = setTimeout(() => { if (!img.complete || !img.naturalWidth) swap(img); }, 10000);
+      };
+      const done = () => { clearTimeout(timer); observer?.unobserve(img); };
+      img.addEventListener('load', done, { once: true });
+      if (observer) observer.observe(img); else arm();
+      img.__armCover = arm;
     }
   }
 
@@ -703,7 +775,7 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
       data-action="open" role="button" tabindex="0" aria-label="Open the dossier for ${esc(e.book.title)}">
       <button class="card-cover" data-action="open" data-id="${esc(e.id)}"
         aria-label="Open the dossier for ${esc(e.book.title)}">
-        ${jacket(e)}
+        ${jacket(e, COVER.card)}
         ${scoreBadge(e, s)}
         <span class="card-peek" aria-hidden="true">${ico('arrow')}View dossier</span>
       </button>
@@ -711,8 +783,9 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
         <p class="card-source">${esc(status === 'awaiting-review' && !e.sources.length ? (e.book.publisher || 'Catalogue listing') : e.sources.join(' · '))}</p>
         <button class="card-title" data-action="open" data-id="${esc(e.id)}">${esc(e.book.title)}</button>
         ${e.book.author ? `<p class="card-author">${esc(e.book.author)}</p>` : ''}
-        <div class="tags card-tags">${formTags(e).map((t) =>
-          `<button class="tag" data-action="tag" data-tag="${esc(t.label)}" data-kind="form"
+        <p class="card-blurb">${esc(describeBook(e, 150))}</p>
+        <div class="tags card-tags">${cardTags(e).map((t) =>
+          `<button class="tag" data-action="tag" data-tag="${esc(t.label)}" data-kind="${esc(t.kind)}"
             aria-label="Show other books tagged ${esc(t.label)}">${esc(t.label)}</button>`).join('')}</div>
         <p class="card-why">${ico('sparkles')}<span>${esc(hasProfile() ? matchLine(e, s) : sourceLine(e))}</span></p>
       </div>
@@ -751,7 +824,7 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     // because the handler takes the nearest [data-action] and theirs is nearer.
     return `<li><article class="feed-row" data-family="${i % 4}" data-id="${esc(e.id)}"
       data-action="open" role="button" tabindex="0" aria-label="Open the dossier for ${esc(b.title)}">
-      <span class="row-cover">${jacket(e)}</span>
+      <span class="row-cover">${jacket(e, COVER.row)}</span>
       <div class="row-score">
         ${!hasProfile()
           ? `<span class="row-num" data-state="none">Not scored yet</span>`
@@ -859,26 +932,37 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     </div>`;
   }
 
-  function toolbar({ scopes, scope, showRecommended = true }) {
+  // One toolbar, three views, and the parts a view cannot honour are left out
+  // rather than shown doing nothing. For you passes no scopes, because scope
+  // asks how much is known about a book and that page only ever holds scored
+  // ones; it passes showSort false, because its order is the edit it is making.
+  function toolbar({ scopes, scope, showRecommended = true, showSort = true }) {
     const effective = (!hasProfile() && state.sort === 'fit') ? 'latest' : state.sort;
     const sortLabel = SORTS.find((x) => x.id === effective)?.label || 'Newest reviews';
-    return `<div class="toolbar" data-toolbar>
+    return `<div class="toolbar" data-toolbar data-nosort="${!showSort}">
       <div class="search">
         ${ico('search')}
         <label class="sr-only" for="q">Search books</label>
         <input type="search" id="q" value="${esc(state.q)}" placeholder="Title, author, publisher, critic…" autocomplete="off">
       </div>
       <div class="tool-pair">
-        <button class="tool-btn" data-action="menu" data-menu="sort" aria-haspopup="true" aria-expanded="${state.openMenu === 'sort'}">
+        ${showSort ? `<button class="tool-btn" data-action="menu" data-menu="sort" aria-haspopup="true" aria-expanded="${state.openMenu === 'sort'}">
           <span>${esc(sortLabel)}</span>${ico('chevron')}
-        </button>
+        </button>` : ''}
         <button class="tool-btn" data-action="menu" data-menu="filter" aria-haspopup="true" aria-expanded="${state.openMenu === 'filter'}">
-          ${ico('sliders')}<span>Filters</span>
+          ${ico('sliders')}<span>Filters</span>${activeFilters() ? `<em class="tool-count">${activeFilters()}</em>` : ''}
         </button>
       </div>
-      ${state.openMenu === 'sort' ? sortMenu() : ''}
+      ${showSort && state.openMenu === 'sort' ? sortMenu() : ''}
       ${state.openMenu === 'filter' ? filterMenu(scopes, scope, showRecommended) : ''}
     </div>`;
+  }
+
+  // How many filters are on. Without it a reader who set one on another screen
+  // arrives at a short list with the reason folded inside a closed menu.
+  function activeFilters() {
+    return (state.kind !== 'any' ? 1 : 0) + (state.shortOnly ? 1 : 0)
+      + (state.recommendedOnly ? 1 : 0) + (state.tag ? 1 : 0);
   }
 
   function sortMenu() {
@@ -903,12 +987,12 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
         ${KINDS.map((o) => `<button class="menu-opt" role="menuitemradio" aria-checked="${state.kind === o.id}"
           data-action="kind" data-value="${o.id}">${ico('check')}<span>${esc(o.label)}</span></button>`).join('')}
       </div>
-      <div class="menu-pop-group">
+      ${scopes ? `<div class="menu-pop-group">
         <span class="label">Which books</span>
         ${scopes.map((o) => `<button class="menu-opt" role="menuitemradio" aria-checked="${scope === o.id}"
           data-action="scope" data-value="${o.id}">${ico('check')}<span>${esc(o.label)}</span></button>`).join('')}
         <p class="menu-pop-note">Score ranges apply only to scored books. Missing scores are never treated as zero.</p>
-      </div>
+      </div>` : ''}
     </div>`;
   }
 
@@ -942,6 +1026,11 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     return sample;
   }
 
+  // The drawn eight are held for the session and filtered on the way out rather
+  // than redrawn. A filter that dealt a new hand would read as the page losing
+  // its place, which is the same reason the sample is drawn once at all.
+  const filteredSample = () => sampleShelf().filter(({ e }) => inFilters(e));
+
   function viewForYou() {
     // Without a profile this page shows the app rather than an argument for it:
     // real books, the real layout, drawn at random. The first-visit prompt
@@ -949,12 +1038,20 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     // should be leaves a stranger with nothing to look at. What it does not do
     // is rank them or score them — a random eight is honestly a random eight,
     // and calling it an edit would be the borrowed-taste problem again.
-    const ranked = hasProfile() ? edit() : sampleShelf();
+    const ranked = hasProfile() ? edit() : filteredSample();
+    const filtered = Boolean(state.q || state.tag || state.kind !== 'any' || state.shortOnly);
     if (!ranked.length) {
-      return `${viewHead({ eyebrow: dateline(), title: greeting(), lede: 'Nothing in the current build clears the profile. The archive is still browseable under All books.' })}
-        <div class="panel panel-empty"><h2>No edit today</h2>
-        <p>Every scored book has been ruled on, or the build found nothing inside the window.</p>
-        <button class="btn btn-solid" data-action="go" data-view="all">Open the archive ${ico('arrow')}</button></div>`;
+      return `${viewHead({ eyebrow: dateline(), title: greeting(),
+        lede: filtered
+          ? 'Nothing on today’s shelf answers the filters now set.'
+          : 'Nothing in the current build clears the profile. The archive is still browseable under All books.' })}
+        ${toolbar({ scopes: null, scope: null, showRecommended: false, showSort: false })}
+        <div class="panel panel-empty"><h2>${filtered ? 'Nothing matches' : 'No edit today'}</h2>
+        <p>${filtered
+          ? `The edit is a few dozen books, so a filter empties it long before it empties the archive. All ${esc(String(stats.total))} are still under All books.`
+          : 'Every scored book has been ruled on, or the build found nothing inside the window.'}</p>
+        <button class="btn btn-solid" data-action="${filtered ? 'clear' : 'go'}" data-view="all">${
+          filtered ? 'Clear the filters' : `Open the archive ${ico('arrow')}`}</button></div>`;
     }
 
     const best = ranked.find(({ e, s }) => recommendedNow(e, s)) || ranked[0];
@@ -974,6 +1071,9 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
           ? `A quiet edit of the books most worth your attention—drawn from ${esc(String(stats.recentReviews))} new reviews, ordered by your taste.`
           : `Eight books from the archive, drawn at random. Answer three questions and this page becomes an edit: the same shelf, ordered by what you actually like, with the reasoning shown.`,
       })}
+
+      ${toolbar({ scopes: null, scope: null, showRecommended: false, showSort: false })}
+      ${tagBanner(ranked.length)}
 
       ${spotlight(best)}
 
@@ -1055,7 +1155,7 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
       </div>
       <div class="spotlight-cover">
         <button class="jacket-btn" data-action="open" data-id="${esc(e.id)}" aria-label="Open the dossier for ${esc(b.title)}">
-          ${jacket(e)}
+          ${jacket(e, COVER.spotlight)}
         </button>
         ${hasProfile() ? `<span class="spotlight-score"><b>${shownScore(e, s).toFixed(1)}</b><span>Your fit</span></span>` : ''}
         <span class="folio">CR / 001</span>
@@ -1517,7 +1617,11 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
   let roundupOn = false;
 
   async function toggleRoundup() {
-    if (!user) { toast('Sign in first so the roundup knows which devices are yours.'); return; }
+    if (!user) {
+      needAuth('Sign in to get the roundup.',
+        'It is sent to your devices, so it needs an account to know which ones are yours.');
+      return;
+    }
     try {
       if (roundupOn) {
         const gone = await push.disable();
@@ -1681,20 +1785,49 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     reads: 'both', liked: [], disliked: [], refused: [], satire: false,
     ...read(ANSWERS_KEY, {}),
   };
+  // A band cannot be both liked and disliked. The picker has enforced that since
+  // it was written, but the disliked list used to be offered whole — every liked
+  // chip included — so an answer file written before this could hold a band on
+  // both sides, and buildProfile would then write two adjustments to it and let
+  // whichever ran last win. Liked is kept, because it is the question asked first.
+  answers.disliked = (answers.disliked || []).filter((k) => !(answers.liked || []).includes(k));
+
+  // What the two rules on the chips mean. Shown above each list rather than once
+  // at the top, because the second list is a long scroll from the first.
+  function chipKey() {
+    const item = (reads, label) => `<span class="chip-key-item" data-reads="${reads}">${esc(label)}</span>`;
+    return `<p class="chip-key">${item('fiction', 'Fiction')}${item('nonfiction', 'Nonfiction')}${item('both', 'Either')}</p>`;
+  }
 
   function viewStart() {
     // Grouped under headings in the reader's words. Sixty chips in one run is a
     // wall nobody reads to the end of; eight short lists can be skimmed and whole
     // groups skipped by someone who has no opinion about them.
-    const chips = (which) => groupedChipsFor(answers.reads).map((g) => `
+    // A chip already claimed by the other list is not offered here. Asking
+    // someone what puts them off and listing back the things they just said they
+    // read for is a question that answers itself, and picking both wrote two
+    // contradictory adjustments to the same band.
+    const other = (which) => (which === 'liked' ? 'disliked' : 'liked');
+    const chips = (which) => groupedChipsFor(answers.reads).map((g) => {
+      const avail = g.chips.filter((c) => !answers[other(which)].includes(`${c.dim}:${c.band}`));
+      if (!avail.length) return '';
+      return `
       <div class="chip-group" role="group" aria-labelledby="g-${which}-${esc(cssId(g.dim))}">
         <p class="label chip-group-head" id="g-${which}-${esc(cssId(g.dim))}">${esc(g.label)}</p>
-        <div class="start-chips">${g.chips.map((c) => {
+        <div class="start-chips">${avail.map((c) => {
           const key = `${c.dim}:${c.band}`;
           const on = answers[which].includes(key);
-          return `<button class="start-chip" data-action="pick" data-which="${which}" data-key="${esc(key)}" aria-pressed="${on}">${esc(c.label)}</button>`;
+          // Fiction and nonfiction chips are told apart by a rule down the left
+          // edge and by the word in the accessible name, never by the colour
+          // alone: a reader who cannot see the difference is told it.
+          const reads = c.reads || 'both';
+          const said = reads === 'both' ? '' : `, a ${reads} answer`;
+          return `<button class="start-chip" data-action="pick" data-which="${which}" data-key="${esc(key)}"
+            data-reads="${esc(reads)}" aria-pressed="${on}"
+            aria-label="${esc(c.label)}${said}">${esc(c.label)}</button>`;
         }).join('')}</div>
-      </div>`).join('');
+      </div>`;
+    }).join('');
 
     const ready = answersReady(answers);
 
@@ -1718,13 +1851,15 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
           <p class="eyebrow">Second</p>
           <h2>What do you read for?</h2>
           <p>Anything that makes you want to open a book.</p>
+          ${chipKey()}
           ${chips('liked')}
         </section>
 
         <section class="start-block">
           <p class="eyebrow">Third, and it matters as much</p>
           <h2>What puts you off?</h2>
-          <p>A model with nothing to push against ranks everything alike, so this list is worth as much as the one above it.</p>
+          <p>A model with nothing to push against ranks everything alike, so this list is worth as much as the one above it. Anything you picked above is not repeated here.</p>
+          ${chipKey()}
           ${chips('disliked')}
         </section>
 
@@ -1785,6 +1920,13 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     toast('Your profile is in. The feed is ranked by it now.');
     announce('Profile built. Every score has been recalculated against your answers.');
     syncNow();
+    // The first moment there is something worth losing. Before the answers there
+    // was nothing to keep and the offer was noise; after them it is a browser
+    // cache away from gone.
+    if (!signedInNow()) {
+      needAuth('Sign in to keep it.',
+        'You have just built a profile that is held in this browser and nowhere else. Clearing your history would take it.');
+    }
   }
 
   // ------------------------------------------------------------ dossier
@@ -1847,6 +1989,30 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     const m = e.mentions.find((x) => (x.standfirst || '').trim()) || e.mentions[0];
     const tags = tagsFor(e).slice(0, 7);
 
+    // The case block and the quote block were printing the same sentence. blurbOf
+    // reads the first mention that has a standfirst; the quote below sets that
+    // same standfirst in a blockquote with a byline under it. On most books they
+    // are one text, so the dossier said it, then said it again in italics.
+    //
+    // The quote is the one that gives way. It is the weaker of the two — the same
+    // words with more furniture — and the block above it is where a reader looks
+    // first. Where a book has a second review with something else to say, that
+    // one is quoted instead, which is better than either.
+    const blurb = blurbOf(e, 420);
+    const same = (t) => normalizeQuote(t) === normalizeQuote(blurb);
+    // A second review with something else to say, where there is one — 114 books
+    // in the archive have one. `cited` is the review this section is about
+    // whether or not it has a quote left to give.
+    const fresh = blurb
+      ? e.mentions.find((x) => (x.standfirst || '').trim() && !same(x.standfirst))
+      : m;
+    const cited = fresh || m;
+    // Where the only standfirst is the sentence already printed above, the block
+    // keeps its attribution and its link and drops the repetition. Suppressing
+    // the whole section instead took the way out to the actual review with it,
+    // on 662 of 823 books.
+    const quote = fresh?.standfirst || '';
+
     const buys = canFindCopy(buyIds(e)) ? RETAILERS.map((r) => {
       const link = linkFor(r.id, buyIds(e), AFFILIATES);
       if (!link) return '';
@@ -1859,7 +2025,7 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
       <button class="dossier-close" data-action="close-dossier" aria-label="Close the dossier">${ico('close')}</button>
 
       <div class="dossier-head">
-        ${jacket(e)}
+        ${jacket(e, COVER.dossier)}
         <div>
           <p class="dossier-score">
             ${!hasProfile()
@@ -1886,7 +2052,7 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
       <section class="dossier-block">
         <p class="eyebrow">${!hasProfile() ? 'What this book is' : scored ? 'The case for it' : 'What is known'}</p>
         ${hasProfile() ? `<h3>${esc(caseFor(e, s))}</h3>` : ''}
-        ${blurbOf(e, 420) ? `<p>${esc(blurbOf(e, 420))}</p>` : ''}
+        ${blurb ? `<p>${esc(blurb)}</p>` : ''}
       </section>
 
       ${!hasProfile() ? `<section class="dossier-block">
@@ -1914,13 +2080,14 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
           aria-label="Show other books tagged ${esc(t.label)}">${esc(t.label)}</button>`).join('')}</div>` : ''}
       </section>`}
 
-      ${m?.standfirst ? `<section class="dossier-block">
+      ${cited?.reviewUrl ? `<section class="dossier-block">
         <p class="eyebrow">${e.reviewCount > 0 ? 'From the review' : fromAuthor(e) ? 'From the author’s account' : 'From the listing'}</p>
-        <blockquote class="quote">${esc(m.standfirst.length > 300 ? `${m.standfirst.slice(0, 300).replace(/\s+\S*$/, '')}…` : m.standfirst)}
-          <span class="quote-source">${esc(m.source.name)} · ${esc(fmtDate(m.reviewDate))}${m.byline ? ` · ${esc(m.byline)}` : ''}</span>
-        </blockquote>
-        <p><a href="${esc(m.reviewUrl)}" target="_blank" rel="noopener">${
-          e.reviewCount > 0 ? `Read the ${esc(m.source.short)} review` : `Open the ${esc(m.source.short)} source`} ↗</a></p>
+        ${quote ? `<blockquote class="quote">${esc(quote.length > 300 ? `${quote.slice(0, 300).replace(/\s+\S*$/, '')}…` : quote)}
+          <span class="quote-source">${esc(cited.source.name)} · ${esc(fmtDate(cited.reviewDate))}${cited.byline ? ` · ${esc(cited.byline)}` : ''}</span>
+        </blockquote>`
+        : `<p class="dossier-facts">${esc(cited.source.name)} · ${esc(fmtDate(cited.reviewDate))}${cited.byline ? ` · ${esc(cited.byline)}` : ''}</p>`}
+        <p><a href="${esc(cited.reviewUrl)}" target="_blank" rel="noopener">${
+          e.reviewCount > 0 ? `Read the ${esc(cited.source.short)} review` : `Open the ${esc(cited.source.short)} source`} ↗</a></p>
       </section>` : ''}
 
       ${buys ? `<section class="dossier-block">
@@ -2155,6 +2322,25 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
   // a failure — nothing is broken and nothing has been lost — but the one thing
   // about this app a reader would be sorry to learn too late, and the only
   // honest reason to ask a stranger for an account.
+  // What to do when a reader reaches for something an account is required for.
+  //
+  // The two of these were a toast — a line of text at the bottom of the screen
+  // saying sign in first, with no way to do it from where it appeared. A reader
+  // who wanted the weekly roundup had to read the toast, find the sidebar, and
+  // start again. `why` names the specific thing they were reaching for, because
+  // "sign in" without it is a demand rather than an answer.
+  //
+  // The button carries `data-auth`, so it is warmed on pointerdown and signs in
+  // on click through the paths that already exist. Google's window has to open
+  // inside the gesture; a button that first downloads a script gets eaten.
+  function needAuth(heading, why) {
+    const dlg = $('needauth');
+    if (!dlg?.showModal) { toast(why); return; }
+    $('needauth-title').textContent = heading;
+    $('needauth-why').textContent = why;
+    if (!dlg.open) dlg.showModal();
+  }
+
   const profileAtRisk = () => !signedInNow() && !isEmpty(overrides);
 
   // Whether this reader has said anything about themselves yet. Everything that
@@ -2347,6 +2533,10 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     // stranded on an error.
     $('firstrun-signin').addEventListener('click', () => { dlg.close(); doAuth(); setView('start'); });
     $('firstrun-later').addEventListener('click', () => dlg.close());
+    $('needauth-later').addEventListener('click', () => $('needauth').close());
+    // Signing in from the dialog closes it. doAuth is already bound to every
+    // [data-auth] control and re-renders on its own.
+    $('needauth-signin').addEventListener('click', () => $('needauth').close());
   }
 
   // ------------------------------------------------------------ navigation
