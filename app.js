@@ -8,19 +8,19 @@
    browser and the build can never disagree about what a number means. This file
    decides what is shown and in what order. */
 
-import * as saved from './lib/saved-books.mjs?v=7324d439e1';
-import { RETAILERS, linkFor, canFindCopy } from './lib/retailers.mjs?v=7324d439e1';
-import { createAnalytics } from './lib/analytics.mjs?v=7324d439e1';
-import { buildTasteModel, tunedTotal, explore, MIN_SIGNAL, MIN_JUDGMENTS, MAX_ADJUSTMENT } from './lib/taste.mjs?v=7324d439e1';
-import { outOfTen, RECOMMEND_AT } from './lib/recommend.mjs?v=7324d439e1';
-import { rescore, isEmpty, bandKey, AVERSION_STRENGTHS, MAX_AVERSIONS, EMPTY as EMPTY_OVERRIDES } from './lib/overrides.mjs?v=7324d439e1';
-import { READS, REFUSALS, MIN_PICKS, answersReady, chipsFor, groupedChipsFor, buildProfile } from './lib/onboard.mjs?v=7324d439e1';
-import * as sync from './lib/sync.mjs?v=7324d439e1';
-import * as push from './lib/push.mjs?v=7324d439e1';
-import { jacketFor } from './lib/jacket.mjs?v=7324d439e1';
-import { cleanBlurb, bestBlurb } from './lib/blurb.mjs?v=7324d439e1';
-import { coverFor } from './lib/cover.mjs?v=7324d439e1';
-import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH_EXAMPLES } from './lib/search.mjs?v=7324d439e1';
+import * as saved from './lib/saved-books.mjs?v=08e456a903';
+import { RETAILERS, linkFor, canFindCopy } from './lib/retailers.mjs?v=08e456a903';
+import { createAnalytics } from './lib/analytics.mjs?v=08e456a903';
+import { buildTasteModel, tunedTotal, explore, MIN_SIGNAL, MIN_JUDGMENTS, MAX_ADJUSTMENT } from './lib/taste.mjs?v=08e456a903';
+import { outOfTen, RECOMMEND_AT } from './lib/recommend.mjs?v=08e456a903';
+import { rescore, isEmpty, bandKey, AVERSION_STRENGTHS, MAX_AVERSIONS, EMPTY as EMPTY_OVERRIDES } from './lib/overrides.mjs?v=08e456a903';
+import { READS, REFUSALS, MIN_PICKS, answersReady, chipsFor, groupedChipsFor, buildProfile } from './lib/onboard.mjs?v=08e456a903';
+import * as sync from './lib/sync.mjs?v=08e456a903';
+import * as push from './lib/push.mjs?v=08e456a903';
+import { jacketFor } from './lib/jacket.mjs?v=08e456a903';
+import { cleanBlurb, bestBlurb } from './lib/blurb.mjs?v=08e456a903';
+import { coverFor, fillsSlot } from './lib/cover.mjs?v=08e456a903';
+import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH_EXAMPLES } from './lib/search.mjs?v=08e456a903';
 
 (() => {
   'use strict';
@@ -712,7 +712,12 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
   // archive card draws at 222 CSS pixels — 444 on a retina screen — and was
   // being handed Google's 128px default. Nothing errored; it just looked soft.
   function jacket(e, slot = 'card') {
-    if (!e.book.coverUrl) return `<div class="jacket">${drawnJacket(e)}</div>`;
+    // A cover the host will not render large enough for this slot is drawn
+    // instead of stretched. 209 of the 823 jackets in the archive are under
+    // 500px, which is fine in a 60px row and visibly soft across a card.
+    if (!e.book.coverUrl || !fillsSlot(e.book.coverWidth, slot)) {
+      return `<div class="jacket">${drawnJacket(e)}</div>`;
+    }
     const c = coverFor(e.book.coverUrl, slot);
     if (!c) return `<div class="jacket">${drawnJacket(e)}</div>`;
     return `<div class="jacket" data-jacket="${esc(e.id)}">
