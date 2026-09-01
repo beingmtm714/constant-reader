@@ -8,19 +8,19 @@
    browser and the build can never disagree about what a number means. This file
    decides what is shown and in what order. */
 
-import * as saved from './lib/saved-books.mjs?v=7724e033d2';
-import { RETAILERS, linkFor, canFindCopy } from './lib/retailers.mjs?v=7724e033d2';
-import { createAnalytics } from './lib/analytics.mjs?v=7724e033d2';
-import { buildTasteModel, tunedTotal, explore, MIN_SIGNAL, MIN_JUDGMENTS, MAX_ADJUSTMENT } from './lib/taste.mjs?v=7724e033d2';
-import { outOfTen, RECOMMEND_AT } from './lib/recommend.mjs?v=7724e033d2';
-import { rescore, isEmpty, bandKey, AVERSION_STRENGTHS, MAX_AVERSIONS, EMPTY as EMPTY_OVERRIDES } from './lib/overrides.mjs?v=7724e033d2';
-import { READS, REFUSALS, MIN_PICKS, answersReady, chipsFor, groupedChipsFor, buildProfile } from './lib/onboard.mjs?v=7724e033d2';
-import * as sync from './lib/sync.mjs?v=7724e033d2';
-import * as push from './lib/push.mjs?v=7724e033d2';
-import { jacketFor } from './lib/jacket.mjs?v=7724e033d2';
-import { cleanBlurb, bestBlurb } from './lib/blurb.mjs?v=7724e033d2';
-import { coverFor } from './lib/cover.mjs?v=7724e033d2';
-import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH_EXAMPLES } from './lib/search.mjs?v=7724e033d2';
+import * as saved from './lib/saved-books.mjs?v=78f5eeab0f';
+import { RETAILERS, linkFor, canFindCopy } from './lib/retailers.mjs?v=78f5eeab0f';
+import { createAnalytics } from './lib/analytics.mjs?v=78f5eeab0f';
+import { buildTasteModel, tunedTotal, explore, MIN_SIGNAL, MIN_JUDGMENTS, MAX_ADJUSTMENT } from './lib/taste.mjs?v=78f5eeab0f';
+import { outOfTen, RECOMMEND_AT } from './lib/recommend.mjs?v=78f5eeab0f';
+import { rescore, isEmpty, bandKey, AVERSION_STRENGTHS, MAX_AVERSIONS, EMPTY as EMPTY_OVERRIDES } from './lib/overrides.mjs?v=78f5eeab0f';
+import { READS, REFUSALS, MIN_PICKS, answersReady, chipsFor, groupedChipsFor, buildProfile } from './lib/onboard.mjs?v=78f5eeab0f';
+import * as sync from './lib/sync.mjs?v=78f5eeab0f';
+import * as push from './lib/push.mjs?v=78f5eeab0f';
+import { jacketFor } from './lib/jacket.mjs?v=78f5eeab0f';
+import { cleanBlurb, bestBlurb } from './lib/blurb.mjs?v=78f5eeab0f';
+import { coverFor } from './lib/cover.mjs?v=78f5eeab0f';
+import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH_EXAMPLES } from './lib/search.mjs?v=78f5eeab0f';
 
 (() => {
   'use strict';
@@ -580,6 +580,21 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     return null;
   }
 
+  // The tags in the sentence are the tags on the row, so they are the same
+  // control: following one filters to it. A line that names the reason a book is
+  // here and then makes the reader find that word again in the chips below is
+  // asking them to do the app's work.
+  function whyTagButton(label) {
+    return `<button class="tag-inline" data-action="tag" data-tag="${esc(label)}"
+      aria-label="Show other books tagged ${esc(label)}">${esc(label)}</button>`;
+  }
+
+  function whyHtml(e, s, max = 3) {
+    const why = whyTags(e, s);
+    if (!why) return null;
+    return `Because you ${esc(why.verb)}: ${why.labels.slice(0, max).map(whyTagButton).join(', ')}`;
+  }
+
   function whyLine(e, s) {
     const why = whyTags(e, s);
     if (!why) return null;
@@ -869,7 +884,8 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
         <div class="tags card-tags">${cardTags(e).map((t) =>
           `<button class="tag" data-action="tag" data-tag="${esc(t.label)}" data-kind="${esc(t.kind)}"
             aria-label="Show other books tagged ${esc(t.label)}">${esc(t.label)}</button>`).join('')}</div>
-        <p class="card-why">${ico('sparkles')}<span>${esc(hasProfile() ? matchLine(e, s) : sourceLine(e))}</span></p>
+        <p class="card-why">${ico('sparkles')}<span>${
+          hasProfile() ? (whyHtml(e, s) || esc(matchLine(e, s))) : esc(sourceLine(e))}</span></p>
       </div>
       <div class="card-foot">${passBtn(e)}${bookmarkBtn(e)}</div>
     </article>`;
@@ -1363,7 +1379,8 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
         <h2>${esc(b.title)}</h2>
         ${b.author ? `<p class="spotlight-author">${esc(b.author)}</p>` : ''}
         ${blurbOf(e, 240) ? `<p class="spotlight-blurb">${esc(blurbOf(e, 240))}</p>` : ''}
-        <p class="spotlight-fit">${ico('sparkles')}<span>${esc(hasProfile() ? caseFor(e, s) : sourceLine(e))}</span></p>
+        <p class="spotlight-fit">${ico('sparkles')}<span>${
+          hasProfile() ? (whyHtml(e, s, 4) || esc(caseFor(e, s))) : esc(sourceLine(e))}</span></p>
         <div class="spotlight-actions">
           <button class="btn btn-solid" data-action="open" data-id="${esc(e.id)}">Open the dossier ${ico('arrow')}</button>
           ${saveBtn(e, { label: 'Save for later' })}
@@ -2336,7 +2353,7 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
 
       <section class="dossier-block">
         <p class="eyebrow">${!hasProfile() ? 'What this book is' : scored ? 'The case for it' : 'What is known'}</p>
-        ${hasProfile() ? `<h3>${esc(caseFor(e, s))}</h3>` : ''}
+        ${hasProfile() ? `<h3>${whyHtml(e, s, 4) || esc(caseFor(e, s))}</h3>` : ''}
         ${blurb ? `<p>${esc(blurb)}</p>` : ''}
       </section>
 

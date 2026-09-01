@@ -1776,22 +1776,21 @@ button.tag { cursor: pointer; }
   clip: auto; white-space: normal;
 }
 
-/* The shelf on a phone. One column made every card 848px tall — taller than the
-   screen — so the archive was one book per swipe and the covers could not be
-   compared, which is the whole use of a shelf. Two columns at 375px give a
-   170px cover, four books to a screen, and a description short enough to read
-   at a glance rather than long enough to scroll past. */
-@media (max-width: 767px) {
-  .shelf { grid-template-columns: 1fr 1fr; gap: 12px; }
-  .card-body { padding: 11px 11px 10px; }
-  .card-title { font-size: 16px; line-height: 1.12; }
-  .card-author { font-size: 12.5px; }
-  .card-blurb {
-    font-size: 12px; line-height: 1.45;
-    display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-  .card-why { font-size: 11.5px; }
-  .card-cover { padding: 8px 8px 0; }
-  .card-foot { padding: 0 7px 7px; }
+/* The shelf stays one column on a phone.
+   Two columns were tried and reverted. They fit more books on a screen and they
+   made the shelf look untidy, because a card is as tall as its own title, blurb
+   and tags and no two are the same length — so a two-up grid is a row of ragged
+   bottoms, and the eye reads the raggedness before it reads the books. A single
+   column has nothing to be ragged against. */
+
+/* A tag inside a sentence. The same control as the chips below it — following
+   one filters to it — set to read as part of the line rather than as a chip
+   dropped into the middle of it. */
+.tag-inline {
+  font: inherit; color: var(--porcelain);
+  padding: 0; border: 0; background: none;
+  border-bottom: 1px solid var(--brass);
+  transition: color var(--fast) var(--ease), border-color var(--fast) var(--ease);
 }
+.tag-inline:hover { color: var(--brass); }
+.card-why .tag-inline, .spotlight-fit .tag-inline { line-height: inherit; }
