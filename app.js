@@ -577,6 +577,23 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     return facts ? `${facts}. ${nobody}` : nobody;
   }
 
+  // Why the reader's own verdicts moved this book, in one plain sentence.
+  //
+  // It used to join every reason it had with commas behind a colon: "Your saves
+  // lift this: it runs with your saves on structure (D1), you save books tagged
+  // cities & housing." Three faults in one line. It said "your saves" twice, it
+  // put an internal dimension handle in front of a reader, and two reasons
+  // spliced together read as neither.
+  //
+  // One reason, the strongest, and the plainest frame there is for it.
+  function tunedLine(s) {
+    const lead = s.reasons.slice().sort((a, b) => Math.abs(b.points) - Math.abs(a.points))[0];
+    if (!lead) return '';
+    return lead.points > 0
+      ? `Because ${lead.label}.`
+      : `Marked down because ${lead.label}.`;
+  }
+
   function matchLine(e, s) {
     if (!isScored(e)) {
       return scoreStatus(e) === 'reviewed-unscored'
@@ -591,7 +608,7 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     if (b && a.score >= 9 && b.score >= 9) return pick(STRONG);
     if (b && a.score >= 8) return pick(SOLID);
     if (a.score >= 8) return `${a.name} is the signal doing the work here.`;
-    if (s.tuned && s.reasons?.length) return `Your saves lift this: ${s.reasons.map((r) => r.label).join(', ')}.`;
+    if (s.tuned && s.reasons?.length) return tunedLine(s);
     return `${a.name} reads clearly; the rest of the review says less.`;
   }
 
@@ -1037,10 +1054,64 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     </div>`;
   }
 
+  // More rows, without a button to press.
+  //
+  // The button is still here and still does the work. An observer presses it
+  // when it scrolls into view, which is what makes the list infinite; keeping a
+  // real control rather than a bare sentinel is what keeps it reachable by
+  // keyboard and announceable by a screen reader, both of which an infinite list
+  // otherwise strands. It is only hidden once the observer is known to exist.
   function moreBtn(shown, total, action) {
     if (shown >= total) return '';
-    return `<button class="btn btn-block" data-action="${action}">Show ${Math.min(
-      action === 'more-cards' ? CARD_PAGE : ROW_PAGE, total - shown)} more of ${total}</button>`;
+    const left = total - shown;
+    return `<button class="btn btn-block js-more" data-action="${action}" data-auto="${Boolean(moreWatch)}">
+      Show ${Math.min(action === 'more-cards' ? CARD_PAGE : action === 'more-search' ? SEARCH_PAGE : ROW_PAGE, left)} more of ${left}</button>`;
+  }
+
+  // What presses it: how near the bottom the reader is, checked on scroll.
+  //
+  // An IntersectionObserver on the button is the tidier version and it was the
+  // first one written. It is also the one that can silently never fire — a zero
+  // height viewport is enough, and a hidden button that is never pressed leaves
+  // a reader at the end of fourteen rows with no way to ask for more, which is
+  // worse than the button they started with. A scroll position cannot fail to
+  // be a number.
+  //
+  // 600px of lead, so the next page is there before the reader arrives at it.
+  const MORE_LEAD = 600;
+  const moreWatch = true;
+  let morePending = false;
+
+  function checkMore() {
+    morePending = false;
+    const btn = document.querySelector('.js-more');
+    if (!btn || btn.dataset.spent === 'true') return;
+    const el = document.scrollingElement || document.documentElement;
+    const left = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (left > MORE_LEAD) return;
+    // Spent before the click, because the click re-renders and the button this
+    // handler is holding is gone by the time the next scroll event arrives.
+    btn.dataset.spent = 'true';
+    btn.click();
+  }
+
+  // Throttled on a clock rather than on a frame. `requestAnimationFrame` does
+  // not run in a backgrounded or zero-height tab, and a reader who switches away
+  // mid-scroll and back should not find a list that has stopped growing. Two
+  // reads of scrollTop are cheap enough that 80ms is generous.
+  let moreCheckedAt = 0;
+  const queueMore = () => {
+    const now = performance.now();
+    if (morePending || now - moreCheckedAt < 80) return;
+    morePending = true;
+    moreCheckedAt = now;
+    setTimeout(checkMore, 0);
+  };
+
+  function bindMore() {
+    // A list can also start shorter than the viewport, in which case there is no
+    // scroll to wait for and the next page is due immediately.
+    queueMore();
   }
 
   // ------------------------------------------------------------ For you
@@ -1300,24 +1371,13 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
 
     return `
       ${viewHead({
-        eyebrow: 'Your live edit',
+        eyebrow: hasProfile() ? 'Ranked for you' : 'Newest first',
         title: 'Review feed',
         lede: hasProfile()
-          ? `${esc(String(stats.placed))} titles the profile can place: ${esc(String(stats.fromReviews))} read from reviews and ${esc(String(stats.fromAccount))} from the author’s own account, plus ${esc(String(stats.unscored))} where the evidence was not strong enough for a reliable number.`
-          : `Every book the literary press has written about since ${esc(stats.reachesBack || 'the archive opened')} — ${esc(String(stats.fromReviews))} of them read from reviews and ${esc(String(stats.fromAccount))} from the author’s own account of the book.`,
-        aside: `${shown.length} previewed · ${rows.length} ${hasProfile() ? 'placed' : 'in the archive'}`,
+          ? `Every book the press has written about, best fit first. Save one or pass on it and the order moves.`
+          : `Every book the press has written about since ${esc(stats.reachesBack || 'the archive opened')}, newest first.`,
+        aside: `${rows.length} books`,
       })}
-
-      ${hasProfile() ? `<div class="coverage">
-        <p class="eyebrow">Where the scores come from</p>
-        <div class="coverage-figs">
-          <span class="coverage-fig"><b>${stats.fromReviews}</b><span>read from reviews</span></span>
-          <span class="coverage-sep" aria-hidden="true">|</span>
-          <span class="coverage-fig"><b>${stats.fromAccount}</b><span>from the author’s account</span></span>
-          <span class="coverage-sep" aria-hidden="true">|</span>
-          <span class="coverage-fig"><b>${stats.unscored}</b><span>evidence too thin</span></span>
-        </div>
-      </div>` : ''}
 
       ${toolbar({ scopes: SCOPES, scope: state.scope })}
       ${unrankedNote()}
@@ -1386,7 +1446,7 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
       ${q ? (rows.length
         ? `<ul class="rows">${rows.map(searchRow).join('')}</ul>${
           rows.length < found.results.length
-            ? `<button class="btn btn-block" data-action="more-search">Show ${Math.min(SEARCH_PAGE, found.results.length - rows.length)} more of ${found.results.length}</button>`
+            ? moreBtn(rows.length, found.results.length, 'more-search')
             : ''}`
         : `<div class="panel panel-empty"><h2>Nothing in the archive answers that</h2>
            <p>No book here matched on a band, on the text, or on length. Try the subject on its own, or name a book you want something like.</p>
@@ -2113,7 +2173,7 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
   let lastFocus = null;
   let lastFocusKey = null;
 
-  function openDossier(id) {
+  function openDossier(id, { push = true } = {}) {
     const e = FEED.books.find((x) => x.id === id);
     if (!e) return;
     lastFocus = document.activeElement;
@@ -2134,9 +2194,21 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     box.scrollTop = 0;
     box.querySelector('.dossier-close')?.focus();
     analytics.track('book_opened', { bookId: e.id, view: state.view });
+    // Pushed after the dossier is open, so the entry records the state it is
+    // leaving the reader in rather than the one before it.
+    if (push) pushHistory();
   }
 
+  // Closing is going back. The × , the scrim and Escape all land here, and all
+  // three have to leave the history where the swipe would: a dossier closed
+  // without popping its entry means the next back gesture reopens it.
   function closeDossier() {
+    if ($('dossier').hidden) return;
+    if (history.state?.dossier) { history.back(); return; }
+    shutDossier();
+  }
+
+  function shutDossier() {
     const box = $('dossier');
     if (box.hidden) return;
     box.hidden = true;
@@ -2746,8 +2818,41 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     start: viewStart,
   };
 
+  // ------------------------------------------------------------ history
+  //
+  // The back gesture is the navigation on a phone, and this app had no history
+  // at all: every section swap and every dossier happened inside one entry, so
+  // swiping back left the app entirely and swiping forward could not bring you
+  // to where you were.
+  //
+  // The URL is deliberately not touched. Putting the section in a hash would
+  // make a copied address open on whatever screen the copier was looking at,
+  // and a link to this app has to open the app — the same reason the last
+  // session's view is not restored from storage. What is pushed is state, so
+  // back and forward work for the length of a visit and a shared address still
+  // opens the front.
+  //
+  // The dossier is an entry of its own, which is the part that pays for itself:
+  // a book opened on a phone closes with the gesture the reader already uses
+  // rather than by finding a small × in a corner.
+  const historyState = () => ({ view: state.view, dossier: dossierOpenId() || null });
+
+  function pushHistory() {
+    // A file:// page has no usable history and throws on pushState. The app
+    // already refuses to run there, but this must not be what breaks first.
+    try { history.pushState(historyState(), ''); } catch { /* not served over http */ }
+  }
+
   function setView(view) {
     if (!VIEWS[view]) return;
+    if (view === state.view && !dossierOpenId()) return;
+    applyView(view);
+    pushHistory();
+  }
+
+  function applyView(view) {
+    if (!VIEWS[view]) return;
+    if (!$('dossier').hidden) shutDossier();
     state.view = view;
     state.openMenu = null;
     state.limit = ROW_PAGE;
@@ -2788,6 +2893,7 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     const root = $('view-root');
     root.innerHTML = `<div class="view">${VIEWS[state.view]()}</div>`;
     bindJackets(root);
+    bindMore();
     syncChrome();
     // A dossier left open must show the state the action just produced.
     const openId = dossierOpenId();
@@ -3027,6 +3133,8 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     $('auth').addEventListener('click', doAuth);
     for (const el of $$('[data-auth]')) el.addEventListener('click', doAuth);
     $('scrim').addEventListener('click', closeDossier);
+    window.addEventListener('scroll', queueMore, { passive: true });
+    window.addEventListener('resize', queueMore, { passive: true });
 
     document.addEventListener('keydown', (ev) => {
       if (ev.key === 'Escape') {
@@ -3106,6 +3214,25 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     bindGlobal();
     showAuth();
     render();
+
+    // The entry the visit starts on. Without it the first back gesture reads a
+    // null state and there is nothing to restore to.
+    try { history.replaceState(historyState(), ''); } catch { /* not served over http */ }
+    window.addEventListener('popstate', (ev) => {
+      // Both directions land here, and neither may push: the browser has already
+      // moved the pointer, and pushing on top of it would make forward
+      // unreachable and back a loop.
+      const to = ev.state || { view: 'foryou', dossier: null };
+      if (to.dossier) {
+        if (dossierOpenId() !== to.dossier) {
+          if (to.view && to.view !== state.view) applyView(to.view);
+          openDossier(to.dossier, { push: false });
+        }
+        return;
+      }
+      if (!$('dossier').hidden) shutDossier();
+      if (to.view && to.view !== state.view) applyView(to.view);
+    });
 
     // Read before bindOnboarding, which writes this key: the reminder is for the
     // visit after the one that spent the prompt, not for the same one.

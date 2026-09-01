@@ -837,26 +837,6 @@ button.tag:hover { border-color: var(--brass); color: var(--porcelain); }
   }
 }
 
-/* ------------------------------------------------------------ coverage strip */
-
-.coverage {
-  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
-  gap: 12px;
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius);
-  background: var(--petrol-deep);
-  padding: 15px 18px;
-}
-.coverage-figs { display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px; }
-.coverage-fig { display: flex; align-items: baseline; gap: 7px; }
-.coverage-fig b {
-  font-family: var(--font-display); font-weight: 400; font-size: 24px;
-  color: var(--porcelain);
-}
-.coverage-fig span { font-size: 13.5px; color: var(--graphite); }
-.coverage-sep { color: var(--hairline-dark); }
-
-
 
 /* ------------------------------------------------------------ panels */
 
@@ -1519,19 +1499,6 @@ button.tag { cursor: pointer; }
   .view-head-aside, .view-head .aside { font-size: 11px; }
 }
 
-/* The coverage strip on a phone. These rules live at the end of the file on
-   purpose: the mobile block near the top is written *before* the base .coverage
-   rules, so every one of these was being overridden by a later rule of equal
-   specificity and the strip kept its three-row column no matter what was set. */
-@media (max-width: 767px) {
-  .coverage { flex-direction: row; align-items: center; gap: 8px; padding: 10px 12px; }
-  .coverage .eyebrow, .coverage-sep { display: none; }
-  .coverage-figs { flex-wrap: nowrap; gap: 10px; width: 100%; justify-content: space-between; }
-  .coverage-fig { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
-  .coverage-fig b { font-size: 17px; line-height: 1; }
-  .coverage-fig span { font-size: 10.5px; line-height: 1.2; }
-}
-
 /* The score column, on a phone, and why it moved.
    Below 1024 the layout puts the number under the cover — in a column 52px wide.
    The number fits. "RECOMMENDED" does not, and neither does "FROM THE AUTHOR'S
@@ -1783,4 +1750,19 @@ button.tag { cursor: pointer; }
   margin: 4px 0 14px;
   max-width: 68ch;
   font-size: 13.5px; line-height: 1.55; color: var(--graphite);
+}
+
+/* The more-button when an observer is pressing it for us. It stays in the
+   document for the keyboard and the screen reader, which an infinite list
+   otherwise strands, and stops taking space on screen. */
+.js-more[data-auto="true"] {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+.js-more[data-auto="true"]:focus-visible {
+  position: static;
+  width: auto; height: auto; margin: 14px 0 0; padding: 0 18px;
+  clip: auto; white-space: normal;
 }
