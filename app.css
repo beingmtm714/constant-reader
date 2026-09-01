@@ -856,41 +856,7 @@ button.tag:hover { border-color: var(--brass); color: var(--porcelain); }
 .coverage-fig span { font-size: 13.5px; color: var(--graphite); }
 .coverage-sep { color: var(--hairline-dark); }
 
-/* ------------------------------------------------------------ status board */
 
-.board {
-  display: grid; grid-template-columns: 1fr;
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius);
-  overflow: hidden;
-}
-.board-lede { background: var(--garnet); padding: 26px 24px; }
-.board-lede h2 {
-  font-family: var(--font-display); font-weight: 400;
-  font-size: clamp(26px, 5vw, 34px); line-height: 1.08; letter-spacing: -.02em;
-  color: var(--porcelain);
-  margin: 12px 0 0;
-}
-.board-lede p { margin: 12px 0 0; font-size: 14.5px; line-height: 1.5; color: #f0e2e2; max-width: 40ch; }
-.board-figs { display: grid; grid-template-columns: 1fr 1fr; background: var(--petrol-deep); }
-.board-fig {
-  display: flex; align-items: baseline; gap: 12px;
-  padding: 20px 18px;
-  border-top: 1px solid var(--hairline);
-  border-right: 1px solid var(--hairline);
-}
-.board-fig:nth-child(2n) { border-right: 0; }
-.board-fig[aria-current="true"] { background: var(--lapis); }
-.board-fig b {
-  font-family: var(--font-display); font-weight: 400; font-size: 30px; line-height: 1;
-  color: var(--brass);
-}
-.board-fig span { display: block; }
-.board-fig .board-fig-name {
-  font-family: var(--font-mono); font-size: 9px; letter-spacing: .12em;
-  text-transform: uppercase; color: var(--porcelain);
-}
-.board-fig .board-fig-note { font-size: 12.5px; color: var(--graphite); margin-top: 3px; }
 
 /* ------------------------------------------------------------ panels */
 
@@ -1388,9 +1354,6 @@ body.is-locked { overflow: hidden; }
   .pane { padding: 30px 32px 96px; }
   .shelf { grid-template-columns: 1fr 1fr; }
   .toolbar { grid-template-columns: 1fr 190px 150px; }
-  .board { grid-template-columns: 1fr 1fr; }
-  .board-figs { grid-template-columns: 1fr 1fr; }
-  .board-fig:nth-child(-n+2) { border-top: 0; }
   .steps { grid-template-columns: repeat(3, 1fr); }
   .step { border-top: 0; border-left: 1px solid var(--hairline); }
   .step:first-child { border-left: 0; }
@@ -1801,3 +1764,10 @@ button.tag { cursor: pointer; }
   border-color: var(--brass);
   color: var(--porcelain);
 }
+
+/* Pass, on a card. Same shape as the bookmark so the pair reads as one control
+   with two answers, and quieter, because refusing a book should not be the
+   loudest thing on it. */
+.card-pass { margin-right: 6px; }
+.card-pass:hover { color: var(--destructive); border-color: var(--destructive); }
+.card-pass .ico { width: 15px; height: 15px; }

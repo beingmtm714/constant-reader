@@ -11,7 +11,7 @@
 import * as saved from './lib/saved-books.mjs';
 import { RETAILERS, linkFor, canFindCopy } from './lib/retailers.mjs';
 import { createAnalytics } from './lib/analytics.mjs';
-import { buildTasteModel, tunedTotal, MIN_SIGNAL, MAX_ADJUSTMENT } from './lib/taste.mjs';
+import { buildTasteModel, tunedTotal, MIN_SIGNAL, MIN_JUDGMENTS, MAX_ADJUSTMENT } from './lib/taste.mjs';
 import { outOfTen, RECOMMEND_AT } from './lib/recommend.mjs';
 import { rescore, isEmpty, bandKey, AVERSION_STRENGTHS, MAX_AVERSIONS, EMPTY as EMPTY_OVERRIDES } from './lib/overrides.mjs';
 import { READS, REFUSALS, MIN_PICKS, answersReady, chipsFor, groupedChipsFor, buildProfile } from './lib/onboard.mjs';
@@ -782,6 +782,15 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
       aria-pressed="${on}" aria-label="${on ? 'Remove from your shelf' : 'Save to your shelf'}">${ico('bookmark')}</button>`;
   }
 
+  // A pass on the card, because the front page was the one place a book could be
+  // recommended and not refused. The feed row and the dossier have had this the
+  // whole time; For you is where a reader actually meets the recommendation, so
+  // it is where a disagreement with it is worth the most.
+  function passBtn(e) {
+    return `<button class="card-bookmark card-pass" data-action="pass" data-id="${esc(e.id)}"
+      aria-label="Pass on ${esc(e.book.title)} and stop showing it">${ico('close')}</button>`;
+  }
+
   function scoreBadge(e, s) {
     // A number on a cover is the strongest claim the interface makes. It is a
     // fit score, so before there is anyone to fit it is simply absent — not
@@ -813,7 +822,7 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
             aria-label="Show other books tagged ${esc(t.label)}">${esc(t.label)}</button>`).join('')}</div>
         <p class="card-why">${ico('sparkles')}<span>${esc(hasProfile() ? matchLine(e, s) : sourceLine(e))}</span></p>
       </div>
-      <div class="card-foot">${bookmarkBtn(e)}</div>
+      <div class="card-foot">${passBtn(e)}${bookmarkBtn(e)}</div>
     </article>`;
   }
 
@@ -1061,7 +1070,24 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
   // The drawn eight are held for the session and filtered on the way out rather
   // than redrawn. A filter that dealt a new hand would read as the page losing
   // its place, which is the same reason the sample is drawn once at all.
-  const filteredSample = () => sampleShelf().filter(({ e }) => inFilters(e));
+  function filteredSample() {
+    const shelf = sampleShelf().filter(({ e }) => !passed(e) && inFilters(e));
+    if (shelf.length >= 8) return shelf;
+    // Passing on a card leaves a hole in a shelf of eight, and a shelf with a
+    // hole in it reads as a fault rather than as the card having gone. The
+    // sample is a random eight, so a fresh draw is as honest as the original —
+    // and it is added to the held sample rather than replacing it, so nothing
+    // already on screen moves.
+    const have = new Set(sampleShelf().map(({ e }) => e.id));
+    const pool = FEED.books.filter((e) => isScored(e) && !passed(e) && !have.has(e.id) && inFilters(e));
+    while (shelf.length < 8 && pool.length) {
+      const [picked] = pool.splice(Math.floor(Math.random() * pool.length), 1);
+      const row = { e: picked, s: scoreOf(picked) };
+      sample.push(row);
+      shelf.push(row);
+    }
+    return shelf;
+  }
 
   function viewForYou() {
     // Without a profile this page shows the app rather than an argument for it:
@@ -1183,6 +1209,7 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
         <div class="spotlight-actions">
           <button class="btn btn-solid" data-action="open" data-id="${esc(e.id)}">Open the dossier ${ico('arrow')}</button>
           ${saveBtn(e, { label: 'Save for later' })}
+          <button class="btn btn-quiet" data-action="pass" data-id="${esc(e.id)}">Not for me</button>
         </div>
       </div>
       <div class="spotlight-cover">
@@ -1419,32 +1446,23 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     const rows = sortPool(pool, state.sort);
     const shown = rows.slice(0, state.allLimit);
 
-    const fig = (n, name, note, id) => `<div class="board-fig" aria-current="${state.allScope === id}">
-      <b>${n}</b><span><span class="board-fig-name">${esc(name)}</span><span class="board-fig-note">${esc(note)}</span></span></div>`;
-
+    // The score-status board is gone. It counted how many books the scorer had
+    // placed, how many it had read from a review against an author's account,
+    // and how many carried too little evidence — a build report, standing where
+    // a reader who came to browse a shelf has to scroll past it. Most mornings
+    // two of its four figures were zero.
+    //
+    // Nothing went with it. Its figures doubled as the scope filter, and that
+    // filter is in the Filters menu, where the other three live.
     return `
       ${viewHead({
-        eyebrow: 'The complete catalogue',
-        title: 'Every book, clearly accounted for.',
+        eyebrow: 'Nothing left out',
+        title: 'The whole shelf.',
         lede: hasProfile()
-          ? `The full ${esc(String(stats.total))}-book archive—placed and unplaced—without making absence look like a verdict.`
-          : `The full ${esc(String(stats.total))}-book archive, as the press left it. Browse it freely; nothing here is filtered by anybody's taste.`,
-        aside: `${shown.length} previewed · ${rows.length} total`,
+          ? `${esc(String(stats.total))} books, yours to sort. The one page that shows what your profile scores badly as well as what it likes.`
+          : `${esc(String(stats.total))} books, newest first. Everything the press has written about, whether or not anyone has scored it.`,
+        aside: `${shown.length} of ${rows.length}`,
       })}
-
-      <div class="board">
-        <div class="board-lede">
-          <p class="eyebrow">Score status</p>
-          <h2>A missing score is information, not a judgment.</h2>
-          <p>A book is placed on whatever anyone has written about it — a critic, or the author on their own book. The ${esc(String(stats.awaiting))} left are the ones nobody has described at all.</p>
-        </div>
-        <div class="board-figs">
-          ${fig(stats.total, 'All books', 'Complete archive', 'any')}
-          ${fig(stats.scored, 'Scored', `${stats.fromReviews} from reviews, ${stats.fromAccount} from the author`, 'scored')}
-          ${fig(stats.unscored, 'Described · no score', 'Evidence too thin', 'reviewed-unscored')}
-          ${fig(stats.awaiting, 'Not yet described', 'Catalogue listing only', 'awaiting-review')}
-        </div>
-      </div>
 
       ${toolbar({ scopes: ALL_SCOPES, scope: state.allScope, showRecommended: false })}
       ${unrankedNote()}
@@ -1533,8 +1551,16 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
         ],
       });
     }
+    // Two counters, because the model has two halves and they need different
+    // evidence. Saves anchor it: a mean of the books you liked, and the nearest
+    // one to say why. Passes only sharpen what it already reads off a tag, so
+    // they open that half on their own and never the other.
     const savedN = taste?.savedCount ?? saved.savedCount(verdicts);
+    const passedN = taste?.passedCount ?? 0;
+    const judgedN = savedN + passedN;
     const need = Math.max(0, MIN_SIGNAL - savedN);
+    const needAny = Math.max(0, MIN_JUDGMENTS - judgedN);
+    const learning = Boolean(taste?.ready);
     const dims = FEED.dimensions
       .map((d) => ({ name: d.name, weight: weightOf(d) }))
       .sort((a, b) => b.weight - a.weight)
@@ -1551,12 +1577,21 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
       <div class="dash">
         <div class="dash-side">
           <div class="dash-calibrate">
-            <span class="calibrate-dial">${savedN}<small>/ ${MIN_SIGNAL}</small></span>
+            <span class="calibrate-dial">${learning ? judgedN : Math.min(judgedN, MIN_JUDGMENTS)}<small>${
+              learning ? '' : `/ ${MIN_JUDGMENTS}`}</small></span>
             <div>
               <p class="eyebrow">Calibration</p>
-              <h2>${need ? `${need} more save${need === 1 ? '' : 's'} to begin learning.` : 'Your saves are tuning the feed.'}</h2>
-              <p>Saves can move a score by no more than ${(MAX_ADJUSTMENT / 10).toFixed(1)} points. Rules and penalties remain entirely yours.</p>
-              <button class="btn btn-solid" data-action="go" data-view="foryou">${need ? 'Find something to keep' : 'Keep reading the edit'}</button>
+              <h2>${!learning
+                ? `${needAny} more verdict${needAny === 1 ? '' : 's'} to begin learning.`
+                : need
+                  ? 'Learning from what you pass on.'
+                  : 'Your saves and passes are tuning the feed.'}</h2>
+              <p>${!learning
+                ? 'A save or a pass both count. Refusing a book says as much about your taste as keeping one.'
+                : need
+                  ? `${esc(String(passedN))} passes have told it which tags to mark down. ${need} more save${need === 1 ? '' : 's'} and it can also say what a book you would keep looks like.`
+                  : `Together they can move a score by no more than ${(MAX_ADJUSTMENT / 10).toFixed(1)} points. Rules and penalties remain entirely yours.`}</p>
+              <button class="btn btn-solid" data-action="go" data-view="foryou">${learning ? 'Keep reading the edit' : 'Start ruling on books'}</button>
             </div>
           </div>
         </div>
