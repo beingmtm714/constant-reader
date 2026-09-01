@@ -1853,3 +1853,11 @@ button.tag { cursor: pointer; }
   #weekpick-slot { top: 0; }
   .weekpick { padding: 10px 72px; }
 }
+
+/* The one line under a section heading that says how the list beneath it is
+   ordered, where the order is an argument rather than an obvious default. */
+.section-note {
+  margin: 6px 0 0;
+  font-size: 13px; line-height: 1.5; color: var(--muted-ink);
+  max-width: 62ch;
+}

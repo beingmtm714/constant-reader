@@ -8,19 +8,19 @@
    browser and the build can never disagree about what a number means. This file
    decides what is shown and in what order. */
 
-import * as saved from './lib/saved-books.mjs?v=924c1867d0';
-import { RETAILERS, linkFor, canFindCopy } from './lib/retailers.mjs?v=924c1867d0';
-import { createAnalytics } from './lib/analytics.mjs?v=924c1867d0';
-import { buildTasteModel, tunedTotal, explore, MIN_SIGNAL, MIN_JUDGMENTS, MAX_ADJUSTMENT } from './lib/taste.mjs?v=924c1867d0';
-import { outOfTen, RECOMMEND_AT } from './lib/recommend.mjs?v=924c1867d0';
-import { rescore, isEmpty, bandKey, AVERSION_STRENGTHS, MAX_AVERSIONS, EMPTY as EMPTY_OVERRIDES } from './lib/overrides.mjs?v=924c1867d0';
-import { READS, REFUSALS, MIN_PICKS, answersReady, chipsFor, groupedChipsFor, buildProfile } from './lib/onboard.mjs?v=924c1867d0';
-import * as sync from './lib/sync.mjs?v=924c1867d0';
-import * as push from './lib/push.mjs?v=924c1867d0';
-import { jacketFor } from './lib/jacket.mjs?v=924c1867d0';
-import { cleanBlurb, bestBlurb } from './lib/blurb.mjs?v=924c1867d0';
-import { coverFor, fillsSlot } from './lib/cover.mjs?v=924c1867d0';
-import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH_EXAMPLES } from './lib/search.mjs?v=924c1867d0';
+import * as saved from './lib/saved-books.mjs?v=5a97887a83';
+import { RETAILERS, linkFor, canFindCopy } from './lib/retailers.mjs?v=5a97887a83';
+import { createAnalytics } from './lib/analytics.mjs?v=5a97887a83';
+import { buildTasteModel, tunedTotal, explore, MIN_SIGNAL, MIN_JUDGMENTS, MAX_ADJUSTMENT } from './lib/taste.mjs?v=5a97887a83';
+import { outOfTen, RECOMMEND_AT } from './lib/recommend.mjs?v=5a97887a83';
+import { rescore, isEmpty, bandKey, AVERSION_STRENGTHS, MAX_AVERSIONS, EMPTY as EMPTY_OVERRIDES } from './lib/overrides.mjs?v=5a97887a83';
+import { READS, REFUSALS, MIN_PICKS, answersReady, chipsFor, groupedChipsFor, buildProfile } from './lib/onboard.mjs?v=5a97887a83';
+import * as sync from './lib/sync.mjs?v=5a97887a83';
+import * as push from './lib/push.mjs?v=5a97887a83';
+import { jacketFor } from './lib/jacket.mjs?v=5a97887a83';
+import { cleanBlurb, bestBlurb } from './lib/blurb.mjs?v=5a97887a83';
+import { coverFor, fillsSlot } from './lib/cover.mjs?v=5a97887a83';
+import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH_EXAMPLES } from './lib/search.mjs?v=5a97887a83';
 
 (() => {
   'use strict';
@@ -1297,14 +1297,40 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
   // got a second review last night is news too, and the second review is often
   // the more interesting one.
   function sinceLastVisit() {
-    return FEED.books
+    const rows = FEED.books
       .filter((e) => isScored(e) && !passed(e) && inFilters(e)
         && (Date.parse(e.lastReviewed || '') || 0) >= sinceCutoff)
-      .map((e) => ({ e, s: scoreOf(e) }))
-      .sort((a, b) => (hasProfile() ? b.s.total - a.s.total : reviewTime(b.e) - reviewTime(a.e)));
+      .map((e) => ({ e, s: scoreOf(e) }));
+    const byFit = (a, b) => (hasProfile() ? b.s.total - a.s.total : reviewTime(b.e) - reviewTime(a.e));
+
+    // Critics first, and the author's own account after them.
+    //
+    // These are different classes of text and lib/sources.mjs is explicit about
+    // it: a critic on a book they have read is the only text allowed to say
+    // whether it is any good, while an author describing their own book says
+    // what it is about and cannot say that. Ordering the two together by fit
+    // buried the New York Times under a podcast interview, because the interview
+    // happened to score higher. Measured over two days of arrivals: 9 reviews
+    // against 12 author accounts, so this is most of what lands.
+    //
+    // Nothing is hidden — the author accounts follow, and every row already says
+    // which it is.
+    const reviewed = rows.filter((r) => readFrom(r.e) === 'reviews').sort(byFit);
+    const described = rows.filter((r) => readFrom(r.e) !== 'reviews').sort(byFit);
+    return [...reviewed, ...described];
   }
 
   // How long ago that was, in the words a reader would use.
+  // What the order of that list is, where it is worth saying. A reader who sees
+  // a podcast interview above a New York Times review should know it was not
+  // ranked above it.
+  function freshNote(rows) {
+    const critics = rows.filter((r) => readFrom(r.e) === 'reviews').length;
+    const authors = rows.length - critics;
+    if (!critics || !authors) return '';
+    return `<p class="section-note">${esc(String(critics))} from critics first, then ${esc(String(authors))} where the author described the book themselves.</p>`;
+  }
+
   function sinceLabel() {
     const days = Math.round((Date.now() - sinceCutoff) / 86400000);
     if (days <= 0) return 'today';
@@ -1382,6 +1408,7 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
               <div>
                 <p class="eyebrow">${esc(sinceLabel() === 'today' ? 'Filed today' : `Since you were last here, ${sinceLabel()}`)}</p>
                 <h2 id="fresh-h">${hasProfile() ? 'New, and ranked for you' : 'Newly reviewed'}</h2>
+                ${freshNote(fresh)}
               </div>
               <button class="section-head-link" data-action="go" data-view="feed">See the full feed ${ico('arrow')}</button>
             </div>
