@@ -8,19 +8,19 @@
    browser and the build can never disagree about what a number means. This file
    decides what is shown and in what order. */
 
-import * as saved from './lib/saved-books.mjs?v=ce26cab02f';
-import { RETAILERS, linkFor, canFindCopy } from './lib/retailers.mjs?v=ce26cab02f';
-import { createAnalytics } from './lib/analytics.mjs?v=ce26cab02f';
-import { buildTasteModel, tunedTotal, explore, MIN_SIGNAL, MIN_JUDGMENTS, MAX_ADJUSTMENT } from './lib/taste.mjs?v=ce26cab02f';
-import { outOfTen, RECOMMEND_AT } from './lib/recommend.mjs?v=ce26cab02f';
-import { rescore, isEmpty, bandKey, AVERSION_STRENGTHS, MAX_AVERSIONS, EMPTY as EMPTY_OVERRIDES } from './lib/overrides.mjs?v=ce26cab02f';
-import { READS, REFUSALS, MIN_PICKS, answersReady, chipsFor, groupedChipsFor, buildProfile } from './lib/onboard.mjs?v=ce26cab02f';
-import * as sync from './lib/sync.mjs?v=ce26cab02f';
-import * as push from './lib/push.mjs?v=ce26cab02f';
-import { jacketFor } from './lib/jacket.mjs?v=ce26cab02f';
-import { cleanBlurb, bestBlurb } from './lib/blurb.mjs?v=ce26cab02f';
-import { coverFor, fillsSlot } from './lib/cover.mjs?v=ce26cab02f';
-import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH_EXAMPLES } from './lib/search.mjs?v=ce26cab02f';
+import * as saved from './lib/saved-books.mjs?v=bb5f9182b2';
+import { RETAILERS, linkFor, canFindCopy } from './lib/retailers.mjs?v=bb5f9182b2';
+import { createAnalytics } from './lib/analytics.mjs?v=bb5f9182b2';
+import { buildTasteModel, tunedTotal, explore, MIN_SIGNAL, MIN_JUDGMENTS, MAX_ADJUSTMENT } from './lib/taste.mjs?v=bb5f9182b2';
+import { outOfTen, RECOMMEND_AT } from './lib/recommend.mjs?v=bb5f9182b2';
+import { rescore, isEmpty, bandKey, AVERSION_STRENGTHS, MAX_AVERSIONS, EMPTY as EMPTY_OVERRIDES } from './lib/overrides.mjs?v=bb5f9182b2';
+import { READS, REFUSALS, MIN_PICKS, answersReady, chipsFor, groupedChipsFor, buildProfile } from './lib/onboard.mjs?v=bb5f9182b2';
+import * as sync from './lib/sync.mjs?v=bb5f9182b2';
+import * as push from './lib/push.mjs?v=bb5f9182b2';
+import { jacketFor } from './lib/jacket.mjs?v=bb5f9182b2';
+import { cleanBlurb, bestBlurb } from './lib/blurb.mjs?v=bb5f9182b2';
+import { coverFor, fillsSlot } from './lib/cover.mjs?v=bb5f9182b2';
+import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH_EXAMPLES } from './lib/search.mjs?v=bb5f9182b2';
 
 (() => {
   'use strict';
@@ -2999,8 +2999,12 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     }, 500);
 
     $('firstrun-build').addEventListener('click', () => { dlg.close(); setView('start'); });
-    // Sign in and go, without waiting on the popup or the round trip. The builder
-    // is where they were headed, the profile does not need the account to be
+    // Sign in and go, without waiting on the popup or the round trip.
+    //
+    // The order is the point: an account attached before the first question
+    // means the profile is kept as it is built, rather than the reader being
+    // asked a second time once they have something to lose. The builder is where
+    // they were headed either way, the profile does not need the account to be
     // built, and a sign-in that fails should leave them building rather than
     // stranded on an error.
     $('firstrun-signin').addEventListener('click', () => { dlg.close(); doAuth(); setView('start'); });

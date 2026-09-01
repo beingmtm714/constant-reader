@@ -52,7 +52,7 @@
      three faces are also fetched: without them a Windows or Android reader gets
      Georgia everywhere and the display/text/interface division collapses. -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..700;1,6..96,400..600&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400..600;1,8..60,400&display=swap">
-<link rel="stylesheet" href="app.css?v=ce26cab02f">
+<link rel="stylesheet" href="app.css?v=bb5f9182b2">
 
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/constant-reader-180.png">
@@ -216,16 +216,18 @@
        filed it, which the page behind this dialog says in as many words. The
        popup was arguing with the screen underneath it.
 
-       The sign-in button stays, and it is not an offer to save anything — there
-       is nothing here to save yet. It is for a reader who built a profile on
-       another device and wants it back, which is the only reason to sign in
-       before there is something of your own on the screen. -->
+       The sign-in button signs in and then opens the builder, which is the order
+       that costs a reader nothing: answer with an account already attached and
+       the profile is kept from the first question rather than prompted for
+       afterwards. An account is what makes a taste profile outlive this browser
+       and follow the reader to another one, so the button says that rather than
+       naming a flow. -->
   <p class="eyebrow">First time here</p>
   <h2 id="firstrun-title">Nothing here is ranked yet.</h2>
   <p class="firstrun-body">Every book is in the order the press reviewed it, and none of them carries a score, because a score here measures fit with a particular reader. Three questions, about two minutes, and the whole thing reorders around what you read for.</p>
   <div class="firstrun-actions">
     <button class="btn btn-solid" id="firstrun-build" autofocus>Answer the three questions</button>
-    <button class="btn" id="firstrun-signin">I already have an account</button>
+    <button class="btn" id="firstrun-signin">Sign in first, so it is kept</button>
     <button class="btn btn-quiet" id="firstrun-later">Just let me look</button>
   </div>
 </dialog>
@@ -233,6 +235,6 @@
 <p class="toast" id="toast" role="status" aria-live="polite" hidden></p>
 <p class="sr-only" id="announce" role="status" aria-live="polite"></p>
 
-<script type="module" src="app.js?v=ce26cab02f"></script>
+<script type="module" src="app.js?v=bb5f9182b2"></script>
 </body>
 </html>
