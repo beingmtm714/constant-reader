@@ -609,7 +609,16 @@ a:hover { text-decoration: underline; }
 .card:hover .card-peek, .card:focus-within .card-peek { opacity: 1; }
 .card-peek .ico { width: 13px; height: 13px; }
 
-.card-body { display: flex; flex-direction: column; gap: 5px; padding: 13px 14px 12px; flex: 1; }
+.card-body { display: flex; flex-direction: column; gap: 0; padding: 14px 14px 12px; flex: 1; }
+/* The card's vertical rhythm, and nothing else may set a margin inside it.
+   6 under the eyebrow, 3 between title and author because they are one unit,
+   then an even 12 between the blocks that are separate thoughts. */
+.card-body > * { margin: 0; }
+.card-source { margin-bottom: 6px; }
+.card-author { margin-top: 3px; }
+.card-blurb { margin-top: 12px; }
+.card-tags { margin-top: 12px; }
+.card-why { margin-top: 12px; }
 .card-source {
   font-family: var(--font-mono); font-size: 8px; letter-spacing: .12em;
   text-transform: uppercase; color: #ffffff8f;
@@ -623,10 +632,9 @@ a:hover { text-decoration: underline; }
   text-align: left;
 }
 .card-author { font-family: var(--font-text); font-style: italic; font-size: 14px; color: #ffffffc4; }
-.card-tags { margin-top: 7px; gap: 5px; }
+.card-tags { gap: 5px; }
 .card-why {
   display: flex; gap: 7px; align-items: flex-start;
-  margin-top: 5px;
   font-size: 12.5px; line-height: 1.45; color: #ffffffcc;
 }
 .card-why .ico { width: 12px; height: 12px; margin-top: 3px; color: var(--brass); }
@@ -1669,11 +1677,9 @@ button.tag { cursor: pointer; }
 /* A card says what the book is. Before this it carried a title, an author and
    "Fiction, probably", which is the one fact the cover already gives. */
 .card-blurb {
-  margin: 9px 0 0;
   font-family: var(--font-text); font-size: 13.5px; line-height: 1.5;
   color: var(--graphite);
 }
-.card-tags { margin-top: 10px; }
 
 /* For you offers no sort, so its toolbar is a field and one button rather than
    a field and two. */
@@ -1734,10 +1740,13 @@ button.tag { cursor: pointer; }
 
 /* Pass, on a card. Same shape as the bookmark so the pair reads as one control
    with two answers, and quieter, because refusing a book should not be the
-   loudest thing on it. */
+   loudest thing on it. Pressed, it is the way back: the archive keeps passed
+   books, so the button has to say which of its two jobs it is doing. */
 .card-pass { margin-right: 6px; }
 .card-pass:hover { color: var(--destructive); border-color: var(--destructive); }
 .card-pass .ico { width: 15px; height: 15px; }
+.card-pass[aria-pressed="true"] { color: var(--destructive); border-color: var(--hairline-dark); }
+.card-pass[aria-pressed="true"]:hover { color: var(--porcelain); }
 
 /* The reserve slot. Set apart with a brass rule rather than a colour, because
    it is not a fifth recommendation and should not read as one. */
@@ -1765,4 +1774,24 @@ button.tag { cursor: pointer; }
   position: static;
   width: auto; height: auto; margin: 14px 0 0; padding: 0 18px;
   clip: auto; white-space: normal;
+}
+
+/* The shelf on a phone. One column made every card 848px tall — taller than the
+   screen — so the archive was one book per swipe and the covers could not be
+   compared, which is the whole use of a shelf. Two columns at 375px give a
+   170px cover, four books to a screen, and a description short enough to read
+   at a glance rather than long enough to scroll past. */
+@media (max-width: 767px) {
+  .shelf { grid-template-columns: 1fr 1fr; gap: 12px; }
+  .card-body { padding: 11px 11px 10px; }
+  .card-title { font-size: 16px; line-height: 1.12; }
+  .card-author { font-size: 12.5px; }
+  .card-blurb {
+    font-size: 12px; line-height: 1.45;
+    display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .card-why { font-size: 11.5px; }
+  .card-cover { padding: 8px 8px 0; }
+  .card-foot { padding: 0 7px 7px; }
 }

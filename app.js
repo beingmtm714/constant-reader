@@ -8,19 +8,19 @@
    browser and the build can never disagree about what a number means. This file
    decides what is shown and in what order. */
 
-import * as saved from './lib/saved-books.mjs?v=a1e20bbf7e';
-import { RETAILERS, linkFor, canFindCopy } from './lib/retailers.mjs?v=a1e20bbf7e';
-import { createAnalytics } from './lib/analytics.mjs?v=a1e20bbf7e';
-import { buildTasteModel, tunedTotal, explore, MIN_SIGNAL, MIN_JUDGMENTS, MAX_ADJUSTMENT } from './lib/taste.mjs?v=a1e20bbf7e';
-import { outOfTen, RECOMMEND_AT } from './lib/recommend.mjs?v=a1e20bbf7e';
-import { rescore, isEmpty, bandKey, AVERSION_STRENGTHS, MAX_AVERSIONS, EMPTY as EMPTY_OVERRIDES } from './lib/overrides.mjs?v=a1e20bbf7e';
-import { READS, REFUSALS, MIN_PICKS, answersReady, chipsFor, groupedChipsFor, buildProfile } from './lib/onboard.mjs?v=a1e20bbf7e';
-import * as sync from './lib/sync.mjs?v=a1e20bbf7e';
-import * as push from './lib/push.mjs?v=a1e20bbf7e';
-import { jacketFor } from './lib/jacket.mjs?v=a1e20bbf7e';
-import { cleanBlurb, bestBlurb } from './lib/blurb.mjs?v=a1e20bbf7e';
-import { coverFor } from './lib/cover.mjs?v=a1e20bbf7e';
-import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH_EXAMPLES } from './lib/search.mjs?v=a1e20bbf7e';
+import * as saved from './lib/saved-books.mjs?v=7724e033d2';
+import { RETAILERS, linkFor, canFindCopy } from './lib/retailers.mjs?v=7724e033d2';
+import { createAnalytics } from './lib/analytics.mjs?v=7724e033d2';
+import { buildTasteModel, tunedTotal, explore, MIN_SIGNAL, MIN_JUDGMENTS, MAX_ADJUSTMENT } from './lib/taste.mjs?v=7724e033d2';
+import { outOfTen, RECOMMEND_AT } from './lib/recommend.mjs?v=7724e033d2';
+import { rescore, isEmpty, bandKey, AVERSION_STRENGTHS, MAX_AVERSIONS, EMPTY as EMPTY_OVERRIDES } from './lib/overrides.mjs?v=7724e033d2';
+import { READS, REFUSALS, MIN_PICKS, answersReady, chipsFor, groupedChipsFor, buildProfile } from './lib/onboard.mjs?v=7724e033d2';
+import * as sync from './lib/sync.mjs?v=7724e033d2';
+import * as push from './lib/push.mjs?v=7724e033d2';
+import { jacketFor } from './lib/jacket.mjs?v=7724e033d2';
+import { cleanBlurb, bestBlurb } from './lib/blurb.mjs?v=7724e033d2';
+import { coverFor } from './lib/cover.mjs?v=7724e033d2';
+import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH_EXAMPLES } from './lib/search.mjs?v=7724e033d2';
 
 (() => {
   'use strict';
@@ -534,16 +534,57 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
   // the same sentence four times across one shelf, which reads as boilerplate
   // rather than as a reason. The claim is identical; the phrasing rotates on the
   // book's own id, so it is stable per book and varied across a row.
-  const STRONG = [
-    (x, y) => `${x} and ${lower(y)} align almost perfectly with your profile.`,
-    (x, y) => `Two of your highest-weight dimensions appear here: ${lower(x)} and ${lower(y)}.`,
-    (x, y) => `Your ${lower(x)} and ${lower(y)} preferences both fire on this one.`,
-  ];
-  const SOLID = [
-    (x, y) => `A high-confidence match for ${lower(x)}, with ${lower(y)} behind it.`,
-    (x, y) => `${x} carries it; ${lower(y)} holds the rest up.`,
-    (x, y) => `Strong on ${lower(x)}, and ${lower(y)} does not let it down.`,
-  ];
+  // Which tag kind each dimension files its band under. One to one, which is
+  // what lets a band the reader picked during onboarding be found again as a tag
+  // on a book.
+  const KIND_OF_DIM = {
+    D1: 'period', D2: 'subject', D3: 'form', D4: 'prose',
+    D5: 'tone', D6: 'scale', D7: 'press', D8: 'narration',
+  };
+
+  // Why this book is where it is, named as things the reader did.
+  //
+  // This line used to be six templated sentences chosen by a hash of the book's
+  // id — "Strong on subject, and structure does not let it down", "Subject
+  // carries it; structure holds the rest up" — which is generated variety
+  // standing in for an explanation. Every one of them named a dimension the
+  // reader never chose, in a grammar that sounded like a judgement and carried
+  // none.
+  //
+  // It names tags now, and the verb says where they came from: what the reader
+  // saved, what they passed on, or what they picked when they built the profile.
+  // All three are things the reader did and can check, and the tags are the same
+  // words on the chips directly below the line.
+  function whyTags(e, s) {
+    const own = e.tags || [];
+
+    // Their own verdicts first, where any of them bear on this book.
+    if (taste?.ready) {
+      const rows = own.map((t) => ({ t, row: taste.tags.get(t.id) })).filter((x) => x.row);
+      const up = rows.filter((x) => x.row.weight > 0.15).sort((a, b) => b.row.weight - a.row.weight);
+      const down = rows.filter((x) => x.row.weight < -0.15).sort((a, b) => a.row.weight - b.row.weight);
+      // A book can carry both. The one that actually moved it is the one named.
+      if (up.length && ((s?.delta ?? 0) >= 0 || !down.length)) return { verb: 'saved', labels: up.map((x) => x.t.label) };
+      if (down.length) return { verb: 'passed on', labels: down.map((x) => x.t.label) };
+    }
+
+    // Otherwise the profile itself, which was built from bands they picked.
+    const picked = [];
+    for (const [dim, d] of Object.entries(e.score?.dimensions || {})) {
+      if (d.defaulted || !d.id) continue;
+      if (!(answers.liked || []).includes(`${dim}:${d.id}`)) continue;
+      const tag = own.find((t) => t.kind === KIND_OF_DIM[dim]);
+      if (tag) picked.push(tag.label);
+    }
+    if (picked.length) return { verb: 'picked', labels: picked };
+    return null;
+  }
+
+  function whyLine(e, s) {
+    const why = whyTags(e, s);
+    if (!why) return null;
+    return `Because you ${why.verb}: ${why.labels.slice(0, 3).join(', ')}`;
+  }
 
   // What can honestly be said about a book to someone the app knows nothing
   // about: where it came from and when. A fact about the book rather than a
@@ -577,23 +618,6 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     return facts ? `${facts}. ${nobody}` : nobody;
   }
 
-  // Why the reader's own verdicts moved this book, in one plain sentence.
-  //
-  // It used to join every reason it had with commas behind a colon: "Your saves
-  // lift this: it runs with your saves on structure (D1), you save books tagged
-  // cities & housing." Three faults in one line. It said "your saves" twice, it
-  // put an internal dimension handle in front of a reader, and two reasons
-  // spliced together read as neither.
-  //
-  // One reason, the strongest, and the plainest frame there is for it.
-  function tunedLine(s) {
-    const lead = s.reasons.slice().sort((a, b) => Math.abs(b.points) - Math.abs(a.points))[0];
-    if (!lead) return '';
-    return lead.points > 0
-      ? `Because ${lead.label}.`
-      : `Marked down because ${lead.label}.`;
-  }
-
   function matchLine(e, s) {
     if (!isScored(e)) {
       return scoreStatus(e) === 'reviewed-unscored'
@@ -601,27 +625,26 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
         : 'A catalogue listing and nothing more. Nobody has described it yet.';
     }
     if (!readTheReview(e)) return `Ranked on its length and its publisher; ${e.reviewCount > 0 ? 'the review' : 'the description'} said nothing the profile could read.`;
+    const why = whyLine(e, s);
+    if (why) return why;
     const fired = firedDims(e);
     if (!fired.length) return 'Scored on the little the review gave, so treat the number lightly.';
-    const [a, b] = fired;
-    const pick = (bank) => bank[hashId(e.id) % bank.length](a.name, b.name);
-    if (b && a.score >= 9 && b.score >= 9) return pick(STRONG);
-    if (b && a.score >= 8) return pick(SOLID);
-    if (a.score >= 8) return `${a.name} is the signal doing the work here.`;
-    if (s.tuned && s.reasons?.length) return tunedLine(s);
-    return `${a.name} reads clearly; the rest of the review says less.`;
+    // Nothing the reader has said bears on this book. Naming what it was read on
+    // is the most that can honestly be claimed.
+    return `Read on ${fired.slice(0, 2).map((d) => lower(d.name)).join(' and ')}, none of which you have ruled on.`;
   }
 
   // The dossier's fuller version of the same argument.
   function caseFor(e, s) {
     if (!isScored(e)) return matchLine(e, s);
     if (!readTheReview(e)) return `There is no case yet. ${e.reviewCount > 0 ? 'The review' : 'The description'} said nothing the profile could read.`;
+    const why = whyTags(e, s);
+    if (why) return `Because you ${why.verb}: ${why.labels.slice(0, 4).join(', ')}`;
     const fired = firedDims(e);
     const names = fired.slice(0, 3).map((d) => lower(d.name));
     if (!names.length) return 'Too little of this review spoke to the profile for a confident argument.';
     const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0];
-    const strength = shownScore(e, s) >= 9 ? 'align almost perfectly with' : shownScore(e, s) >= threshold() ? 'sit well inside' : 'only partly meet';
-    return `Strong signals for ${list} ${strength} your profile.`;
+    return `Read on ${list}, none of which you have ruled on.`;
   }
 
   // Two texts are the same text for this purpose when they differ only by the
@@ -803,9 +826,18 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
   // recommended and not refused. The feed row and the dossier have had this the
   // whole time; For you is where a reader actually meets the recommendation, so
   // it is where a disagreement with it is worth the most.
+  // Pass is a toggle — setVerdict clears a verdict that is set again — and this
+  // button shipped without saying so. All books keeps passed books on purpose,
+  // being a record rather than an opinion, so a reader who pressed × on one
+  // already passed silently un-passed it and the book came back to the feed with
+  // nothing on screen having changed. The state has to be visible for the second
+  // press to mean what it does.
   function passBtn(e) {
+    const on = passed(e);
     return `<button class="card-bookmark card-pass" data-action="pass" data-id="${esc(e.id)}"
-      aria-label="Pass on ${esc(e.book.title)} and stop showing it">${ico('close')}</button>`;
+      aria-pressed="${on}"
+      aria-label="${on ? `Passed on ${esc(e.book.title)}. Put it back in the feed` : `Pass on ${esc(e.book.title)} and stop showing it`}"
+      >${ico(on ? 'undo' : 'close')}</button>`;
   }
 
   function scoreBadge(e, s) {
@@ -912,7 +944,8 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
       </div>
       <div class="row-actions">
         ${saveBtn(e, { block: true })}
-        <button class="btn btn-quiet" data-action="pass" data-id="${esc(e.id)}">Pass</button>
+        <button class="btn btn-quiet" data-action="pass" data-id="${esc(e.id)}"
+          aria-pressed="${passed(e)}">${passed(e) ? 'Passed' : 'Pass'}</button>
       </div>
     </article></li>`;
   }
@@ -2297,7 +2330,8 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
       <div class="dossier-actions">
         <button class="btn ${on ? '' : 'btn-solid'}" data-action="save" data-id="${esc(e.id)}" aria-pressed="${on}">
           ${ico('bookmark')}<span>${on ? 'On your shelf' : 'Save to shelf'}</span></button>
-        <button class="btn" data-action="pass" data-id="${esc(e.id)}">Pass for now</button>
+        <button class="btn" data-action="pass" data-id="${esc(e.id)}" aria-pressed="${passed(e)}">${
+          passed(e) ? 'Passed — put it back' : 'Pass for now'}</button>
       </div>
 
       <section class="dossier-block">
