@@ -8,19 +8,19 @@
    browser and the build can never disagree about what a number means. This file
    decides what is shown and in what order. */
 
-import * as saved from './lib/saved-books.mjs?v=78f5eeab0f';
-import { RETAILERS, linkFor, canFindCopy } from './lib/retailers.mjs?v=78f5eeab0f';
-import { createAnalytics } from './lib/analytics.mjs?v=78f5eeab0f';
-import { buildTasteModel, tunedTotal, explore, MIN_SIGNAL, MIN_JUDGMENTS, MAX_ADJUSTMENT } from './lib/taste.mjs?v=78f5eeab0f';
-import { outOfTen, RECOMMEND_AT } from './lib/recommend.mjs?v=78f5eeab0f';
-import { rescore, isEmpty, bandKey, AVERSION_STRENGTHS, MAX_AVERSIONS, EMPTY as EMPTY_OVERRIDES } from './lib/overrides.mjs?v=78f5eeab0f';
-import { READS, REFUSALS, MIN_PICKS, answersReady, chipsFor, groupedChipsFor, buildProfile } from './lib/onboard.mjs?v=78f5eeab0f';
-import * as sync from './lib/sync.mjs?v=78f5eeab0f';
-import * as push from './lib/push.mjs?v=78f5eeab0f';
-import { jacketFor } from './lib/jacket.mjs?v=78f5eeab0f';
-import { cleanBlurb, bestBlurb } from './lib/blurb.mjs?v=78f5eeab0f';
-import { coverFor } from './lib/cover.mjs?v=78f5eeab0f';
-import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH_EXAMPLES } from './lib/search.mjs?v=78f5eeab0f';
+import * as saved from './lib/saved-books.mjs?v=a8985e3957';
+import { RETAILERS, linkFor, canFindCopy } from './lib/retailers.mjs?v=a8985e3957';
+import { createAnalytics } from './lib/analytics.mjs?v=a8985e3957';
+import { buildTasteModel, tunedTotal, explore, MIN_SIGNAL, MIN_JUDGMENTS, MAX_ADJUSTMENT } from './lib/taste.mjs?v=a8985e3957';
+import { outOfTen, RECOMMEND_AT } from './lib/recommend.mjs?v=a8985e3957';
+import { rescore, isEmpty, bandKey, AVERSION_STRENGTHS, MAX_AVERSIONS, EMPTY as EMPTY_OVERRIDES } from './lib/overrides.mjs?v=a8985e3957';
+import { READS, REFUSALS, MIN_PICKS, answersReady, chipsFor, groupedChipsFor, buildProfile } from './lib/onboard.mjs?v=a8985e3957';
+import * as sync from './lib/sync.mjs?v=a8985e3957';
+import * as push from './lib/push.mjs?v=a8985e3957';
+import { jacketFor } from './lib/jacket.mjs?v=a8985e3957';
+import { cleanBlurb, bestBlurb } from './lib/blurb.mjs?v=a8985e3957';
+import { coverFor } from './lib/cover.mjs?v=a8985e3957';
+import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH_EXAMPLES } from './lib/search.mjs?v=a8985e3957';
 
 (() => {
   'use strict';
@@ -3250,6 +3250,32 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     if (!res.ok) { failure('No feed has been built yet', 'Run the build; it writes <code>data/feed.json</code>.'); return; }
     FEED = await res.json();
     if (!FEED.books?.length) { failure('The feed is empty', 'The build ran but found nothing. Check the source report it printed.'); return; }
+
+    // Is this copy of the app the one that was published?
+    //
+    // index.html is the entry point, so it cannot carry a version stamp of its
+    // own, and GitHub Pages serves it with max-age=600 and gives no way to
+    // change that. An installed web app has no reload gesture either — swiping
+    // it away closes the window and leaves the cache where it was — so a reader
+    // can be left running an old build with no way to escape it. That is exactly
+    // what happened, twice in one evening.
+    //
+    // feed.json is fetched with `cache: 'no-cache'`, so it is the one file that
+    // is always current, and the publish stamps the build's version into it.
+    // A mismatch means the HTML this page came from is stale, and the fix is one
+    // reload at a URL the cache has never seen.
+    //
+    // Guarded by the session so a version that somehow never matches reloads
+    // once and then gives up, rather than spinning.
+    const mine = new URL(import.meta.url).searchParams.get('v');
+    if (FEED.assetVersion && mine && FEED.assetVersion !== mine) {
+      const already = sessionStorage.getItem('litfeed:freshenedTo');
+      if (already !== FEED.assetVersion) {
+        try { sessionStorage.setItem('litfeed:freshenedTo', FEED.assetVersion); } catch { /* private mode */ }
+        location.replace(`${location.pathname}?v=${encodeURIComponent(FEED.assetVersion)}`);
+        return;
+      }
+    }
 
     loadPrefs();
     loadOverrides();
