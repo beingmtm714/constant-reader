@@ -8,19 +8,19 @@
    browser and the build can never disagree about what a number means. This file
    decides what is shown and in what order. */
 
-import * as saved from './lib/saved-books.mjs';
-import { RETAILERS, linkFor, canFindCopy } from './lib/retailers.mjs';
-import { createAnalytics } from './lib/analytics.mjs';
-import { buildTasteModel, tunedTotal, explore, MIN_SIGNAL, MIN_JUDGMENTS, MAX_ADJUSTMENT } from './lib/taste.mjs';
-import { outOfTen, RECOMMEND_AT } from './lib/recommend.mjs';
-import { rescore, isEmpty, bandKey, AVERSION_STRENGTHS, MAX_AVERSIONS, EMPTY as EMPTY_OVERRIDES } from './lib/overrides.mjs';
-import { READS, REFUSALS, MIN_PICKS, answersReady, chipsFor, groupedChipsFor, buildProfile } from './lib/onboard.mjs';
-import * as sync from './lib/sync.mjs';
-import * as push from './lib/push.mjs';
-import { jacketFor } from './lib/jacket.mjs';
-import { cleanBlurb, bestBlurb } from './lib/blurb.mjs';
-import { coverFor } from './lib/cover.mjs';
-import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH_EXAMPLES } from './lib/search.mjs';
+import * as saved from './lib/saved-books.mjs?v=a1e20bbf7e';
+import { RETAILERS, linkFor, canFindCopy } from './lib/retailers.mjs?v=a1e20bbf7e';
+import { createAnalytics } from './lib/analytics.mjs?v=a1e20bbf7e';
+import { buildTasteModel, tunedTotal, explore, MIN_SIGNAL, MIN_JUDGMENTS, MAX_ADJUSTMENT } from './lib/taste.mjs?v=a1e20bbf7e';
+import { outOfTen, RECOMMEND_AT } from './lib/recommend.mjs?v=a1e20bbf7e';
+import { rescore, isEmpty, bandKey, AVERSION_STRENGTHS, MAX_AVERSIONS, EMPTY as EMPTY_OVERRIDES } from './lib/overrides.mjs?v=a1e20bbf7e';
+import { READS, REFUSALS, MIN_PICKS, answersReady, chipsFor, groupedChipsFor, buildProfile } from './lib/onboard.mjs?v=a1e20bbf7e';
+import * as sync from './lib/sync.mjs?v=a1e20bbf7e';
+import * as push from './lib/push.mjs?v=a1e20bbf7e';
+import { jacketFor } from './lib/jacket.mjs?v=a1e20bbf7e';
+import { cleanBlurb, bestBlurb } from './lib/blurb.mjs?v=a1e20bbf7e';
+import { coverFor } from './lib/cover.mjs?v=a1e20bbf7e';
+import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH_EXAMPLES } from './lib/search.mjs?v=a1e20bbf7e';
 
 (() => {
   'use strict';
