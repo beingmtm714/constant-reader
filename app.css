@@ -306,11 +306,17 @@ a:hover { text-decoration: underline; }
 .menu-item[aria-current="page"] .ico { color: var(--brass); }
 .menu-signin { margin-top: 12px; min-height: 48px; justify-content: flex-start; padding-left: 14px; }
 
+/* The bar is 66px of controls PLUS whatever the device reserves at the bottom,
+   never 66px with the reservation taken out of it.
+   `* { box-sizing: border-box }` means a padding-bottom of env(safe-area-inset-
+   bottom) comes out of the declared height, so on a phone with a 34px home
+   indicator the icons and labels had 32px to live in and sat right on top of the
+   indicator. The height has to grow by the inset instead. */
 .bottombar {
   position: fixed; inset: auto 0 0 0; z-index: 40;
   width: 100%; max-width: 100vw;
   display: grid; grid-template-columns: repeat(4, 1fr);
-  height: 66px;
+  height: calc(68px + env(safe-area-inset-bottom));
   background: var(--lacquer);
   border-top: 1px solid var(--hairline);
   padding-bottom: env(safe-area-inset-bottom);
@@ -318,6 +324,7 @@ a:hover { text-decoration: underline; }
 .bottom-item {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
   position: relative; min-width: 0;
+  padding-bottom: 2px;
   font-family: var(--font-ui); font-size: 10px;
   color: #7f978e;
 }
@@ -344,7 +351,7 @@ a:hover { text-decoration: underline; }
 /* ------------------------------------------------------------ the pane */
 
 .pane {
-  padding: 26px 16px 96px;
+  padding: 26px 16px calc(96px + env(safe-area-inset-bottom));
   min-width: 0;
 }
 
@@ -1209,7 +1216,9 @@ input[type="number"] {
   border: 1px solid var(--hairline-dark);
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 22px 18px 40px;
+  /* Full-screen, so the last thing in it — Save and Pass — would otherwise end
+     underneath the home indicator. */
+  padding: 22px 18px calc(40px + env(safe-area-inset-bottom));
 }
 body.is-locked { overflow: hidden; }
 
@@ -1315,7 +1324,7 @@ body.is-locked { overflow: hidden; }
 
 .toast {
   position: fixed; z-index: 55;
-  left: 16px; right: 16px; bottom: 82px;
+  left: 16px; right: 16px; bottom: calc(84px + env(safe-area-inset-bottom));
   margin: 0;
   display: flex; align-items: center; justify-content: space-between; gap: 14px;
   background: var(--lacquer);

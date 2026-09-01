@@ -8,19 +8,19 @@
    browser and the build can never disagree about what a number means. This file
    decides what is shown and in what order. */
 
-import * as saved from './lib/saved-books.mjs?v=a8985e3957';
-import { RETAILERS, linkFor, canFindCopy } from './lib/retailers.mjs?v=a8985e3957';
-import { createAnalytics } from './lib/analytics.mjs?v=a8985e3957';
-import { buildTasteModel, tunedTotal, explore, MIN_SIGNAL, MIN_JUDGMENTS, MAX_ADJUSTMENT } from './lib/taste.mjs?v=a8985e3957';
-import { outOfTen, RECOMMEND_AT } from './lib/recommend.mjs?v=a8985e3957';
-import { rescore, isEmpty, bandKey, AVERSION_STRENGTHS, MAX_AVERSIONS, EMPTY as EMPTY_OVERRIDES } from './lib/overrides.mjs?v=a8985e3957';
-import { READS, REFUSALS, MIN_PICKS, answersReady, chipsFor, groupedChipsFor, buildProfile } from './lib/onboard.mjs?v=a8985e3957';
-import * as sync from './lib/sync.mjs?v=a8985e3957';
-import * as push from './lib/push.mjs?v=a8985e3957';
-import { jacketFor } from './lib/jacket.mjs?v=a8985e3957';
-import { cleanBlurb, bestBlurb } from './lib/blurb.mjs?v=a8985e3957';
-import { coverFor } from './lib/cover.mjs?v=a8985e3957';
-import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH_EXAMPLES } from './lib/search.mjs?v=a8985e3957';
+import * as saved from './lib/saved-books.mjs?v=7324d439e1';
+import { RETAILERS, linkFor, canFindCopy } from './lib/retailers.mjs?v=7324d439e1';
+import { createAnalytics } from './lib/analytics.mjs?v=7324d439e1';
+import { buildTasteModel, tunedTotal, explore, MIN_SIGNAL, MIN_JUDGMENTS, MAX_ADJUSTMENT } from './lib/taste.mjs?v=7324d439e1';
+import { outOfTen, RECOMMEND_AT } from './lib/recommend.mjs?v=7324d439e1';
+import { rescore, isEmpty, bandKey, AVERSION_STRENGTHS, MAX_AVERSIONS, EMPTY as EMPTY_OVERRIDES } from './lib/overrides.mjs?v=7324d439e1';
+import { READS, REFUSALS, MIN_PICKS, answersReady, chipsFor, groupedChipsFor, buildProfile } from './lib/onboard.mjs?v=7324d439e1';
+import * as sync from './lib/sync.mjs?v=7324d439e1';
+import * as push from './lib/push.mjs?v=7324d439e1';
+import { jacketFor } from './lib/jacket.mjs?v=7324d439e1';
+import { cleanBlurb, bestBlurb } from './lib/blurb.mjs?v=7324d439e1';
+import { coverFor } from './lib/cover.mjs?v=7324d439e1';
+import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH_EXAMPLES } from './lib/search.mjs?v=7324d439e1';
 
 (() => {
   'use strict';
