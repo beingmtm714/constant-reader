@@ -11,7 +11,7 @@
 import * as saved from './lib/saved-books.mjs';
 import { RETAILERS, linkFor, canFindCopy } from './lib/retailers.mjs';
 import { createAnalytics } from './lib/analytics.mjs';
-import { buildTasteModel, tunedTotal, MIN_SIGNAL, MIN_JUDGMENTS, MAX_ADJUSTMENT } from './lib/taste.mjs';
+import { buildTasteModel, tunedTotal, explore, MIN_SIGNAL, MIN_JUDGMENTS, MAX_ADJUSTMENT } from './lib/taste.mjs';
 import { outOfTen, RECOMMEND_AT } from './lib/recommend.mjs';
 import { rescore, isEmpty, bandKey, AVERSION_STRENGTHS, MAX_AVERSIONS, EMPTY as EMPTY_OVERRIDES } from './lib/overrides.mjs';
 import { READS, REFUSALS, MIN_PICKS, answersReady, chipsFor, groupedChipsFor, buildProfile } from './lib/onboard.mjs';
@@ -1089,6 +1089,58 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     return shelf;
   }
 
+  // The one book the model cannot place, held until the model changes.
+  //
+  // Redrawing it on every render would be churn — the page re-renders on every
+  // save, filter and tag — and the point of the slot is to get a verdict on one
+  // book rather than to keep offering different ones. It changes when the model
+  // does, which is also exactly when the answer to "what does it not know" moves.
+  let reserve = { at: -2, value: null };
+  function reserveBook(shown) {
+    if (!taste?.ready) return null;
+    if (reserve.at === profileVersion) {
+      // Still held, unless the reader has since ruled on it or filtered it out.
+      const v = reserve.value;
+      if (!v) return null;
+      if (saved.verdictOf(verdicts, v.entry.id) || !inFilters(v.entry)) { reserve = { at: -2, value: null }; }
+      else return v;
+    }
+    const onScreen = new Set(shown);
+    const eligible = FEED.books.filter((e) => isScored(e)
+      && !saved.verdictOf(verdicts, e.id)
+      && !onScreen.has(e.id)
+      && inFilters(e));
+    reserve = { at: profileVersion, value: explore(eligible, taste) };
+    return reserve.value;
+  }
+
+  // The section itself. It says what it is before it says what the book is,
+  // because a shelf called "for you" that quietly includes something the model
+  // does not believe in would be lying by omission — and because the reason it
+  // is here is the reason to rule on it.
+  function reserveSection(shownIds) {
+    const pick = reserveBook(shownIds);
+    if (!pick) return '';
+    const names = pick.tags.slice(0, 2).map((t) => t.label);
+    const rest = pick.tags.length - names.length;
+    const which = names.length === 1
+      ? `tagged ${names[0]}`
+      : `tagged ${names[0]} or ${names[1]}`;
+    const others = rest > 0 ? `, or ${rest} other${rest === 1 ? '' : 's'} this one carries` : '';
+    return `
+      <section class="reserve" aria-labelledby="res-h">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Held back on purpose</p>
+            <h2 id="res-h">One it cannot place</h2>
+          </div>
+          <span class="label">Save or pass either way</span>
+        </div>
+        <p class="reserve-note">You have never saved or passed a book ${esc(which)}${esc(others)}, so nothing above was chosen with them in mind. A verdict here is worth more than one on a book the model has already made up its mind about.</p>
+        <ul class="rows">${feedRow({ e: pick.entry, s: scoreOf(pick.entry) }, 0)}</ul>
+      </section>`;
+  }
+
   function viewForYou() {
     // Without a profile this page shows the app rather than an argument for it:
     // real books, the real layout, drawn at random. The first-visit prompt
@@ -1163,6 +1215,8 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
         </div>
         ${shelf(picks)}
       </section>
+
+      ${reserveSection([best, ...picks, ...newly].map((r) => r.e.id))}
 
       <section aria-labelledby="new-h">
         <div class="section-head">

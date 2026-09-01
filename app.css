@@ -1771,3 +1771,16 @@ button.tag { cursor: pointer; }
 .card-pass { margin-right: 6px; }
 .card-pass:hover { color: var(--destructive); border-color: var(--destructive); }
 .card-pass .ico { width: 15px; height: 15px; }
+
+/* The reserve slot. Set apart with a brass rule rather than a colour, because
+   it is not a fifth recommendation and should not read as one. */
+.reserve {
+  margin-top: 28px;
+  border-top: 1px solid var(--brass);
+  padding-top: 18px;
+}
+.reserve-note {
+  margin: 4px 0 14px;
+  max-width: 68ch;
+  font-size: 13.5px; line-height: 1.55; color: var(--graphite);
+}
