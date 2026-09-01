@@ -719,6 +719,25 @@ a:hover { text-decoration: underline; }
   font-family: var(--font-text); font-style: normal; font-size: 17px;
   color: #ffffffb8; margin-left: 9px;
 }
+/* Who reviewed it, and the way out to the review, directly under the title. The
+   publication used to sit at the head of .row-meta, which is 8.5px uppercase mono
+   in 54% white between a date and a page count, and it read as filing metadata
+   rather than as a masthead. Brass rule and brass arrow, so it reads as the one
+   outbound link on the card. */
+.row-source {
+  display: inline-flex; align-items: baseline; gap: 7px;
+  margin: 9px 0 0; max-width: 100%;
+  font-family: var(--font-ui); font-size: 12.5px; line-height: 1.35;
+  color: #ffffffb0;
+  border-bottom: 1px solid #b69a6240;
+  padding-bottom: 2px;
+  transition: color var(--fast) var(--ease), border-color var(--fast) var(--ease);
+}
+.row-source b { font-weight: 500; color: var(--brass); }
+.row-source-go { color: var(--brass); font-size: 11px; flex: none; }
+.row-source:hover { color: var(--porcelain); border-color: var(--brass); }
+.row-source:hover b { color: var(--porcelain); }
+
 .row-meta {
   margin: 7px 0 0; overflow-wrap: anywhere;
   font-family: var(--font-mono); font-size: 8.5px; letter-spacing: .09em;

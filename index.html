@@ -52,7 +52,7 @@
      three faces are also fetched: without them a Windows or Android reader gets
      Georgia everywhere and the display/text/interface division collapses. -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..700;1,6..96,400..600&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400..600;1,8..60,400&display=swap">
-<link rel="stylesheet" href="app.css?v=5a97887a83">
+<link rel="stylesheet" href="app.css?v=ce26cab02f">
 
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/constant-reader-180.png">
@@ -205,23 +205,34 @@
     <button class="btn btn-solid" id="needauth-signin" data-auth autofocus>Continue with Google</button>
     <button class="btn btn-quiet" id="needauth-later">Not now</button>
   </div>
-  <p class="privacy">Your books and your profile stay on this device either way. Signing in copies them to your account so the same feed opens on your phone.</p>
+  <p class="privacy">Your books and your profile stay on this device either way. Signing in copies them to your account so the same feed opens wherever else you read.</p>
 </dialog>
 
 <dialog class="firstrun" id="firstrun" aria-labelledby="firstrun-title">
-  <p class="eyebrow">Before you go further</p>
-  <h2 id="firstrun-title">These scores aren’t yours yet.</h2>
-  <p class="firstrun-body">Everything here is ranked against one reader’s taste profile. Three questions, about two minutes, and it ranks against yours instead.</p>
+  <!-- This dialog used to say "These scores aren't yours yet" and "Everything
+       here is ranked against one reader's taste profile". Both were true before
+       the app became a blank slate and neither is now: a reader who has answered
+       nothing sees no scores at all, and every list is in the order the press
+       filed it, which the page behind this dialog says in as many words. The
+       popup was arguing with the screen underneath it.
+
+       The sign-in button stays, and it is not an offer to save anything — there
+       is nothing here to save yet. It is for a reader who built a profile on
+       another device and wants it back, which is the only reason to sign in
+       before there is something of your own on the screen. -->
+  <p class="eyebrow">First time here</p>
+  <h2 id="firstrun-title">Nothing here is ranked yet.</h2>
+  <p class="firstrun-body">Every book is in the order the press reviewed it, and none of them carries a score, because a score here measures fit with a particular reader. Three questions, about two minutes, and the whole thing reorders around what you read for.</p>
   <div class="firstrun-actions">
-    <button class="btn btn-solid" id="firstrun-build" autofocus>Build my profile</button>
-    <button class="btn" id="firstrun-signin">Sign in with Google to keep it across devices</button>
-    <button class="btn btn-quiet" id="firstrun-later">Not now</button>
+    <button class="btn btn-solid" id="firstrun-build" autofocus>Answer the three questions</button>
+    <button class="btn" id="firstrun-signin">I already have an account</button>
+    <button class="btn btn-quiet" id="firstrun-later">Just let me look</button>
   </div>
 </dialog>
 
 <p class="toast" id="toast" role="status" aria-live="polite" hidden></p>
 <p class="sr-only" id="announce" role="status" aria-live="polite"></p>
 
-<script type="module" src="app.js?v=5a97887a83"></script>
+<script type="module" src="app.js?v=ce26cab02f"></script>
 </body>
 </html>

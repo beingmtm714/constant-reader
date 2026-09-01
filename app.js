@@ -8,19 +8,19 @@
    browser and the build can never disagree about what a number means. This file
    decides what is shown and in what order. */
 
-import * as saved from './lib/saved-books.mjs?v=5a97887a83';
-import { RETAILERS, linkFor, canFindCopy } from './lib/retailers.mjs?v=5a97887a83';
-import { createAnalytics } from './lib/analytics.mjs?v=5a97887a83';
-import { buildTasteModel, tunedTotal, explore, MIN_SIGNAL, MIN_JUDGMENTS, MAX_ADJUSTMENT } from './lib/taste.mjs?v=5a97887a83';
-import { outOfTen, RECOMMEND_AT } from './lib/recommend.mjs?v=5a97887a83';
-import { rescore, isEmpty, bandKey, AVERSION_STRENGTHS, MAX_AVERSIONS, EMPTY as EMPTY_OVERRIDES } from './lib/overrides.mjs?v=5a97887a83';
-import { READS, REFUSALS, MIN_PICKS, answersReady, chipsFor, groupedChipsFor, buildProfile } from './lib/onboard.mjs?v=5a97887a83';
-import * as sync from './lib/sync.mjs?v=5a97887a83';
-import * as push from './lib/push.mjs?v=5a97887a83';
-import { jacketFor } from './lib/jacket.mjs?v=5a97887a83';
-import { cleanBlurb, bestBlurb } from './lib/blurb.mjs?v=5a97887a83';
-import { coverFor, fillsSlot } from './lib/cover.mjs?v=5a97887a83';
-import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH_EXAMPLES } from './lib/search.mjs?v=5a97887a83';
+import * as saved from './lib/saved-books.mjs?v=ce26cab02f';
+import { RETAILERS, linkFor, canFindCopy } from './lib/retailers.mjs?v=ce26cab02f';
+import { createAnalytics } from './lib/analytics.mjs?v=ce26cab02f';
+import { buildTasteModel, tunedTotal, explore, MIN_SIGNAL, MIN_JUDGMENTS, MAX_ADJUSTMENT } from './lib/taste.mjs?v=ce26cab02f';
+import { outOfTen, RECOMMEND_AT } from './lib/recommend.mjs?v=ce26cab02f';
+import { rescore, isEmpty, bandKey, AVERSION_STRENGTHS, MAX_AVERSIONS, EMPTY as EMPTY_OVERRIDES } from './lib/overrides.mjs?v=ce26cab02f';
+import { READS, REFUSALS, MIN_PICKS, answersReady, chipsFor, groupedChipsFor, buildProfile } from './lib/onboard.mjs?v=ce26cab02f';
+import * as sync from './lib/sync.mjs?v=ce26cab02f';
+import * as push from './lib/push.mjs?v=ce26cab02f';
+import { jacketFor } from './lib/jacket.mjs?v=ce26cab02f';
+import { cleanBlurb, bestBlurb } from './lib/blurb.mjs?v=ce26cab02f';
+import { coverFor, fillsSlot } from './lib/cover.mjs?v=ce26cab02f';
+import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH_EXAMPLES } from './lib/search.mjs?v=ce26cab02f';
 
 (() => {
   'use strict';
@@ -618,6 +618,38 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     return `${who}${when}.`;
   }
 
+  // The one mention a row should point at: the newest thing that is actually a
+  // review, where the book has one. `critical` comes from the build, which marks
+  // a publisher's catalogue and an author interview false, and mentions arrive
+  // newest first. A feed built before that flag shipped carries no `critical` on
+  // its mentions at all, so an absent flag reads as a review — on the current
+  // archive that is right for all 410 reviewed books, none of which lead with a
+  // podcast.
+  function citedMention(e) {
+    const ms = (e.mentions || []).filter((m) => m.reviewUrl);
+    if (!ms.length) return null;
+    return ms.find((m) => m.critical !== false) || ms[0];
+  }
+
+  // Who said it, on the row rather than only inside the dossier. The publication
+  // was already on the card — first in the meta line, 8.5px grey mono between a
+  // date and a page count — and it was not being read there. Someone looking at a
+  // list of new reviews should see that the New York Times is the one reviewing,
+  // and be able to go and read it, without opening anything first.
+  function rowSource(e) {
+    const m = citedMention(e);
+    if (!m) return '';
+    const review = readFrom(e) === 'reviews';
+    const lead = review ? 'Reviewed in' : fromAuthor(e) ? 'The author’s own account, at' : 'Listed by';
+    const others = review && e.reviewCount > 1 ? e.reviewCount - 1 : 0;
+    return `<a class="row-source" href="${esc(m.reviewUrl)}" target="_blank" rel="noopener noreferrer"
+      data-action="review" data-id="${esc(e.id)}" data-source="${esc(m.source.id)}"
+      aria-label="${esc(`${lead} ${m.source.name}. Opens the ${review ? 'review' : 'source'} in a new tab.`)}">
+      <span>${lead} <b>${esc(m.source.name)}</b>${others ? `, and ${others} more` : ''}</span>
+      <span class="row-source-go" aria-hidden="true">↗</span>
+    </a>`;
+  }
+
   // Every row says what the book is, whoever is looking. 27 of the 785 books have
   // no standfirst anywhere in their mentions — a catalogue listing with a title,
   // a press and a page count and nothing written about it yet — and those rows
@@ -912,8 +944,13 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     const scored = status === 'scored';
     const rec = recommendedNow(e, s);
 
+    // The publication moved out of this line and into the credit link below the
+    // title, where it can be read and followed. It comes back here only on the
+    // handful of rows that have no linkable mention at all.
+    const src = rowSource(e);
+
     const meta = [
-      e.sources.join(' · '),
+      src ? null : e.sources.join(' · '),
       e.reviewCount > 0 ? `reviewed ${fmtDate(e.lastReviewed)}`
         : fromAuthor(e) ? `author’s account, ${fmtDate(e.lastReviewed)}`
         : `listed ${fmtDate(e.lastReviewed)}`,
@@ -956,6 +993,7 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
       <div class="row-main">
         <h3 class="row-title">${esc(b.title)}${
           b.author ? `<span class="row-author">${esc(b.author)}</span>` : ''}</h3>
+        ${src}
         <p class="row-meta">${esc(meta)}</p>
         <p class="row-blurb">${esc(describeBook(e, 190))}</p>
         ${!scored && hasProfile() ? `<p class="row-note">${esc(status === 'reviewed-unscored'
@@ -1175,50 +1213,6 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
 
   // ------------------------------------------------------------ For you
 
-  // Drawn once and kept for the session. A shelf that deals itself a new hand on
-  // every render — and this app re-renders on every save, filter and tag — reads
-  // as a bug rather than as variety, which is the same reason the drawn jackets
-  // are hashed from the book id instead of randomised.
-  let sample = null;
-  function sampleShelf() {
-    if (sample) return sample;
-    const pool = FEED.books.filter((e) => isScored(e) && !passed(e));
-    const picked = [];
-    const taken = new Set();
-    // Sample without replacement from a pool of hundreds; the loop is bounded by
-    // the pool being far larger than what is wanted.
-    while (picked.length < 8 && taken.size < pool.length) {
-      const i = Math.floor(Math.random() * pool.length);
-      if (taken.has(i)) continue;
-      taken.add(i);
-      picked.push(pool[i]);
-    }
-    sample = picked.map((e) => ({ e, s: scoreOf(e) }));
-    return sample;
-  }
-
-  // The drawn eight are held for the session and filtered on the way out rather
-  // than redrawn. A filter that dealt a new hand would read as the page losing
-  // its place, which is the same reason the sample is drawn once at all.
-  function filteredSample() {
-    const shelf = sampleShelf().filter(({ e }) => !passed(e) && inFilters(e));
-    if (shelf.length >= 8) return shelf;
-    // Passing on a card leaves a hole in a shelf of eight, and a shelf with a
-    // hole in it reads as a fault rather than as the card having gone. The
-    // sample is a random eight, so a fresh draw is as honest as the original —
-    // and it is added to the held sample rather than replacing it, so nothing
-    // already on screen moves.
-    const have = new Set(sampleShelf().map(({ e }) => e.id));
-    const pool = FEED.books.filter((e) => isScored(e) && !passed(e) && !have.has(e.id) && inFilters(e));
-    while (shelf.length < 8 && pool.length) {
-      const [picked] = pool.splice(Math.floor(Math.random() * pool.length), 1);
-      const row = { e: picked, s: scoreOf(picked) };
-      sample.push(row);
-      shelf.push(row);
-    }
-    return shelf;
-  }
-
   // The one book the model cannot place, held until the model changes.
   //
   // Redrawing it on every render would be churn — the page re-renders on every
@@ -1321,14 +1315,30 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
   }
 
   // How long ago that was, in the words a reader would use.
-  // What the order of that list is, where it is worth saying. A reader who sees
-  // a podcast interview above a New York Times review should know it was not
-  // ranked above it.
-  function freshNote(rows) {
-    const critics = rows.filter((r) => readFrom(r.e) === 'reviews').length;
-    const authors = rows.length - critics;
-    if (!critics || !authors) return '';
-    return `<p class="section-note">${esc(String(critics))} from critics first, then ${esc(String(authors))} where the author described the book themselves.</p>`;
+  // The critic rows were already first and nothing on the page said so. A note
+  // under one heading was doing that job and it was the wrong instrument: the two
+  // halves of the list are different kinds of evidence, so they get the same
+  // treatment as every other break on this page — an eyebrow, a heading of their
+  // own, and a line saying what the group is.
+  function freshHead(kind, n, withLink) {
+    const review = kind === 'reviews';
+    const eyebrow = review
+      ? (sinceLabel() === 'today' ? 'Filed today by the critics' : `Reviewed ${sinceLabel()}`)
+      : 'No critic yet';
+    const heading = review
+      ? (hasProfile() ? 'New reviews, ranked for you' : 'New reviews')
+      : 'Described by their authors';
+    const note = review
+      ? `${n === 1 ? 'One book' : `${n} books`} the press has just reviewed. Every one links straight out to the review it came from.`
+      : 'Nobody has reviewed these. What is known comes from the author on their own book, which says what it is about and cannot say whether it is any good.';
+    return `<div class="section-head">
+      <div>
+        <p class="eyebrow">${esc(eyebrow)}</p>
+        <h2 id="fresh-h${review ? '' : '-a'}">${esc(heading)}</h2>
+        <p class="section-note">${esc(note)}</p>
+      </div>
+      ${withLink ? `<button class="section-head-link" data-action="go" data-view="feed">See the full feed ${ico('arrow')}</button>` : ''}
+    </div>`;
   }
 
   function sinceLabel() {
@@ -1367,7 +1377,12 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     // should be leaves a stranger with nothing to look at. What it does not do
     // is rank them or score them — a random eight is honestly a random eight,
     // and calling it an edit would be the borrowed-taste problem again.
-    const ranked = hasProfile() ? edit() : filteredSample();
+    // Without a profile this used to be eight books drawn at random, because the
+    // page had nothing else to put up. It has the week's reviews now, which are
+    // real, current and in an order that means something — so the sample is
+    // gone, and with it two lines that had started lying: "reload for a
+    // different eight" and "these eight lean", on a page showing twelve reviews.
+    const ranked = hasProfile() ? edit() : sinceLastVisit();
     const filtered = Boolean(state.q || state.tag || state.kind !== 'any' || state.shortOnly);
     if (!ranked.length) {
       return `${viewHead({ eyebrow: dateline(), title: greeting(),
@@ -1390,6 +1405,15 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     const shown = new Set([week?.e.id, ...fresh.slice(0, 12).map((r) => r.e.id)].filter(Boolean));
     const picks = ranked.filter((r) => !shown.has(r.e.id)).slice(0, 4);
 
+    // The same twelve rows in the same order — sinceLastVisit already put the
+    // reviews first — split at the seam it already sorted on so each half can be
+    // named. Either half is routinely empty: a day of nothing but author accounts
+    // and a day of nothing but reviews both happen, and a heading over no rows is
+    // worse than no heading.
+    const freshTop = fresh.slice(0, 12);
+    const freshCritics = freshTop.filter((r) => readFrom(r.e) === 'reviews');
+    const freshAuthors = freshTop.filter((r) => readFrom(r.e) !== 'reviews');
+
     return `
       ${viewHead({
         eyebrow: dateline(),
@@ -1403,17 +1427,14 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
       ${tagBanner(ranked.length)}
 
       ${fresh.length
-        ? `<section aria-labelledby="fresh-h">
-            <div class="section-head">
-              <div>
-                <p class="eyebrow">${esc(sinceLabel() === 'today' ? 'Filed today' : `Since you were last here, ${sinceLabel()}`)}</p>
-                <h2 id="fresh-h">${hasProfile() ? 'New, and ranked for you' : 'Newly reviewed'}</h2>
-                ${freshNote(fresh)}
-              </div>
-              <button class="section-head-link" data-action="go" data-view="feed">See the full feed ${ico('arrow')}</button>
-            </div>
-            <ul class="rows">${fresh.slice(0, 12).map(feedRow).join('')}</ul>
-          </section>`
+        ? `${freshCritics.length ? `<section aria-labelledby="fresh-h">
+            ${freshHead('reviews', freshCritics.length, true)}
+            <ul class="rows">${freshCritics.map(feedRow).join('')}</ul>
+          </section>` : ''}
+          ${freshAuthors.length ? `<section aria-labelledby="fresh-h-a">
+            ${freshHead('author', freshAuthors.length, !freshCritics.length)}
+            <ul class="rows">${freshAuthors.map((r, i) => feedRow(r, i + freshCritics.length)).join('')}</ul>
+          </section>` : ''}`
         : `<section class="panel panel-empty" aria-labelledby="fresh-h">
             <h2 id="fresh-h">Nothing new since you were here</h2>
             <p>The desks file about seventeen reviews a day into this feed, so there is usually something by tomorrow morning. The whole archive is under All books in the meantime.</p>
@@ -1422,15 +1443,15 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
 
       ${hasProfile() ? '' : `<div class="unranked" role="status">
         <div>
-          <p class="eyebrow">A sample, not a recommendation</p>
-          <p class="unranked-text">Nothing here is chosen for you yet. Reload for a different eight, or tell it what you like and it stops being random.</p>
+          <p class="eyebrow">Not chosen for you yet</p>
+          <p class="unranked-text">These are the newest reviews, in the order they were filed. Answer three questions and the same list reorders around what you read for.</p>
         </div>
         <button class="btn btn-solid" data-action="go" data-view="start">Build your taste profile ${ico('arrow')}</button>
       </div>`}
 
       <section class="lean" aria-label="What today’s selection leans toward">
         <div class="lean-copy">
-          <p class="eyebrow">${hasProfile() ? 'Today’s selection leans' : 'These eight lean'}</p>
+          <p class="eyebrow">${hasProfile() ? 'Today’s selection leans' : 'This week’s reviews lean'}</p>
           <p>Toward ${esc(leanPhrase(leans, ranked))}.</p>
         </div>
         <div class="lean-counts">
@@ -1585,7 +1606,7 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
             placeholder="a contemporary Great American Novel">
           ${state.sq ? `<button type="button" class="asksearch-clear" data-action="clear-search" aria-label="Clear the search">${ico('close')}</button>` : ''}
         </div>
-        <p class="asksearch-note">Plain sentences work. So do lengths, years, “in translation”, and “like <em>Trust</em>”. Press return to close the keyboard.</p>
+        <p class="asksearch-note">Plain sentences work. So do lengths, years, “in translation”, and “like <em>Trust</em>”.</p>
       </form>
 
       ${!q ? `<div class="asksearch-eg">
@@ -1752,7 +1773,7 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
       ${viewHead({
         eyebrow: 'Your shelf',
         title: rows.length ? 'Your shelf, so far.' : 'A shelf with room to grow.',
-        lede: 'Save books from the feed and they’ll gather here—ready to compare, buy, or export.',
+        lede: 'Save a book anywhere in the app and it gathers here, with everywhere you can buy a copy.',
         aside: rows.length ? `${rows.length} saved${missing > 0 ? ` · ${missing} not in this build` : ''}` : '',
       })}
       ${rows.length
@@ -2051,7 +2072,7 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
       return blankSlate({
         eyebrow: 'The numbers behind your feed',
         title: 'Set the terms of your own taste.',
-        lede: 'The weights on this screen decide every score in the app. They are supposed to be yours, and until you answer they belong to the reader this was built for.',
+        lede: 'The weights on this screen decide every score in the app. Until you answer three questions they are a starting set, and nothing in the app is scored against them.',
         becomes: [
           'Eight weighted dimensions totalling a hundred points, all of them yours to move.',
           'The words used to describe a book, and what each one is worth to you.',
@@ -3261,6 +3282,13 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
           break;
         }
         case 'aversion': setAversion(btn.dataset.key, btn.dataset.strength); break;
+        // No preventDefault: the anchor navigates itself. It carries a data-action
+        // only so that the row it sits inside — which is a button, and would
+        // otherwise catch the click and open the dossier instead — loses the
+        // closest() race to it.
+        case 'review':
+          analytics.track('review_opened', { bookId: btn.dataset.id, source: btn.dataset.source });
+          break;
         case 'buy':
           write('litfeed:last-retailer', btn.dataset.retailer);
           analytics.track('retailer_opened', { bookId: btn.dataset.id, retailer: btn.dataset.retailer, resolution: btn.dataset.resolution });
