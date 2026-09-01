@@ -8,19 +8,19 @@
    browser and the build can never disagree about what a number means. This file
    decides what is shown and in what order. */
 
-import * as saved from './lib/saved-books.mjs?v=08e456a903';
-import { RETAILERS, linkFor, canFindCopy } from './lib/retailers.mjs?v=08e456a903';
-import { createAnalytics } from './lib/analytics.mjs?v=08e456a903';
-import { buildTasteModel, tunedTotal, explore, MIN_SIGNAL, MIN_JUDGMENTS, MAX_ADJUSTMENT } from './lib/taste.mjs?v=08e456a903';
-import { outOfTen, RECOMMEND_AT } from './lib/recommend.mjs?v=08e456a903';
-import { rescore, isEmpty, bandKey, AVERSION_STRENGTHS, MAX_AVERSIONS, EMPTY as EMPTY_OVERRIDES } from './lib/overrides.mjs?v=08e456a903';
-import { READS, REFUSALS, MIN_PICKS, answersReady, chipsFor, groupedChipsFor, buildProfile } from './lib/onboard.mjs?v=08e456a903';
-import * as sync from './lib/sync.mjs?v=08e456a903';
-import * as push from './lib/push.mjs?v=08e456a903';
-import { jacketFor } from './lib/jacket.mjs?v=08e456a903';
-import { cleanBlurb, bestBlurb } from './lib/blurb.mjs?v=08e456a903';
-import { coverFor, fillsSlot } from './lib/cover.mjs?v=08e456a903';
-import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH_EXAMPLES } from './lib/search.mjs?v=08e456a903';
+import * as saved from './lib/saved-books.mjs?v=924c1867d0';
+import { RETAILERS, linkFor, canFindCopy } from './lib/retailers.mjs?v=924c1867d0';
+import { createAnalytics } from './lib/analytics.mjs?v=924c1867d0';
+import { buildTasteModel, tunedTotal, explore, MIN_SIGNAL, MIN_JUDGMENTS, MAX_ADJUSTMENT } from './lib/taste.mjs?v=924c1867d0';
+import { outOfTen, RECOMMEND_AT } from './lib/recommend.mjs?v=924c1867d0';
+import { rescore, isEmpty, bandKey, AVERSION_STRENGTHS, MAX_AVERSIONS, EMPTY as EMPTY_OVERRIDES } from './lib/overrides.mjs?v=924c1867d0';
+import { READS, REFUSALS, MIN_PICKS, answersReady, chipsFor, groupedChipsFor, buildProfile } from './lib/onboard.mjs?v=924c1867d0';
+import * as sync from './lib/sync.mjs?v=924c1867d0';
+import * as push from './lib/push.mjs?v=924c1867d0';
+import { jacketFor } from './lib/jacket.mjs?v=924c1867d0';
+import { cleanBlurb, bestBlurb } from './lib/blurb.mjs?v=924c1867d0';
+import { coverFor, fillsSlot } from './lib/cover.mjs?v=924c1867d0';
+import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH_EXAMPLES } from './lib/search.mjs?v=924c1867d0';
 
 (() => {
   'use strict';
@@ -39,6 +39,11 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
   // said, let alone change one word of it. Everything they can edit afterwards
   // depends on this being written down.
   const ANSWERS_KEY = 'litfeed:answers';
+  // When the reader was last here, and the cutoff the page is currently drawing
+  // "new since" against. Two keys rather than one because a reload must not
+  // wipe the answer: the cutoff only advances when a visit is an hour or more
+  // after the last, so refreshing five minutes later shows the same books.
+  const VISIT_KEY = 'litfeed:visit';
 
   // No affiliate programme has been approved, so every outbound link goes clean.
   const AFFILIATES = {};
@@ -1266,6 +1271,69 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
       </section>`;
   }
 
+  // The week's pick, and it holds for the week.
+  //
+  // Not the best book in the archive, which is what the spotlight used to be and
+  // why the page looked identical every morning: that only changes when
+  // something outscores it. This is the best of what arrived this week, anchored
+  // to Monday so it is the same book on Friday as it was on Tuesday.
+  let weekPick = { at: -1, value: null };
+  function pickOfWeek() {
+    const from = weekStart();
+    if (weekPick.at === from + profileVersion) return weekPick.value;
+    const fresh = FEED.books
+      .filter((e) => isScored(e) && !passed(e) && (Date.parse(e.firstReviewed || '') || 0) >= from)
+      .map((e) => ({ e, s: scoreOf(e) }));
+    const sorted = hasProfile()
+      ? fresh.sort((a, b) => b.s.total - a.s.total)
+      : fresh.sort((a, b) => reviewTime(b.e) - reviewTime(a.e));
+    weekPick = { at: from + profileVersion, value: sorted[0] || null };
+    return weekPick.value;
+  }
+
+  // What the press has written since the reader was last here.
+  //
+  // `lastReviewed` rather than `firstReviewed`: a book reviewed a month ago that
+  // got a second review last night is news too, and the second review is often
+  // the more interesting one.
+  function sinceLastVisit() {
+    return FEED.books
+      .filter((e) => isScored(e) && !passed(e) && inFilters(e)
+        && (Date.parse(e.lastReviewed || '') || 0) >= sinceCutoff)
+      .map((e) => ({ e, s: scoreOf(e) }))
+      .sort((a, b) => (hasProfile() ? b.s.total - a.s.total : reviewTime(b.e) - reviewTime(a.e)));
+  }
+
+  // How long ago that was, in the words a reader would use.
+  function sinceLabel() {
+    const days = Math.round((Date.now() - sinceCutoff) / 86400000);
+    if (days <= 0) return 'today';
+    if (days === 1) return 'yesterday';
+    if (days < 7) return `in the last ${days} days`;
+    if (days < 10) return 'this week';
+    return `in the last ${Math.round(days / 7)} weeks`;
+  }
+
+  // The week's pick, small and stuck under the header rather than filling the
+  // top of every visit. It is the one thing on the page that should not change
+  // between Tuesday and Friday, so it is also the one thing that does not need
+  // the room.
+  function weekStrip() {
+    const pick = pickOfWeek();
+    if (!pick) return '';
+    const { e, s } = pick;
+    return `<div class="weekpick" data-action="open" data-id="${esc(e.id)}" role="button" tabindex="0"
+      aria-label="Pick of the week: ${esc(e.book.title)}. Open the dossier.">
+      <span class="weekpick-cover">${jacket(e, 'row')}</span>
+      <span class="weekpick-body">
+        <span class="weekpick-eyebrow">${hasProfile() ? 'Your pick of the week' : 'Pick of the week'}</span>
+        <span class="weekpick-title">${esc(e.book.title)}${e.book.author ? `<em> ${esc(e.book.author)}</em>` : ''}</span>
+      </span>
+      ${hasProfile() && isScored(e) ? `<span class="weekpick-score">${shownScore(e, s).toFixed(1)}</span>` : ''}
+      <span class="weekpick-go" aria-hidden="true">${ico('arrow')}</span>
+    </div>`;
+  }
+
   function viewForYou() {
     // Without a profile this page shows the app rather than an argument for it:
     // real books, the real layout, drawn at random. The first-visit prompt
@@ -1289,28 +1357,41 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
           filtered ? 'Clear the filters' : `Open the archive ${ico('arrow')}`}</button></div>`;
     }
 
-    const best = ranked.find(({ e, s }) => recommendedNow(e, s)) || ranked[0];
-    const rest = ranked.filter((r) => r.e.id !== best.e.id);
-    const picks = rest.slice(0, 4);
+    const week = pickOfWeek();
+    const fresh = sinceLastVisit().filter((r) => r.e.id !== week?.e.id);
     const leans = leanCounts(ranked);
-    const newly = ranked.slice()
-      .sort((a, b) => reviewTime(b.e) - reviewTime(a.e))
-      .filter((r) => r.e.id !== best.e.id)
-      .slice(0, 3);
+    // Everything else the profile likes, minus what is already on the page.
+    const shown = new Set([week?.e.id, ...fresh.slice(0, 12).map((r) => r.e.id)].filter(Boolean));
+    const picks = ranked.filter((r) => !shown.has(r.e.id)).slice(0, 4);
 
     return `
       ${viewHead({
         eyebrow: dateline(),
         title: greeting(),
         lede: hasProfile()
-          ? `A quiet edit of the books most worth your attention—drawn from ${esc(String(stats.recentReviews))} new reviews, ordered by your taste.`
-          : `Eight books from the archive, drawn at random. Answer three questions and this page becomes an edit: the same shelf, ordered by what you actually like, with the reasoning shown.`,
+          ? `${esc(String(fresh.length))} book${fresh.length === 1 ? '' : 's'} the press wrote about ${esc(sinceLabel())}, ordered by your taste.`
+          : `What the press wrote about ${esc(sinceLabel())}, newest first. Answer three questions and this page orders itself by what you like instead.`,
       })}
 
       ${toolbar({ scopes: null, scope: null, showRecommended: false, showSort: false })}
       ${tagBanner(ranked.length)}
 
-      ${spotlight(best)}
+      ${fresh.length
+        ? `<section aria-labelledby="fresh-h">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">${esc(sinceLabel() === 'today' ? 'Filed today' : `Since you were last here, ${sinceLabel()}`)}</p>
+                <h2 id="fresh-h">${hasProfile() ? 'New, and ranked for you' : 'Newly reviewed'}</h2>
+              </div>
+              <button class="section-head-link" data-action="go" data-view="feed">See the full feed ${ico('arrow')}</button>
+            </div>
+            <ul class="rows">${fresh.slice(0, 12).map(feedRow).join('')}</ul>
+          </section>`
+        : `<section class="panel panel-empty" aria-labelledby="fresh-h">
+            <h2 id="fresh-h">Nothing new since you were here</h2>
+            <p>The desks file about seventeen reviews a day into this feed, so there is usually something by tomorrow morning. The whole archive is under All books in the meantime.</p>
+            <button class="btn btn-solid" data-action="go" data-view="all">Open the archive ${ico('arrow')}</button>
+          </section>`}
 
       ${hasProfile() ? '' : `<div class="unranked" role="status">
         <div>
@@ -1341,18 +1422,7 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
         ${shelf(picks)}
       </section>
 
-      ${reserveSection([best, ...picks, ...newly].map((r) => r.e.id))}
-
-      <section aria-labelledby="new-h">
-        <div class="section-head">
-          <div>
-            <p class="eyebrow">The review desk</p>
-            <h2 id="new-h">Newly reviewed</h2>
-          </div>
-          <span class="label">Updated daily</span>
-        </div>
-        <ul class="rows">${newly.map(feedRow).join('')}</ul>
-      </section>`;
+      ${reserveSection([week?.e.id, ...fresh.slice(0, 12).map((r) => r.e.id), ...picks.map((r) => r.e.id)].filter(Boolean))}`;
   }
 
   // What the shortlist leans toward and away from. Both halves are counted rather
@@ -2075,6 +2145,48 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
   // prompt and the return band point at it, the Profile screen keeps everything
   // it produces, and a permanent seventh nav item for a screen used once would
   // cost a slot on every other visit.
+  // What counts as new for this visit.
+  //
+  // The front page was the highest-scoring book in the whole archive followed by
+  // the next four, which changes when something outscores them and not before —
+  // maybe weekly, whatever arrives. Measured, the press files about 17 reviews a
+  // day into this feed and 8 of them are books it has never seen. That is the
+  // material the page was not showing.
+  //
+  // A gap of more than a fortnight is capped: coming back after a month should
+  // open on a readable page rather than four hundred books.
+  const WEEK = 7 * 86400000;
+  const HOUR = 3600000;
+  const MAX_GAP = 14 * 86400000;
+
+  let sinceCutoff = null;
+  function openVisit() {
+    const now = Date.now();
+    const v = read(VISIT_KEY, null);
+    const last = v?.at ? Date.parse(v.at) : null;
+    if (!last) {
+      // A first visit has nothing to be new against, so it opens on the week.
+      sinceCutoff = now - WEEK;
+      write(VISIT_KEY, { at: new Date(now).toISOString(), since: new Date(sinceCutoff).toISOString() });
+      return;
+    }
+    if (now - last < HOUR) {
+      // Same sitting. Hold the cutoff the page already used.
+      sinceCutoff = v.since ? Date.parse(v.since) : last;
+      return;
+    }
+    sinceCutoff = Math.max(last, now - MAX_GAP);
+    write(VISIT_KEY, { at: new Date(now).toISOString(), since: new Date(sinceCutoff).toISOString() });
+  }
+
+  // Monday, so a pick of the week holds for the week rather than sliding daily.
+  function weekStart(now = Date.now()) {
+    const d = new Date(now);
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    return d.getTime();
+  }
+
   let answers = {
     reads: 'both', liked: [], disliked: [], refused: [], satire: false,
     ...read(ANSWERS_KEY, {}),
@@ -2948,6 +3060,13 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     rankAll();
     const root = $('view-root');
     root.innerHTML = `<div class="view">${VIEWS[state.view]()}</div>`;
+    // The strip lives outside view-root so it stays put while the page under it
+    // scrolls, and it is only drawn on the page it belongs to.
+    const strip = $('weekpick-slot');
+    const stripHtml = state.view === 'foryou' ? weekStrip() : '';
+    strip.innerHTML = stripHtml;
+    strip.hidden = !stripHtml;
+    bindJackets(strip);
     bindJackets(root);
     bindMore();
     syncChrome();
@@ -3284,6 +3403,7 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
 
     loadPrefs();
     loadOverrides();
+    openVisit();
     retune();
 
     // The status card asserts a profile version and a recommend threshold. Both

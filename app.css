@@ -1803,3 +1803,53 @@ button.tag { cursor: pointer; }
 }
 .tag-inline:hover { color: var(--brass); }
 .card-why .tag-inline, .spotlight-fit .tag-inline { line-height: inherit; }
+
+/* ------------------------------------------------- the week's pick */
+
+/* Stuck under the header rather than filling the top of every visit. It is the
+   one thing on the page that should read the same on Friday as it did on
+   Tuesday, so it is also the one thing that does not need the room. */
+/* The wrapper is what sticks, not the strip inside it. A sticky element can
+   only travel within its own parent's box, and a parent that is exactly as tall
+   as its one child has nowhere to travel — so the strip scrolled away with the
+   page it was supposed to sit above. */
+#weekpick-slot {
+  position: sticky; top: 60px; z-index: 38;
+  margin-bottom: 18px;
+}
+.weekpick {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 16px;
+  background: var(--garnet);
+  border-bottom: 1px solid var(--brass);
+  cursor: pointer;
+  transition: background var(--fast) var(--ease);
+}
+.weekpick:hover { background: var(--oxblood-dark); }
+.weekpick-cover { flex: none; width: 34px; }
+.weekpick-cover .jacket { box-shadow: 0 2px 6px #0000004d; }
+.weekpick-body { min-width: 0; flex: 1 1 auto; display: block; }
+.weekpick-eyebrow {
+  display: block;
+  font-family: var(--font-mono); font-size: 8.5px; letter-spacing: .14em;
+  text-transform: uppercase; color: #f0dfe1b8;
+}
+.weekpick-title {
+  display: block; margin-top: 2px;
+  font-family: var(--font-display); font-size: 15px; line-height: 1.15;
+  color: var(--porcelain);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.weekpick-title em { font-family: var(--font-text); font-style: italic; font-size: 13px; color: #f0dfe1c4; }
+.weekpick-score {
+  flex: none;
+  font-family: var(--font-display); font-size: 17px; color: var(--porcelain);
+}
+.weekpick-go { flex: none; display: grid; place-items: center; color: #f0dfe1a8; }
+.weekpick-go .ico { width: 15px; height: 15px; }
+
+/* On desktop there is no sticky header above it, so it starts at the top. */
+@media (min-width: 1024px) {
+  #weekpick-slot { top: 0; }
+  .weekpick { padding: 10px 72px; }
+}
