@@ -8,19 +8,19 @@
    browser and the build can never disagree about what a number means. This file
    decides what is shown and in what order. */
 
-import * as saved from './lib/saved-books.mjs?v=bb5f9182b2';
-import { RETAILERS, linkFor, canFindCopy } from './lib/retailers.mjs?v=bb5f9182b2';
-import { createAnalytics } from './lib/analytics.mjs?v=bb5f9182b2';
-import { buildTasteModel, tunedTotal, explore, MIN_SIGNAL, MIN_JUDGMENTS, MAX_ADJUSTMENT } from './lib/taste.mjs?v=bb5f9182b2';
-import { outOfTen, RECOMMEND_AT } from './lib/recommend.mjs?v=bb5f9182b2';
-import { rescore, isEmpty, bandKey, AVERSION_STRENGTHS, MAX_AVERSIONS, EMPTY as EMPTY_OVERRIDES } from './lib/overrides.mjs?v=bb5f9182b2';
-import { READS, REFUSALS, MIN_PICKS, answersReady, chipsFor, groupedChipsFor, buildProfile } from './lib/onboard.mjs?v=bb5f9182b2';
-import * as sync from './lib/sync.mjs?v=bb5f9182b2';
-import * as push from './lib/push.mjs?v=bb5f9182b2';
-import { jacketFor } from './lib/jacket.mjs?v=bb5f9182b2';
-import { cleanBlurb, bestBlurb } from './lib/blurb.mjs?v=bb5f9182b2';
-import { coverFor, fillsSlot } from './lib/cover.mjs?v=bb5f9182b2';
-import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH_EXAMPLES } from './lib/search.mjs?v=bb5f9182b2';
+import * as saved from './lib/saved-books.mjs?v=ac537f3435';
+import { RETAILERS, linkFor, canFindCopy } from './lib/retailers.mjs?v=ac537f3435';
+import { createAnalytics } from './lib/analytics.mjs?v=ac537f3435';
+import { buildTasteModel, tunedTotal, explore, MIN_SIGNAL, MIN_JUDGMENTS, MAX_ADJUSTMENT } from './lib/taste.mjs?v=ac537f3435';
+import { outOfTen, RECOMMEND_AT } from './lib/recommend.mjs?v=ac537f3435';
+import { rescore, isEmpty, bandKey, AVERSION_STRENGTHS, MAX_AVERSIONS, EMPTY as EMPTY_OVERRIDES } from './lib/overrides.mjs?v=ac537f3435';
+import { READS, REFUSALS, MIN_PICKS, answersReady, chipsFor, groupedChipsFor, buildProfile } from './lib/onboard.mjs?v=ac537f3435';
+import * as sync from './lib/sync.mjs?v=ac537f3435';
+import * as push from './lib/push.mjs?v=ac537f3435';
+import { jacketFor } from './lib/jacket.mjs?v=ac537f3435';
+import { cleanBlurb, bestBlurb } from './lib/blurb.mjs?v=ac537f3435';
+import { coverFor, fillsSlot } from './lib/cover.mjs?v=ac537f3435';
+import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH_EXAMPLES } from './lib/search.mjs?v=ac537f3435';
 
 (() => {
   'use strict';
@@ -2519,7 +2519,8 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
       <section class="dossier-block">
         <p class="eyebrow">${!hasProfile() ? 'What this book is' : scored ? 'The case for it' : 'What is known'}</p>
         ${hasProfile() ? `<h3>${whyHtml(e, s, 4) || esc(caseFor(e, s))}</h3>` : ''}
-        ${blurb ? `<p>${esc(blurb)}</p>` : ''}
+        ${blurb ? `<p>${esc(blurb)}${blurb.endsWith('…')
+          ? ` <button class="read-more" data-action="read-more" data-id="${esc(e.id)}">Read more</button>` : ''}</p>` : ''}
       </section>
 
       ${!hasProfile() ? `<section class="dossier-block">
@@ -3167,6 +3168,12 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
       switch (action) {
         case 'open': ev.preventDefault(); openDossier(btn.dataset.id); break;
         case 'close-dossier': closeDossier(); break;
+        case 'read-more': {
+          const entry = FEED.books.find((x) => x.id === btn.dataset.id);
+          const p = btn.closest('p');
+          if (entry && p) p.textContent = bestBlurb(entry, { max: Infinity }).text;
+          break;
+        }
         case 'save': toggleSave(btn.dataset.id); break;
         case 'pass': passBook(btn.dataset.id); break;
         case 'go': setView(btn.dataset.view); break;

@@ -71,6 +71,7 @@ body {
   font-size: 16px;
   line-height: 1.6;
   overflow-x: hidden;
+  overscroll-behavior-y: none;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -320,6 +321,12 @@ a:hover { text-decoration: underline; }
   background: var(--lacquer);
   border-top: 1px solid var(--hairline);
   padding-bottom: env(safe-area-inset-bottom);
+  /* iOS keeps a fixed element off its own compositor layer by default, so it
+     visibly lags behind the content during momentum scroll and then snaps
+     back — reads as the bar bobbing up and down. Forcing a layer here is
+     what stops that. */
+  transform: translateZ(0);
+  will-change: transform;
 }
 .bottom-item {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
@@ -1289,6 +1296,11 @@ body.is-locked { overflow: hidden; }
   max-width: 34ch;
 }
 .dossier-block p { margin: 12px 0 0; font-size: 15px; line-height: 1.55; color: var(--graphite); }
+.read-more {
+  color: var(--brass); font-family: var(--font-ui); font-size: 14px;
+  text-decoration: underline; text-underline-offset: 2px; white-space: nowrap;
+}
+.read-more:hover { color: var(--porcelain); }
 .dossier-block .bars { margin-top: 18px; }
 .dossier-head-note {
   float: right;

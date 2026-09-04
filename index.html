@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Constant Reader</title>
 <link rel="icon" href="icons/cr-mark.svg" type="image/svg+xml">
 <meta name="description" content="Every book the literary press reviews, ranked against your own taste. Answer three questions and the feed becomes yours.">
@@ -52,7 +52,7 @@
      three faces are also fetched: without them a Windows or Android reader gets
      Georgia everywhere and the display/text/interface division collapses. -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..700;1,6..96,400..600&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400..600;1,8..60,400&display=swap">
-<link rel="stylesheet" href="app.css?v=bb5f9182b2">
+<link rel="stylesheet" href="app.css?v=ac537f3435">
 
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/constant-reader-180.png">
@@ -235,6 +235,10 @@
 <p class="toast" id="toast" role="status" aria-live="polite" hidden></p>
 <p class="sr-only" id="announce" role="status" aria-live="polite"></p>
 
-<script type="module" src="app.js?v=bb5f9182b2"></script>
+<!-- iOS caches a module script across page loads even in standalone mode, past
+     the point a plain reload — or even a PWA reinstall — clears it. Bump the
+     query string whenever app.js changes, so a fix is never sitting there
+     unseen because the old file was still the one cached. -->
+<script type="module" src="app.js?v=20260903c"></script>
 </body>
 </html>
