@@ -8,19 +8,19 @@
    browser and the build can never disagree about what a number means. This file
    decides what is shown and in what order. */
 
-import * as saved from './lib/saved-books.mjs?v=2dff524985';
-import { RETAILERS, linkFor, canFindCopy } from './lib/retailers.mjs?v=2dff524985';
-import { createAnalytics } from './lib/analytics.mjs?v=2dff524985';
-import { buildTasteModel, tunedTotal, explore, MIN_SIGNAL, MIN_JUDGMENTS, MAX_ADJUSTMENT } from './lib/taste.mjs?v=2dff524985';
-import { outOfTen, RECOMMEND_AT } from './lib/recommend.mjs?v=2dff524985';
-import { rescore, isEmpty, bandKey, AVERSION_STRENGTHS, MAX_AVERSIONS, EMPTY as EMPTY_OVERRIDES } from './lib/overrides.mjs?v=2dff524985';
-import { READS, REFUSALS, MIN_PICKS, answersReady, chipsFor, groupedChipsFor, buildProfile } from './lib/onboard.mjs?v=2dff524985';
-import * as sync from './lib/sync.mjs?v=2dff524985';
-import * as push from './lib/push.mjs?v=2dff524985';
-import { jacketFor } from './lib/jacket.mjs?v=2dff524985';
-import { cleanBlurb, bestBlurb } from './lib/blurb.mjs?v=2dff524985';
-import { coverFor, fillsSlot } from './lib/cover.mjs?v=2dff524985';
-import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH_EXAMPLES } from './lib/search.mjs?v=2dff524985';
+import * as saved from './lib/saved-books.mjs?v=47f9c4b88f';
+import { RETAILERS, linkFor, canFindCopy } from './lib/retailers.mjs?v=47f9c4b88f';
+import { createAnalytics } from './lib/analytics.mjs?v=47f9c4b88f';
+import { buildTasteModel, tunedTotal, explore, MIN_SIGNAL, MIN_JUDGMENTS, MAX_ADJUSTMENT } from './lib/taste.mjs?v=47f9c4b88f';
+import { outOfTen, RECOMMEND_AT } from './lib/recommend.mjs?v=47f9c4b88f';
+import { rescore, isEmpty, bandKey, AVERSION_STRENGTHS, MAX_AVERSIONS, EMPTY as EMPTY_OVERRIDES } from './lib/overrides.mjs?v=47f9c4b88f';
+import { READS, REFUSALS, MIN_PICKS, answersReady, chipsFor, groupedChipsFor, buildProfile } from './lib/onboard.mjs?v=47f9c4b88f';
+import * as sync from './lib/sync.mjs?v=47f9c4b88f';
+import * as push from './lib/push.mjs?v=47f9c4b88f';
+import { jacketFor } from './lib/jacket.mjs?v=47f9c4b88f';
+import { cleanBlurb, bestBlurb } from './lib/blurb.mjs?v=47f9c4b88f';
+import { coverFor, fillsSlot } from './lib/cover.mjs?v=47f9c4b88f';
+import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH_EXAMPLES } from './lib/search.mjs?v=47f9c4b88f';
 
 (() => {
   'use strict';
@@ -960,6 +960,14 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
         : `listed ${fmtDate(e.lastReviewed)}`,
       b.editionDate || b.bookYear || null,
       b.pages ? `${b.pages} pp.` : null,
+      // The one caveat with nowhere else to live: a scored book whose evidence
+      // was thin. Everything else that used to sit up in row-score as a second
+      // or third badge beside the number was saying something already said
+      // elsewhere on the row - "from the author's account" repeats what this
+      // same line already says with a date, and "evidence too thin"/"not yet
+      // described" repeat row-note's full sentence below - so those were cut
+      // rather than moved. This one has no other home.
+      scored && hasProfile() && !readTheReview(e) ? 'length and press only' : null,
     ].filter(Boolean).join(' · ');
 
     // Always at least one: tagsFor leads with the fiction/nonfiction label, which
@@ -999,10 +1007,6 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
           ? `<span class="row-num">${shownScore(e, s).toFixed(1)}<small>/ 10</small></span>`
           : `<span class="row-num" data-state="none">No score</span>`}
         ${hasProfile() && scored && rec ? `<span class="row-rec">${ico('sparkles')}Recommended</span>` : ''}
-        ${hasProfile() && scored && !readTheReview(e) ? `<span class="row-rec" data-state="thin">Length and press only</span>`
-          : hasProfile() && scored && fromAuthor(e) ? `<span class="row-rec" data-state="thin">From the author’s account</span>` : ''}
-        ${hasProfile() && status === 'reviewed-unscored' ? `<span class="row-rec" data-state="thin">Evidence too thin</span>` : ''}
-        ${status === 'awaiting-review' ? `<span class="row-rec" data-state="thin">Not yet described</span>` : ''}
       </div>
       <div class="row-main">
         <h3 class="row-title">${esc(b.title)}${
@@ -1451,7 +1455,11 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     }
 
     const week = pickOfWeek();
-    const fresh = sinceLastVisit().filter((r) => r.e.id !== week?.e.id);
+    const sinceRows = sinceLastVisit();
+    const fresh = sinceRows.filter((r) => r.e.id !== week?.e.id);
+    // Skipped under an active filter: a filter can empty sinceRows on its own,
+    // which says nothing about whether new material actually arrived.
+    if (!filtered) commitFreshness(sinceRows.length > 0);
     const leans = leanCounts(ranked);
     // Everything else the profile likes, minus what is already on the page.
     const shown = new Set([week?.e.id, ...fresh.slice(0, 12).map((r) => r.e.id)].filter(Boolean));
@@ -1692,6 +1700,9 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
   // work it describes is never seen — and then searches.
   let searchTimer = null;
   const SETTLE = 180;
+  // The toolbar filter field (#q) debounces its render on the same settle
+  // time, for the same reason: see the input handler in bindGlobal().
+  let qTimer = null;
 
   function queueSearch({ now = false } = {}) {
     clearTimeout(searchTimer);
@@ -2288,6 +2299,11 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
   const MAX_GAP = 14 * 86400000;
 
   let sinceCutoff = null;
+  // Guards commitFreshness() below: true once this sitting's "since" baseline
+  // is settled and needs no further write, false while a new sitting is still
+  // waiting to find out whether it has anything to show.
+  let sinceCommitted = true;
+
   function openVisit() {
     const now = Date.now();
     const v = read(VISIT_KEY, null);
@@ -2303,8 +2319,31 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
       sinceCutoff = v.since ? Date.parse(v.since) : last;
       return;
     }
-    sinceCutoff = Math.max(last, now - MAX_GAP);
-    write(VISIT_KEY, { at: new Date(now).toISOString(), since: new Date(sinceCutoff).toISOString() });
+    // A new sitting. The cutoff is the last point that actually had something
+    // to show, not simply "when the app was last opened" - a quiet stretch
+    // with nothing new must not be recorded as seen, or the reader loses
+    // those days without the app ever having shown them anything from them.
+    // `at` still advances, so the next visit still knows a new sitting has
+    // started; `since` only moves once this sitting turns out to have
+    // something fresh, in commitFreshness() below.
+    const since = v.since ? Date.parse(v.since) : last;
+    sinceCutoff = Math.max(since, now - MAX_GAP);
+    write(VISIT_KEY, { at: new Date(now).toISOString(), since: v.since || new Date(sinceCutoff).toISOString() });
+    sinceCommitted = false;
+  }
+
+  // Called once per sitting, from the one place sinceLastVisit()'s result is
+  // actually shown to the reader. Moving "since" forward here rather than in
+  // openVisit() is the whole fix: advancing it unconditionally on every visit
+  // meant a quiet stretch got marked seen regardless of whether anything was
+  // ever shown for it, so the next visit's window started from "now" and
+  // that stretch was gone for good. Skipped under an active filter, because a
+  // filtered view's empty result says nothing about whether new material
+  // actually arrived.
+  function commitFreshness(hadFresh) {
+    if (sinceCommitted || !hadFresh) return;
+    sinceCommitted = true;
+    write(VISIT_KEY, { at: new Date().toISOString(), since: new Date(sinceCutoff).toISOString() });
   }
 
   // Monday, so a pick of the week holds for the week rather than sliding daily.
@@ -2579,9 +2618,13 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
               : `${scored ? `<b>${shownScore(e, s).toFixed(1)}<small>FIT</small></b>` : ''}
             <span class="dossier-state" data-state="${scored && rec ? 'rec' : 'none'}">${
               scored ? (rec ? 'Recommended for you' : 'Below your threshold') :
-              status === 'reviewed-unscored' ? 'Described · no score' : 'Not yet described'}</span>
-            ${scored && !readTheReview(e) ? '<span class="dossier-state" data-state="none">Length and press only</span>'
-              : scored && fromAuthor(e) ? '<span class="dossier-state" data-state="none">From the author’s account</span>' : ''}`}
+              status === 'reviewed-unscored' ? 'Described · no score' : 'Not yet described'}</span>`}
+            <!-- A third badge here for "Length and press only" or "From the
+                 author's account" repeated what the source line a few lines
+                 below already says - "The author's own account, at X" - or
+                 what "There is no case yet" says further down. Cut rather
+                 than moved: this line's job is the one status a scored book
+                 doesn't say anywhere else, not a repeat of one it does. -->
           </p>
           <h2 id="dossier-title">${esc(b.title)}</h2>
           ${b.author ? `<p class="dossier-author">${esc(b.author)}</p>` : ''}
@@ -2973,6 +3016,7 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
       user = null;
       showAuth();
       render();
+      closeMenuPanel();
       toast('Signed out. Your books stay on this device.');
       return;
     }
@@ -2982,6 +3026,7 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
       rememberAccount(user);
       showAuth();
       render();
+      closeMenuPanel();
       await syncNow();
       toast('Signed in. Your books are synced.');
     } catch (err) {
@@ -3411,17 +3456,27 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
         return;
       }
       if (ev.target.id === 'q') {
-        // The whole view redraws, which destroys the field being typed into, so
-        // the caret is carried across by hand rather than snapped to the end —
-        // otherwise editing the middle of a query throws you to the end of it.
+        // Rendering on every keystroke replaced the field being typed into on
+        // every keystroke too, and a phone's on-screen keyboard reads that as
+        // the field losing focus - it minimised itself after every letter,
+        // even though the restored focus below made it look, on a desktop
+        // trackpad, like nothing had happened. Debounced the same way sq
+        // above already is: render once typing settles rather than on every
+        // character, and carry the caret across by hand when it does -
+        // otherwise editing the middle of a query throws you to the end of
+        // it.
+        clearTimeout(qTimer);
         const at = ev.target.selectionStart;
         const end = ev.target.selectionEnd;
         state.q = ev.target.value;
-        state.limit = ROW_PAGE;
-        state.allLimit = CARD_PAGE;
-        render();
-        const field = $('q');
-        if (field) { field.focus(); try { field.setSelectionRange(at, end); } catch { /* not selectable */ } }
+        qTimer = setTimeout(() => {
+          qTimer = null;
+          state.limit = ROW_PAGE;
+          state.allLimit = CARD_PAGE;
+          render();
+          const field = $('q');
+          if (field) { field.focus(); try { field.setSelectionRange(at, end); } catch { /* not selectable */ } }
+        }, SETTLE);
         return;
       }
       if (ev.target.dataset.weight) {

@@ -720,8 +720,6 @@ a:hover { text-decoration: underline; }
   font-family: var(--font-mono); font-size: 7.5px; letter-spacing: .13em;
   text-transform: uppercase; color: var(--brass);
 }
-.row-rec[data-state="thin"] { color: var(--muted-ink); }
-
 .row-title {
   margin: 0; min-width: 0; overflow-wrap: anywhere;
   font-family: var(--font-display); font-weight: 400;
