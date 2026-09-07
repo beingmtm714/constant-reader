@@ -52,7 +52,7 @@
      three faces are also fetched: without them a Windows or Android reader gets
      Georgia everywhere and the display/text/interface division collapses. -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..700;1,6..96,400..600&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400..600;1,8..60,400&display=swap">
-<link rel="stylesheet" href="app.css?v=ac537f3435">
+<link rel="stylesheet" href="app.css?v=2dff524985">
 
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/constant-reader-180.png">
@@ -160,8 +160,12 @@
        standing fact about the feed below it and not an alert: it should scroll
        away with the thing it describes. app.js shows it only to a reader who has
        already been asked once, on a later visit, and still has no profile. -->
+  <!-- This used to say "every score here is still one reader's rather than
+       yours" - true before the blank-slate rewrite, when a stranger saw
+       somebody else's numbers, and false since: nothing is scored here until
+       you answer. Same fix #firstrun (below) already got, applied here too. -->
   <aside class="remind" id="remind" hidden>
-    <p class="remind-text">You haven’t built a taste profile yet, so every score here is still one reader’s rather than yours. Three questions, about two minutes.</p>
+    <p class="remind-text">Nothing here is ranked yet — every book is in the order the press reviewed it. Three questions, about two minutes, and it reorders around what you read for.</p>
     <div class="remind-actions">
       <button class="btn btn-solid" id="remind-build">Build your profile</button>
       <button class="btn btn-quiet" id="remind-hide" aria-label="Hide this reminder until your next visit">Hide for now</button>

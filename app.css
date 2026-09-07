@@ -18,16 +18,24 @@
   --oxblood: #c38994;
   --oxblood-rich: #744451;
   --oxblood-dark: #8a4f5d;
-  --garnet: #744451;
-  --malachite: #315149;
+  /* The four shelf grounds were measured against the text tokens they actually
+     carry - brass, oxblood, graphite - and none of the four cleared 4.5:1:
+     axe-core found 85 failing instances across Review feed and All books.
+     Deepened and re-saturated in HSL (roughly +20 points of saturation, minus
+     10-15 of lightness, hue held) rather than just darkened toward black,
+     which is both what a jewel tone actually is and what buys the contrast:
+     every one of the three text tokens now clears 4.6:1 or better against all
+     four, unchanged. */
+  --garnet: #4e1d2a;
+  --malachite: #143429;
   --petrol-deep: #213a37;
   --petrol: #315149;
-  --lapis: #3b4e67;
+  --lapis: #1c304a;
   /* Lapis raised until it reads as a line rather than a shadow. The ground
      version is a card fill and disappears at 2px on this paper; this is the one
      that carries the nonfiction rule on the taste chips. */
   --lapis-line: #7d97bd;
-  --olive-jade: #505a43;
+  --olive-jade: #243012;
   --muted: #354944;
   --hairline: #c4bdae2e;
   --hairline-dark: #c4bdae57;
@@ -1465,6 +1473,11 @@ body.is-locked { overflow: hidden; }
   border-radius: 50%;
   background: var(--brass);
 }
+.roundup-freq { display: flex; gap: 8px; margin-top: 10px; }
+.roundup-freq .tag { cursor: pointer; }
+.roundup-freq .tag[aria-checked="true"] {
+  background: var(--oxblood-rich); border-color: var(--oxblood); color: var(--porcelain);
+}
 
 
 /* ------------------------------------------- following a tag, and the answers */
@@ -1543,6 +1556,22 @@ button.tag { cursor: pointer; }
     font-size: 15px; line-height: 1.45; margin-top: 8px;
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
   }
+  /* The clamp above hides real sentences, not a teaser for a detail page
+     underneath — there is nowhere else this copy lives. Expanding it removes
+     the clamp; the toggle button only shows once bindLedeMore() (app.js) has
+     measured that the two lines actually cut something off. */
+  .view-head .view-lede.is-expanded { -webkit-line-clamp: unset; overflow: visible; }
+  /* For you is the landing screen's pitch for what the site is — the one lede
+     that has to read whole on arrival, not behind a tap. viewHead()'s fullLede
+     flag skips the clamp entirely here rather than relying on a reader to find
+     a More button under the first thing they see. */
+  .view-head .view-lede-full { display: block; -webkit-line-clamp: unset; overflow: visible; }
+  .lede-more {
+    display: block; margin-top: 6px; padding: 0; background: none; border: 0;
+    font-family: var(--font-ui); font-size: 13px; color: var(--brass);
+    text-decoration: underline; text-underline-offset: 2px;
+  }
+  .lede-more[hidden] { display: none; }
   .view-head { padding-bottom: 12px; }
   .view-head-aside, .view-head .aside { font-size: 11px; }
 }
@@ -1556,16 +1585,19 @@ button.tag { cursor: pointer; }
    So on a phone the score and its badges become one full-width strip under the
    cover and the title, where they have the whole row to sit on. */
 @media (max-width: 767px) {
-  /* The cover runs down the left across both text rows; the score leads the text
-     column and the title follows it. Putting the strip last instead pushed the
-     number below the tags, which buried the one thing the row exists to say. */
-  .row-cover { grid-column: 1; grid-row: 1 / span 2; }
+  /* The score used to share the cover's own row, which put "Not scored yet"
+     at the cover's top edge and pushed the title down to a second row below
+     it — so the jacket read as centred against the title instead of level
+     with it. The score is the one thing the row exists to say, so it still
+     leads, but as its own full-width line above both: the cover and the
+     title now share a row and start at the same edge. */
   .row-score {
-    grid-column: 2; grid-row: 1;
+    grid-column: 1 / -1; grid-row: 1;
     display: flex; flex-direction: row; flex-wrap: wrap;
     align-items: baseline; gap: 3px 9px;
-    padding-top: 0; min-width: 0;
+    padding-top: 0; min-width: 0; margin-bottom: 2px;
   }
+  .row-cover { grid-column: 1; grid-row: 2; }
   .row-main { grid-column: 2; grid-row: 2; }
   .row-actions { grid-column: 1 / -1; grid-row: 3; }
   /* The badges were sized to a narrow column and wrapped mid-phrase. On one

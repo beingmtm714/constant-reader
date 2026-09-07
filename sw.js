@@ -75,7 +75,7 @@ self.addEventListener('push', (event) => {
     try {
       text = await roundup();
     } catch {
-      text = { title: 'Constant Reader', body: 'Your weekly roundup is ready.' };
+      text = { title: 'Constant Reader', body: 'Your roundup is ready.' };
     }
     await self.registration.showNotification(text.title, {
       body: text.body,

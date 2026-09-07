@@ -8,19 +8,19 @@
    browser and the build can never disagree about what a number means. This file
    decides what is shown and in what order. */
 
-import * as saved from './lib/saved-books.mjs?v=ac537f3435';
-import { RETAILERS, linkFor, canFindCopy } from './lib/retailers.mjs?v=ac537f3435';
-import { createAnalytics } from './lib/analytics.mjs?v=ac537f3435';
-import { buildTasteModel, tunedTotal, explore, MIN_SIGNAL, MIN_JUDGMENTS, MAX_ADJUSTMENT } from './lib/taste.mjs?v=ac537f3435';
-import { outOfTen, RECOMMEND_AT } from './lib/recommend.mjs?v=ac537f3435';
-import { rescore, isEmpty, bandKey, AVERSION_STRENGTHS, MAX_AVERSIONS, EMPTY as EMPTY_OVERRIDES } from './lib/overrides.mjs?v=ac537f3435';
-import { READS, REFUSALS, MIN_PICKS, answersReady, chipsFor, groupedChipsFor, buildProfile } from './lib/onboard.mjs?v=ac537f3435';
-import * as sync from './lib/sync.mjs?v=ac537f3435';
-import * as push from './lib/push.mjs?v=ac537f3435';
-import { jacketFor } from './lib/jacket.mjs?v=ac537f3435';
-import { cleanBlurb, bestBlurb } from './lib/blurb.mjs?v=ac537f3435';
-import { coverFor, fillsSlot } from './lib/cover.mjs?v=ac537f3435';
-import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH_EXAMPLES } from './lib/search.mjs?v=ac537f3435';
+import * as saved from './lib/saved-books.mjs?v=2dff524985';
+import { RETAILERS, linkFor, canFindCopy } from './lib/retailers.mjs?v=2dff524985';
+import { createAnalytics } from './lib/analytics.mjs?v=2dff524985';
+import { buildTasteModel, tunedTotal, explore, MIN_SIGNAL, MIN_JUDGMENTS, MAX_ADJUSTMENT } from './lib/taste.mjs?v=2dff524985';
+import { outOfTen, RECOMMEND_AT } from './lib/recommend.mjs?v=2dff524985';
+import { rescore, isEmpty, bandKey, AVERSION_STRENGTHS, MAX_AVERSIONS, EMPTY as EMPTY_OVERRIDES } from './lib/overrides.mjs?v=2dff524985';
+import { READS, REFUSALS, MIN_PICKS, answersReady, chipsFor, groupedChipsFor, buildProfile } from './lib/onboard.mjs?v=2dff524985';
+import * as sync from './lib/sync.mjs?v=2dff524985';
+import * as push from './lib/push.mjs?v=2dff524985';
+import { jacketFor } from './lib/jacket.mjs?v=2dff524985';
+import { cleanBlurb, bestBlurb } from './lib/blurb.mjs?v=2dff524985';
+import { coverFor, fillsSlot } from './lib/cover.mjs?v=2dff524985';
+import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH_EXAMPLES } from './lib/search.mjs?v=2dff524985';
 
 (() => {
   'use strict';
@@ -910,8 +910,12 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
   function card(row, i) {
     const { e, s } = row;
     const status = scoreStatus(e);
-    return `<article class="card" data-family="${i % 4}" data-id="${esc(e.id)}"
-      data-action="open" role="button" tabindex="0" aria-label="Open the dossier for ${esc(e.book.title)}">
+    // No role or tabindex on the article itself: card-cover and card-title just
+    // below are already real, labelled, focusable buttons doing the same
+    // thing, so a role="button" out here only wrapped them in a second,
+    // redundant focus stop - the nested-interactive pattern axe-core flags.
+    // data-action stays, for the same click-anywhere delegation feed rows use.
+    return `<article class="card" data-family="${i % 4}" data-id="${esc(e.id)}" data-action="open">
       <button class="card-cover" data-action="open" data-id="${esc(e.id)}"
         aria-label="Open the dossier for ${esc(e.book.title)}">
         ${jacket(e, 'card')}
@@ -975,9 +979,19 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     // were buttons and the other eighty per cent of the row was not, which on a
     // phone is most of what a thumb lands on. The controls inside it still win,
     // because the handler takes the nearest [data-action] and theirs is nearer.
-    return `<li><article class="feed-row" data-family="${i % 4}" data-id="${esc(e.id)}"
-      data-action="open" role="button" tabindex="0" aria-label="Open the dossier for ${esc(b.title)}">
-      <span class="row-cover">${jacket(e, 'row')}</span>
+    //
+    // The article itself used to carry role="button" and a tabindex, which put
+    // a screen reader on a focusable landmark wrapping other focusable controls
+    // - the row-source link, the tag buttons, Save and Pass - a nesting axe-core
+    // flags for good reason: a reader tabs onto the row, hears the whole thing
+    // announced as one button, then tabs again into a control already inside
+    // it. The click-anywhere convenience is unaffected - data-action delegates
+    // to the nearest [data-action] regardless of role or tabindex - so this only
+    // removes the redundant stop. The cover becomes the row's own focusable,
+    // labelled way in, matching the card's cover-and-title pair below.
+    return `<li><article class="feed-row" data-family="${i % 4}" data-id="${esc(e.id)}" data-action="open">
+      <button class="row-cover" data-action="open" data-id="${esc(e.id)}"
+        aria-label="Open the dossier for ${esc(b.title)}">${jacket(e, 'row')}</button>
       <div class="row-score">
         ${!hasProfile()
           ? `<span class="row-num" data-state="none">Not scored yet</span>`
@@ -1034,15 +1048,40 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
       </section>`;
   }
 
-  function viewHead({ eyebrow, title, lede, aside = '', action = '' }) {
+  // fullLede is for the one screen where this sentence is doing real work —
+  // For you is where a reader decides what the site even is, and a landing
+  // pitch that gets cut off mid-thought defeats the point of writing it. Every
+  // other screen's lede is context a reader can take or leave, so it clamps
+  // with a More toggle instead of always claiming the vertical space.
+  function viewHead({ eyebrow, title, lede, aside = '', action = '', fullLede = false } = {}) {
     return `<header class="view-head">
       <div class="view-head-main">
         <p class="eyebrow">${esc(eyebrow)}</p>
         <h1>${esc(title)}</h1>
-        ${lede ? `<p class="view-lede">${lede}</p>` : ''}
+        ${lede ? (fullLede
+          ? `<p class="view-lede view-lede-full">${lede}</p>`
+          : `<p class="view-lede">${lede}</p>
+        <button class="lede-more" type="button" data-action="toggle-lede" hidden aria-expanded="false">More</button>`) : ''}
       </div>
       ${aside || action ? `<div class="view-head-aside">${aside ? `<span>${esc(aside)}</span>` : ''}${action}</div>` : ''}
     </header>`;
+  }
+
+  // A view-head's lede is fixed copy, not a book's own words, so it has no
+  // detail page to send a reader to for the rest of it. The two-line clamp on
+  // a phone (app.css) is only safe to keep if this checks, on every render and
+  // resize, whether it actually cut a sentence off, and offers to undo it when
+  // it did — measuring scrollHeight against clientHeight because CSS line-clamp
+  // never says on its own whether it clipped anything.
+  function bindLedeMore(root) {
+    const lede = root.querySelector('.view-lede');
+    const btn = root.querySelector('.lede-more');
+    if (!lede || !btn) return;
+    lede.classList.remove('is-expanded');
+    const clipped = lede.scrollHeight > lede.clientHeight + 1;
+    btn.hidden = !clipped;
+    btn.textContent = 'More';
+    btn.setAttribute('aria-expanded', 'false');
   }
 
   // Shown while a tag is being followed, and it has two jobs: say what is being
@@ -1291,8 +1330,14 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
   // got a second review last night is news too, and the second review is often
   // the more interesting one.
   function sinceLastVisit() {
+    // Not gated on isScored(): this is "what the press wrote," not "what the
+    // press wrote that cleared a threshold." A stranger sees no scores at all,
+    // so filtering by one here only meant a run of evidence-thin reviews - the
+    // ordinary case for a debut poetry chapbook, say - could empty this list
+    // on a day the desks were plenty busy, which is exactly the dead end this
+    // page exists to avoid.
     const rows = FEED.books
-      .filter((e) => isScored(e) && !passed(e) && inFilters(e)
+      .filter((e) => !passed(e) && inFilters(e)
         && (Date.parse(e.lastReviewed || '') || 0) >= sinceCutoff)
       .map((e) => ({ e, s: scoreOf(e) }));
     const byFit = (a, b) => (hasProfile() ? b.s.total - a.s.total : reviewTime(b.e) - reviewTime(a.e));
@@ -1384,11 +1429,18 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     // different eight" and "these eight lean", on a page showing twelve reviews.
     const ranked = hasProfile() ? edit() : sinceLastVisit();
     const filtered = Boolean(state.q || state.tag || state.kind !== 'any' || state.shortOnly);
-    if (!ranked.length) {
+    // "Nothing clears the profile" is a fact about a threshold a stranger has
+    // never set, so it only belongs here once there is a profile to have
+    // cleared it. Without one, an empty sinceLastVisit() falls through instead
+    // to the fresh.length check below, which already has the right words for
+    // it - "Nothing new since you were here" - and still opens on the week's
+    // pick rather than a dead end.
+    if (!ranked.length && (filtered || hasProfile())) {
       return `${viewHead({ eyebrow: dateline(), title: greeting(),
         lede: filtered
           ? 'Nothing on today’s shelf answers the filters now set.'
-          : 'Nothing in the current build clears the profile. The archive is still browseable under All books.' })}
+          : 'Nothing in the current build clears the profile. The archive is still browseable under All books.',
+        fullLede: true })}
         ${toolbar({ scopes: null, scope: null, showRecommended: false, showSort: false })}
         <div class="panel panel-empty"><h2>${filtered ? 'Nothing matches' : 'No edit today'}</h2>
         <p>${filtered
@@ -1421,6 +1473,7 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
         lede: hasProfile()
           ? `${esc(String(fresh.length))} book${fresh.length === 1 ? '' : 's'} the press wrote about ${esc(sinceLabel())}, ordered by your taste.`
           : `What the press wrote about ${esc(sinceLabel())}, newest first. Answer three questions and this page orders itself by what you like instead.`,
+        fullLede: true,
       })}
 
       ${toolbar({ scopes: null, scope: null, showRecommended: false, showSort: false })}
@@ -2012,21 +2065,32 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
       denied: 'Notifications are switched off for this app in your browser or system settings, so this cannot ask again from here.',
     }[stop];
     return `<div class="roundup" data-state="${on ? 'on' : 'off'}">
-      <h3>Weekly roundup</h3>
+      <h3>Roundup</h3>
       ${body
         ? `<p class="privacy">${body}</p>`
         : !signedInNow()
           ? '<p class="privacy">Sign in first. The roundup is sent to your devices, so it needs an account to know which ones are yours.</p>'
           : `<p class="privacy">${on
-              ? 'On. One notification a week, Monday morning, only when something new clears your threshold.'
-              : 'One notification a week, Monday morning, naming what is new for you. Nothing else is ever sent.'}</p>
+              ? `On. A notification ${
+                  roundupFrequency === 'every' ? 'Monday, Wednesday and Saturday morning' : 'Monday morning'
+                }, only when something new clears your threshold.`
+              : 'A notification naming what is new for you, on whichever schedule below you pick. Nothing else is ever sent.'}</p>
+             <div class="roundup-freq" role="radiogroup" aria-label="How often">
+               <button class="tag" role="radio" aria-checked="${roundupFrequency !== 'every'}" data-action="roundup-freq" data-value="weekly">Weekly</button>
+               <button class="tag" role="radio" aria-checked="${roundupFrequency === 'every'}" data-action="roundup-freq" data-value="every">Every refresh</button>
+             </div>
              <button class="btn ${on ? 'btn-ghost' : 'btn-solid'}" data-action="roundup">${on ? 'Turn off' : 'Turn on notifications'}</button>`}
     </div>`;
   }
 
-  // Whether this device is subscribed. Read once at start and kept here so the
-  // card can render on the first paint rather than flickering through "off".
+  // Whether this device is subscribed, and how often it wants to hear from the
+  // feed. Read once at start (roundupOn from the browser's own push
+  // registration; roundupFrequency from this device's own last choice) so the
+  // card renders correctly on the first paint rather than flickering through
+  // a default.
   let roundupOn = false;
+  const ROUNDUP_FREQ_KEY = 'litfeed:roundup-frequency';
+  let roundupFrequency = read(ROUNDUP_FREQ_KEY, 'weekly');
 
   async function toggleRoundup() {
     if (!user) {
@@ -2040,18 +2104,34 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
         if (gone) await sync.forgetDevice(user.uid, await push.deviceId(gone.endpoint));
         roundupOn = false;
         render();
-        toast('Weekly roundup off.');
+        toast('Roundup off.');
         return;
       }
       const sub = await push.enable();
-      await sync.saveDevice(user.uid, await push.deviceId(sub.endpoint), sub);
+      await sync.saveDevice(user.uid, await push.deviceId(sub.endpoint), sub, roundupFrequency);
       roundupOn = true;
       render();
-      toast('Weekly roundup on. The next one is Monday.');
+      toast(roundupFrequency === 'every' ? 'Roundup on. The next one is whenever the feed next rebuilds.' : 'Roundup on. The next one is Monday.');
     } catch (err) {
       roundupOn = false;
       render();
       toast(explainPush(err), { error: true });
+    }
+  }
+
+  // The frequency choice is this device's own, not the reader's: the phone on
+  // the Home Screen and the laptop that set it up can want different things.
+  async function setRoundupFrequency(value) {
+    if (value === roundupFrequency) return;
+    roundupFrequency = value;
+    write(ROUNDUP_FREQ_KEY, value);
+    render();
+    if (!roundupOn || !user) return;
+    try {
+      const sub = await push.current();
+      if (sub) await sync.setDeviceFrequency(user.uid, await push.deviceId(sub.endpoint), value);
+    } catch (err) {
+      toast('Could not save that on the server, so it may revert next visit.', { error: true });
     }
   }
 
@@ -2916,10 +2996,10 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
   // ------------------------------------------------------ asking, once and again
 
   // A stranger's first minute is the only one where interrupting them is
-  // affordable, and it is also the one where it is warranted: every number on
-  // screen is ranked against one reader's taste, and nothing says so until you
-  // go looking on the Profile screen. So this says it once, offers the two
-  // minutes that fix it, and never asks again.
+  // affordable, and it is also the one where it is warranted: nothing is
+  // ranked or scored until an answer exists, and nothing says so unless this
+  // does. So this says it once, offers the two minutes that fix it, and never
+  // asks again.
   //
   // It leads with the profile rather than the account because the profile is
   // what a stranger actually gains, and it needs no account at all. Signing in
@@ -3119,6 +3199,7 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     const stripHtml = state.view === 'foryou' ? weekStrip() : '';
     strip.innerHTML = stripHtml;
     strip.hidden = !stripHtml;
+    bindLedeMore(root);
     bindJackets(strip);
     bindJackets(root);
     bindMore();
@@ -3172,6 +3253,13 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
           const entry = FEED.books.find((x) => x.id === btn.dataset.id);
           const p = btn.closest('p');
           if (entry && p) p.textContent = bestBlurb(entry, { max: Infinity }).text;
+          break;
+        }
+        case 'toggle-lede': {
+          const lede = btn.previousElementSibling;
+          const expanded = lede.classList.toggle('is-expanded');
+          btn.textContent = expanded ? 'Less' : 'More';
+          btn.setAttribute('aria-expanded', String(expanded));
           break;
         }
         case 'save': toggleSave(btn.dataset.id); break;
@@ -3256,6 +3344,7 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
         case 'more-cards': state.allLimit += CARD_PAGE; render(); break;
         case 'save-profile': saveProfile(); break;
         case 'roundup': toggleRoundup(); break;
+        case 'roundup-freq': setRoundupFrequency(btn.dataset.value); break;
         case 'guardrail': toggleGuardrail(Number(btn.dataset.guardrail)); break;
         case 'penalty': togglePenalty(btn.dataset.penalty); break;
         case 'export': exportVerdicts(); break;
@@ -3376,6 +3465,7 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     $('scrim').addEventListener('click', closeDossier);
     window.addEventListener('scroll', queueMore, { passive: true });
     window.addEventListener('resize', queueMore, { passive: true });
+    window.addEventListener('resize', () => bindLedeMore($('view-root')), { passive: true });
 
     document.addEventListener('keydown', (ev) => {
       if (ev.key === 'Escape') {
