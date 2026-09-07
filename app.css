@@ -1249,13 +1249,13 @@ input[type="number"] {
   overflow-y: auto;
   overscroll-behavior: contain;
   /* Full-screen, so the last thing in it — Save and Pass — would otherwise end
-     underneath the home indicator. */
-  padding: 22px 18px calc(40px + env(safe-area-inset-bottom));
+     underneath the home indicator, and the first thing under the status bar. */
+  padding: calc(22px + env(safe-area-inset-top)) 18px calc(40px + env(safe-area-inset-bottom));
 }
 body.is-locked { overflow: hidden; }
 
 .dossier-close {
-  position: absolute; top: 14px; right: 14px;
+  position: absolute; top: calc(14px + env(safe-area-inset-top)); right: 14px;
   display: grid; place-items: center;
   width: 36px; height: 36px;
   border: 1px solid var(--hairline-dark);
