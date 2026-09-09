@@ -1721,7 +1721,11 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
         state.sqRun = q;
         state.searchLimit = SEARCH_PAGE;
         state.searching = false;
+        const field = $('sq');
+        const at = field?.selectionStart, end = field?.selectionEnd, had = document.activeElement === field;
         render();
+        const next = $('sq');
+        if (next && had) { next.focus(); try { next.setSelectionRange(at, end); } catch { /* not selectable */ } }
       };
       if (!heavy) { go(); return; }
       // Two frames, so the spinner is painted before the work that blocks the
