@@ -8,19 +8,19 @@
    browser and the build can never disagree about what a number means. This file
    decides what is shown and in what order. */
 
-import * as saved from './lib/saved-books.mjs?v=47f9c4b88f';
-import { RETAILERS, linkFor, canFindCopy } from './lib/retailers.mjs?v=47f9c4b88f';
-import { createAnalytics } from './lib/analytics.mjs?v=47f9c4b88f';
-import { buildTasteModel, tunedTotal, explore, MIN_SIGNAL, MIN_JUDGMENTS, MAX_ADJUSTMENT } from './lib/taste.mjs?v=47f9c4b88f';
-import { outOfTen, RECOMMEND_AT } from './lib/recommend.mjs?v=47f9c4b88f';
-import { rescore, isEmpty, bandKey, AVERSION_STRENGTHS, MAX_AVERSIONS, EMPTY as EMPTY_OVERRIDES } from './lib/overrides.mjs?v=47f9c4b88f';
-import { READS, REFUSALS, MIN_PICKS, answersReady, chipsFor, groupedChipsFor, buildProfile } from './lib/onboard.mjs?v=47f9c4b88f';
-import * as sync from './lib/sync.mjs?v=47f9c4b88f';
-import * as push from './lib/push.mjs?v=47f9c4b88f';
-import { jacketFor } from './lib/jacket.mjs?v=47f9c4b88f';
-import { cleanBlurb, bestBlurb } from './lib/blurb.mjs?v=47f9c4b88f';
-import { coverFor, fillsSlot } from './lib/cover.mjs?v=47f9c4b88f';
-import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH_EXAMPLES } from './lib/search.mjs?v=47f9c4b88f';
+import * as saved from './lib/saved-books.mjs?v=f3c1dd5be0';
+import { RETAILERS, linkFor, canFindCopy } from './lib/retailers.mjs?v=f3c1dd5be0';
+import { createAnalytics } from './lib/analytics.mjs?v=f3c1dd5be0';
+import { buildTasteModel, tunedTotal, explore, MIN_SIGNAL, MIN_JUDGMENTS, MAX_ADJUSTMENT } from './lib/taste.mjs?v=f3c1dd5be0';
+import { outOfTen, RECOMMEND_AT } from './lib/recommend.mjs?v=f3c1dd5be0';
+import { rescore, isEmpty, bandKey, AVERSION_STRENGTHS, MAX_AVERSIONS, EMPTY as EMPTY_OVERRIDES } from './lib/overrides.mjs?v=f3c1dd5be0';
+import { READS, REFUSALS, MIN_PICKS, answersReady, chipsFor, groupedChipsFor, buildProfile } from './lib/onboard.mjs?v=f3c1dd5be0';
+import * as sync from './lib/sync.mjs?v=f3c1dd5be0';
+import * as push from './lib/push.mjs?v=f3c1dd5be0';
+import { jacketFor } from './lib/jacket.mjs?v=f3c1dd5be0';
+import { cleanBlurb, bestBlurb } from './lib/blurb.mjs?v=f3c1dd5be0';
+import { coverFor, fillsSlot } from './lib/cover.mjs?v=f3c1dd5be0';
+import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH_EXAMPLES } from './lib/search.mjs?v=f3c1dd5be0';
 
 (() => {
   'use strict';
@@ -1718,14 +1718,23 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
       const go = () => {
         if (ran) return;
         ran = true;
+        // The field is re-created by render() same as every other view, so a
+        // reader still typing when the debounce settles has to be put back in
+        // it by hand - otherwise the keystroke that triggered this render is
+        // also the keystroke that dismisses the keyboard. Checked fresh here
+        // rather than at the keystroke: a submit blurs the field on purpose
+        // first, and that has to stick, not be undone by this same render.
+        const field = $('sq');
+        const had = document.activeElement === field;
+        const at = field?.selectionStart, end = field?.selectionEnd;
         state.sqRun = q;
         state.searchLimit = SEARCH_PAGE;
         state.searching = false;
-        const field = $('sq');
-        const at = field?.selectionStart, end = field?.selectionEnd, had = document.activeElement === field;
         render();
-        const next = $('sq');
-        if (next && had) { next.focus(); try { next.setSelectionRange(at, end); } catch { /* not selectable */ } }
+        if (had) {
+          const next = $('sq');
+          if (next) { next.focus(); try { next.setSelectionRange(at, end); } catch { /* not selectable */ } }
+        }
       };
       if (!heavy) { go(); return; }
       // Two frames, so the spinner is painted before the work that blocks the
