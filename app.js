@@ -3250,7 +3250,13 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     computeStats();
     rankAll();
     const root = $('view-root');
-    root.innerHTML = `<div class="view">${VIEWS[state.view]()}</div>`;
+    const html = `<div class="view">${VIEWS[state.view]()}</div>`;
+    // A search field being typed into is kept rather than re-created. Replacing
+    // it, even with focus put straight back, is what closes the keyboard on a
+    // phone: iOS will not reopen it for a focus() that no tap asked for.
+    const typing = document.activeElement;
+    if (typing?.matches?.('input[type="search"][id]') && root.contains(typing)) patchAround(root, html, typing);
+    else root.innerHTML = html;
     // The strip lives outside view-root so it stays put while the page under it
     // scrolls, and it is only drawn on the page it belongs to.
     const strip = $('weekpick-slot');
@@ -3271,6 +3277,38 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
       bindJackets(box);
       box.scrollTop = top;
     }
+  }
+
+  // Puts html into root while leaving `keep` and its ancestors in the document.
+  // Every other node is swapped for the new one, and each kept element takes
+  // the new markup's attributes, so the page ends up as innerHTML would leave
+  // it. If the new markup has no such field, it falls back to innerHTML.
+  function patchAround(root, html, keep) {
+    const t = document.createElement('template');
+    t.innerHTML = html;
+    const fresh = t.content.querySelector(`#${CSS.escape(keep.id)}`);
+    if (!fresh) { root.innerHTML = html; return; }
+    let was = keep, now = fresh;
+    for (;;) {
+      for (const a of [...was.attributes]) if (!now.hasAttribute(a.name)) was.removeAttribute(a.name);
+      for (const a of [...now.attributes]) {
+        // The value the reader is typing is the property, and it is already right.
+        if (was === keep && a.name === 'value') continue;
+        if (was.getAttribute(a.name) !== a.value) was.setAttribute(a.name, a.value);
+      }
+      const before = [], after = [];
+      for (let n = now.previousSibling; n; n = n.previousSibling) before.unshift(n);
+      for (let n = now.nextSibling; n; n = n.nextSibling) after.push(n);
+      while (was.previousSibling) was.previousSibling.remove();
+      while (was.nextSibling) was.nextSibling.remove();
+      was.before(...before);
+      was.after(...after);
+      const up = was.parentNode;
+      if (up === root) { if (now.parentNode === t.content) return; break; }
+      if (now.parentNode === t.content) break;
+      was = up; now = now.parentNode;
+    }
+    root.innerHTML = html;
   }
 
   function closeMenuPanel() {
