@@ -1,0 +1,836 @@
+{
+  "revision": 3,
+  "source": "Reading Taste Profile — Fiction Recommendation Spec, revision 2",
+  "note": "Weights, bands, filters and penalties are transcribed from the profile. Change them here, never in code, and re-run `npm run calibrate` afterward.",
+  "window": {
+    "years": 5,
+    "negotiable": true,
+    "rule": "Default window is the last 5 years, rolling from today. Out-of-window titles are flagged explicitly, never suppressed."
+  },
+  "thresholds": {
+    "lead": 78,
+    "flag": 62,
+    "reserve": 45,
+    "bands": [
+      {
+        "id": "lead",
+        "min": 78,
+        "label": "Lead",
+        "action": "Lead recommendation, full argument."
+      },
+      {
+        "id": "flagged",
+        "min": 62,
+        "label": "Flagged",
+        "action": "Present with an explicit flag naming the risk."
+      },
+      {
+        "id": "reserve",
+        "min": 45,
+        "label": "Reserve",
+        "action": "Hold in reserve."
+      },
+      {
+        "id": "below",
+        "min": 0,
+        "label": "Below",
+        "action": "Do not surface."
+      }
+    ]
+  },
+  "surfacing": {
+    "leadCount": 5,
+    "groupWhenAbove": 8,
+    "groupBy": "D2",
+    "explorationBudget": 0.2,
+    "rule": "Three to five leads per request. Past that, group by subject axis rather than ranking flat — a 25-item grouped list produced the highest acquisition rate of any format tried. One in five surfaced titles should test an open hypothesis rather than maximize expected score."
+  },
+  "calibrationTolerance": {
+    "acquireFloor": 70,
+    "passCeiling": 65,
+    "rule": "If any confirmed acquisition scores below 70, or any confirmed pass above 65, the weights are wrong. Check D1 and D6 first."
+  },
+  "dimensions": [
+    {
+      "id": "D1",
+      "name": "Structure",
+      "weight": 16,
+      "default": 4,
+      "bands": [
+        {
+          "id": "dual_timeline",
+          "score": 10,
+          "label": "Dual or multi-timeline linking a rupture to the present"
+        },
+        {
+          "id": "constraint",
+          "score": 10,
+          "label": "Radical formal constraint sustained at length"
+        },
+        {
+          "id": "alt_archive",
+          "score": 10,
+          "label": "Alternate history or an invented archive"
+        },
+        {
+          "id": "polyphony",
+          "score": 9,
+          "label": "Genuine polyphony: multiple voices, no centre"
+        },
+        {
+          "id": "generational",
+          "score": 9,
+          "label": "Multi-generational single-family or single-place sweep"
+        },
+        {
+          "id": "braid",
+          "score": 8,
+          "label": "Braided timelines or registers carrying the argument"
+        },
+        {
+          "id": "aftermath",
+          "score": 8,
+          "label": "Structured as the aftermath of a specific process"
+        },
+        {
+          "id": "comparative",
+          "score": 7,
+          "label": "Comparative or thematic: cases set against each other"
+        },
+        {
+          "id": "chronicle",
+          "score": 6,
+          "label": "Chronological, single-thread, told straight"
+        },
+        {
+          "id": "texture_only",
+          "score": 3,
+          "label": "Period texture with no causal argument"
+        },
+        {
+          "id": "device_twist",
+          "score": 3,
+          "label": "A formal device resolving into a twist"
+        },
+        {
+          "id": "sealed",
+          "score": 0,
+          "label": "Causally sealed in the present"
+        }
+      ],
+      "fromRecord": false
+    },
+    {
+      "id": "D2",
+      "name": "Subject",
+      "weight": 22,
+      "default": 5,
+      "bands": [
+        {
+          "score": 10,
+          "id": "land",
+          "label": "Land title, water rights, extraction, labor conflict, expropriation, real estate, resource law"
+        },
+        {
+          "score": 9,
+          "id": "state_violence",
+          "label": "State violence, political repression, insurgency, occupation, conquest"
+        },
+        {
+          "score": 9,
+          "id": "institution",
+          "label": "Institutional formation — schools, leagues, studios, unions, foundations, plants"
+        },
+        {
+          "score": 8,
+          "id": "art_under_state",
+          "label": "Art or artists operating under political constraint"
+        },
+        {
+          "score": 7,
+          "id": "faith",
+          "label": "Religion, faith formation, theodicy, a belief system being built"
+        },
+        {
+          "score": 6,
+          "id": "finance",
+          "label": "Money and finance in the abstract"
+        },
+        {
+          "score": 6,
+          "id": "domestic",
+          "label": "Family trauma, marriage, career, identity"
+        },
+        {
+          "score": 3,
+          "id": "media_tech",
+          "label": "Contemporary media culture, tech, wellness, internet life"
+        },
+        {
+          "id": "crime",
+          "score": 5,
+          "label": "Crime, investigation, the law courts",
+          "descriptiveOnly": true,
+          "note": "Added 2026-08-25 to widen the vocabulary for other readers. Scored at the dimension default and placed last in the pick order, so it fires only where none of the profile's own bands did and cannot move this profile's numbers. A reader who cares about it raises its score in their own overrides."
+        },
+        {
+          "id": "migration",
+          "score": 5,
+          "label": "Migration, exile, diaspora, the border",
+          "descriptiveOnly": true,
+          "note": "Added 2026-08-25 to widen the vocabulary for other readers. Scored at the dimension default and placed last in the pick order, so it fires only where none of the profile's own bands did and cannot move this profile's numbers. A reader who cares about it raises its score in their own overrides."
+        },
+        {
+          "id": "medicine",
+          "score": 5,
+          "label": "Illness, medicine, care, addiction",
+          "descriptiveOnly": true,
+          "note": "Added 2026-08-25 to widen the vocabulary for other readers. Scored at the dimension default and placed last in the pick order, so it fires only where none of the profile's own bands did and cannot move this profile's numbers. A reader who cares about it raises its score in their own overrides."
+        },
+        {
+          "id": "ecology",
+          "score": 5,
+          "label": "Ecology, climate, extinction, the non-human",
+          "descriptiveOnly": true,
+          "note": "Added 2026-08-25 to widen the vocabulary for other readers. Scored at the dimension default and placed last in the pick order, so it fires only where none of the profile's own bands did and cannot move this profile's numbers. A reader who cares about it raises its score in their own overrides."
+        },
+        {
+          "id": "youth",
+          "score": 5,
+          "label": "Childhood, adolescence, education as lived",
+          "descriptiveOnly": true,
+          "note": "Added 2026-08-25 to widen the vocabulary for other readers. Scored at the dimension default and placed last in the pick order, so it fires only where none of the profile's own bands did and cannot move this profile's numbers. A reader who cares about it raises its score in their own overrides."
+        },
+        {
+          "id": "sport",
+          "score": 5,
+          "label": "Sport, competition, the body trained",
+          "descriptiveOnly": true,
+          "note": "Added 2026-08-25 to widen the vocabulary for other readers. Scored at the dimension default and placed last in the pick order, so it fires only where none of the profile's own bands did and cannot move this profile's numbers. A reader who cares about it raises its score in their own overrides."
+        },
+        {
+          "id": "urban",
+          "score": 5,
+          "label": "Cities, housing, the built environment",
+          "descriptiveOnly": true,
+          "note": "Added 2026-08-29 so a nonfiction reader has subjects to name. Scored at the dimension default and last in the pick order, so it describes without judging until someone raises it."
+        },
+        {
+          "id": "economy",
+          "score": 5,
+          "label": "Economics, work and labour",
+          "descriptiveOnly": true,
+          "note": "Added 2026-08-29 so a nonfiction reader has subjects to name. Scored at the dimension default and last in the pick order, so it describes without judging until someone raises it."
+        },
+        {
+          "id": "technology_power",
+          "score": 5,
+          "label": "Technology, surveillance and infrastructure",
+          "descriptiveOnly": true,
+          "note": "Added 2026-08-29 so a nonfiction reader has subjects to name. Scored at the dimension default and last in the pick order, so it describes without judging until someone raises it."
+        },
+        {
+          "id": "lives",
+          "score": 5,
+          "label": "A single life, told",
+          "descriptiveOnly": true,
+          "note": "Added 2026-08-29 so a nonfiction reader has subjects to name. Scored at the dimension default and last in the pick order, so it describes without judging until someone raises it."
+        },
+        {
+          "id": "arts",
+          "score": 5,
+          "label": "Art, music and performance",
+          "descriptiveOnly": true,
+          "note": "Added 2026-08-29 so a nonfiction reader has subjects to name. Scored at the dimension default and last in the pick order, so it describes without judging until someone raises it."
+        },
+        {
+          "id": "science",
+          "score": 5,
+          "label": "Science and how it is done",
+          "descriptiveOnly": true,
+          "note": "Added 2026-08-29 so a nonfiction reader has subjects to name. Scored at the dimension default and last in the pick order, so it describes without judging until someone raises it."
+        }
+      ],
+      "fromRecord": false
+    },
+    {
+      "id": "D3",
+      "name": "Form",
+      "weight": 12,
+      "default": 5,
+      "bands": [
+        {
+          "id": "novel",
+          "score": 8,
+          "label": "A novel"
+        },
+        {
+          "id": "stories",
+          "score": 7,
+          "label": "Short stories or linked fiction"
+        },
+        {
+          "id": "history",
+          "score": 7,
+          "label": "History"
+        },
+        {
+          "id": "reportage",
+          "score": 6,
+          "label": "Reporting and long-form journalism"
+        },
+        {
+          "id": "essays",
+          "score": 6,
+          "label": "Essays"
+        },
+        {
+          "id": "monograph",
+          "score": 6,
+          "label": "A scholarly monograph"
+        },
+        {
+          "id": "memoir",
+          "score": 5,
+          "label": "Memoir or biography"
+        },
+        {
+          "id": "poetry",
+          "score": 4,
+          "label": "Poetry"
+        },
+        {
+          "id": "graphic",
+          "score": 4,
+          "label": "Comics and graphic work"
+        },
+        {
+          "id": "reference",
+          "score": 3,
+          "label": "Reference, manual or handbook"
+        }
+      ],
+      "fromRecord": true
+    },
+    {
+      "id": "D4",
+      "name": "Register",
+      "weight": 16,
+      "default": 5,
+      "bands": [
+        {
+          "score": 10,
+          "id": "lyric_dread",
+          "label": "Lyric with dread underneath; sentence-level distinctiveness"
+        },
+        {
+          "score": 9,
+          "id": "baroque",
+          "label": "Dense, baroque, incantatory"
+        },
+        {
+          "score": 9,
+          "id": "spare",
+          "label": "Spare and precise"
+        },
+        {
+          "score": 6,
+          "id": "functional",
+          "label": "Clean and functional — architecture carries it"
+        },
+        {
+          "score": 4,
+          "id": "quippy",
+          "label": "Comic-maximalist, wry, quippy"
+        },
+        {
+          "score": 2,
+          "id": "flat",
+          "label": "Workshop-flat"
+        },
+        {
+          "id": "creative_nonfiction",
+          "score": 9,
+          "label": "Creative or narrative nonfiction, written with the attention of a novel",
+          "nonfiction": true
+        },
+        {
+          "id": "academic",
+          "score": 7,
+          "label": "Scholarly: a monograph addressing a field, with its apparatus",
+          "nonfiction": true
+        },
+        {
+          "id": "dense_theory",
+          "score": 6,
+          "label": "Dense and theoretical, willing to be difficult",
+          "nonfiction": true
+        },
+        {
+          "id": "reported",
+          "score": 6,
+          "label": "Reported and journalistic",
+          "nonfiction": true
+        },
+        {
+          "id": "confessional",
+          "score": 5,
+          "label": "Personal and confessional",
+          "nonfiction": true
+        },
+        {
+          "id": "pop_subject",
+          "score": 3,
+          "label": "A popular treatment for the general reader",
+          "nonfiction": true
+        },
+        {
+          "id": "expository",
+          "score": 6,
+          "label": "Expository: a case argued in plain prose",
+          "descriptiveOnly": false,
+          "nonfiction": true
+        }
+      ],
+      "fromRecord": false
+    },
+    {
+      "id": "D5",
+      "name": "Tone",
+      "weight": 10,
+      "default": 7,
+      "bands": [
+        {
+          "score": 10,
+          "id": "dread",
+          "label": "Dread-forward, atmospheric, menacing, unresolved"
+        },
+        {
+          "score": 9,
+          "id": "elegiac",
+          "label": "Elegiac, haunted, mythic"
+        },
+        {
+          "id": "harrowing",
+          "score": 8,
+          "label": "Harrowing: devastating, unflinching, hard to sit with",
+          "descriptiveOnly": false
+        },
+        {
+          "score": 8,
+          "id": "indicting",
+          "label": "Angry, indicting, morally hot"
+        },
+        {
+          "score": 8,
+          "id": "cold",
+          "label": "Cold, clinical, detached"
+        },
+        {
+          "score": 7,
+          "id": "warm",
+          "label": "Warm, humane, redemptive"
+        },
+        {
+          "score": 4,
+          "id": "comic",
+          "label": "Comic, satirical, farcical as the primary mode"
+        },
+        {
+          "id": "hardboiled",
+          "score": 7,
+          "label": "Hardboiled, noir, laconic",
+          "descriptiveOnly": true,
+          "note": "Added 2026-08-25 to widen the vocabulary for other readers. Scored at the dimension default and placed last in the pick order, so it fires only where none of the profile's own bands did and cannot move this profile's numbers. A reader who cares about it raises its score in their own overrides."
+        },
+        {
+          "id": "gothic",
+          "score": 7,
+          "label": "Gothic, uncanny, spectral",
+          "descriptiveOnly": true,
+          "note": "Added 2026-08-25 to widen the vocabulary for other readers. Scored at the dimension default and placed last in the pick order, so it fires only where none of the profile's own bands did and cannot move this profile's numbers. A reader who cares about it raises its score in their own overrides."
+        },
+        {
+          "id": "surreal",
+          "score": 7,
+          "label": "Surreal, absurdist, dreamlike",
+          "descriptiveOnly": true,
+          "note": "Added 2026-08-25 to widen the vocabulary for other readers. Scored at the dimension default and placed last in the pick order, so it fires only where none of the profile's own bands did and cannot move this profile's numbers. A reader who cares about it raises its score in their own overrides."
+        },
+        {
+          "id": "ironic",
+          "score": 7,
+          "label": "Ironic, wry, mordant",
+          "descriptiveOnly": true,
+          "note": "Added 2026-08-25 to widen the vocabulary for other readers. Scored at the dimension default and placed last in the pick order, so it fires only where none of the profile's own bands did and cannot move this profile's numbers. A reader who cares about it raises its score in their own overrides."
+        },
+        {
+          "id": "propulsive",
+          "score": 7,
+          "label": "Propulsive, taut, suspenseful",
+          "descriptiveOnly": true,
+          "note": "Added 2026-08-25 to widen the vocabulary for other readers. Scored at the dimension default and placed last in the pick order, so it fires only where none of the profile's own bands did and cannot move this profile's numbers. A reader who cares about it raises its score in their own overrides."
+        },
+        {
+          "id": "grave",
+          "score": 7,
+          "label": "Grave and considered: sober, weighty, unhurried",
+          "descriptiveOnly": false
+        }
+      ],
+      "fromRecord": false
+    },
+    {
+      "id": "D6",
+      "name": "Scale",
+      "weight": 8,
+      "default": 6,
+      "bands": [
+        {
+          "score": 10,
+          "id": "sprawl",
+          "label": "500+ pages, multi-strand, decades-spanning"
+        },
+        {
+          "score": 9,
+          "id": "long_ambit",
+          "label": "400–500 pages with real structural ambition"
+        },
+        {
+          "score": 9,
+          "id": "short_formal",
+          "label": "Under 300 pages but formally extreme"
+        },
+        {
+          "score": 7,
+          "id": "mid_conv",
+          "label": "300–400 pages, conventional"
+        },
+        {
+          "score": 6,
+          "id": "short_conv",
+          "label": "Short and conventional"
+        }
+      ],
+      "fromRecord": true
+    },
+    {
+      "id": "D7",
+      "name": "Provenance",
+      "weight": 8,
+      "default": 4,
+      "bands": [
+        {
+          "id": "indie",
+          "score": 10,
+          "label": "Independent or small press"
+        },
+        {
+          "id": "literary",
+          "score": 8,
+          "label": "Literary imprint of a major house"
+        },
+        {
+          "id": "academic_press",
+          "score": 7,
+          "label": "A university or scholarly press"
+        },
+        {
+          "id": "acclaimed",
+          "score": 8,
+          "label": "Reviewed by more than one publication"
+        },
+        {
+          "id": "trade",
+          "score": 4,
+          "label": "A general trade imprint"
+        }
+      ],
+      "fromRecord": true
+    },
+    {
+      "id": "D8",
+      "name": "Narration",
+      "weight": 8,
+      "default": 5,
+      "fromRecord": false,
+      "bands": [
+        {
+          "id": "multi_voice",
+          "score": 9,
+          "label": "Multiple narrators or shifting perspectives, carrying the book",
+          "descriptiveOnly": false,
+          "fiction": true
+        },
+        {
+          "id": "character_interior",
+          "score": 8,
+          "label": "Close and interior: consciousness before incident",
+          "descriptiveOnly": false,
+          "fiction": true
+        },
+        {
+          "id": "unreliable",
+          "score": 7,
+          "label": "A narrator who cannot be taken at their word",
+          "descriptiveOnly": false,
+          "fiction": true
+        },
+        {
+          "id": "ensemble",
+          "score": 6,
+          "label": "A large cast, lives interlocking",
+          "descriptiveOnly": false,
+          "fiction": true
+        },
+        {
+          "id": "single_voice",
+          "score": 6,
+          "label": "One narrator, held throughout",
+          "descriptiveOnly": false,
+          "fiction": true
+        },
+        {
+          "id": "plot_driven",
+          "score": 4,
+          "label": "Driven by incident: premise, reveal, propulsion",
+          "descriptiveOnly": false,
+          "fiction": true
+        }
+      ]
+    }
+  ],
+  "notScored": {
+    "geography": "Setting geography is deliberately not scored. Nine of twelve acquisitions are set in the American interior; that is a confound of subject selection, not a preference. Region is downstream of D2. Do not reintroduce it."
+  },
+  "hardFilters": [
+    {
+      "id": "satire",
+      "label": "Satire as primary mode",
+      "detail": "Primary mode, not an occasional register.",
+      "points": -30,
+      "pointsNote": "Close to disqualifying per the D5 note, but a book that is playful rather than superior should not be erased for it."
+    },
+    {
+      "id": "pynchon",
+      "label": "Pynchon and direct stylistic descendants",
+      "detail": "Voice and comedic tone rejected; subject matter appealing. Do not resolve this by recommending Pynchon-adjacent authors.",
+      "points": -30,
+      "pointsNote": "Voice and comedic tone rejected explicitly."
+    },
+    {
+      "id": "twist",
+      "label": "Structural device resolving into a twist",
+      "detail": "The Trust failure — the archival frame resolved too neatly.",
+      "points": -15,
+      "pointsNote": "The Trust failure. The D3 override already scores the device at 3, so the penalty on top is deliberately modest."
+    },
+    {
+      "id": "sealed_present",
+      "label": "Contemporary-set fiction with no historical causal argument",
+      "detail": "Replaces rev 1's blanket contemporary exclusion, which was wrong. Triggers on D1 = 0.",
+      "points": -10,
+      "pointsNote": "D1 scoring 0 already costs 18 points of weight on its own; a heavy penalty here would charge the same fault twice."
+    },
+    {
+      "id": "bookclub",
+      "label": "Marketed primarily as book club fiction",
+      "detail": "Marketing apparatus as the primary positioning.",
+      "points": -20,
+      "pointsNote": "Marketing apparatus as the primary positioning."
+    }
+  ],
+  "removedFilters": [
+    {
+      "id": "race_engine",
+      "removedIn": 2,
+      "reason": "Over-applied in rev 1. The Sport of Kings was acquired after being explicitly flagged for exactly this. The narrower rule — racial history as the sole engine with no land, labor or institutional machinery underneath — is scored through D2, not filtered."
+    }
+  ],
+  "softPenalties": [
+    {
+      "id": "prestige_tv",
+      "points": -15,
+      "label": "Household-name author with a current prestige-TV adaptation"
+    },
+    {
+      "id": "genre_framing",
+      "points": -10,
+      "label": "Genre framing explicit and load-bearing rather than absorbed"
+    },
+    {
+      "id": "redemptive",
+      "points": -10,
+      "label": "Redemptive ending that arrives on cue",
+      "detail": "A warm ending is not disqualifying. What is penalised is warmth that is cliched or obvious — resolution the review describes as sentimental, tidy, telegraphed or unearned. Warmth the review marks as costly, resisted or strange carries no penalty at all.",
+      "tiers": [
+        {
+          "id": "cliche",
+          "points": -10,
+          "label": "Redemptive ending, arriving on cue"
+        },
+        {
+          "id": "unclear",
+          "points": -3,
+          "label": "Warm ending, and the review does not say how it is handled"
+        },
+        {
+          "id": "earned",
+          "points": 0,
+          "label": "Warm ending the review marks as earned, costly or strange"
+        }
+      ]
+    },
+    {
+      "id": "writer_narrator",
+      "points": -8,
+      "label": "First-person protagonist who is a writer processing their own life, with no political frame"
+    },
+    {
+      "id": "short_conv",
+      "points": -5,
+      "label": "Under 250 pages and conventionally structured"
+    }
+  ],
+  "removedPenalties": [
+    {
+      "id": "framing_narrator",
+      "removedIn": 2,
+      "reason": "The Nix and The Topeka School both bookend a historical story with a present-day framing narrator and were both acquired."
+    }
+  ],
+  "bonuses": [
+    {
+      "id": "catastrophe_religion",
+      "points": 4,
+      "label": "Catastrophe generating a belief system",
+      "detail": "Working reference for an in-development project about a mass event that produces a new religion and a pilgrimage settlement."
+    },
+    {
+      "id": "wimmer",
+      "points": 2,
+      "label": "Translated by Natasha Wimmer",
+      "detail": "A strong positive on its own."
+    }
+  ],
+  "openQuestions": [
+    {
+      "id": "Q1",
+      "question": "How explicit can the supernatural be?",
+      "test": "Folk horror or a ghost story with no genre framing.",
+      "detect": "supernatural"
+    },
+    {
+      "id": "Q2",
+      "question": "Is translation a genuine positive?",
+      "test": "A translated European or Latin American historical novel at length.",
+      "detect": "translated_long"
+    },
+    {
+      "id": "Q3",
+      "question": "Where is the lower bound on length?",
+      "test": "A conventionally structured novel under 250 pages. Expected to fail.",
+      "detect": "short_conventional"
+    },
+    {
+      "id": "Q4",
+      "question": "Is D3 formal ambition a hard requirement or a strong preference?",
+      "test": "Period-set, institutional, 400+ pages, conventional in form — the Manhattan Beach case.",
+      "detect": "period_conventional_long"
+    },
+    {
+      "id": "Q5",
+      "question": "Does the D4 prose floor hold below Ohio?",
+      "test": "Genuinely plain prose with perfect scores elsewhere.",
+      "detect": "plain_prose_strong_elsewhere"
+    },
+    {
+      "id": "Q6",
+      "question": "Is genre absorption possible at all?",
+      "test": "A literary novel with a fully absorbed genre skeleton.",
+      "detect": "absorbed_genre"
+    }
+  ],
+  "traps": [
+    "Overfitting to a small positive set. Require at least fifteen positives before treating any dimension as near-deterministic.",
+    "The race filter, over-applied. Score via D2, do not filter.",
+    "Prose is a floor, not a tiebreaker.",
+    "Land fiction at the wrong scale. Land requires institutional or multi-decade scale.",
+    "Prizes are evidence quality, not ranking signal. Do not weight prizes into the score.",
+    "Same author, different book. Never recommend on author identity. Score every title independently."
+  ],
+  "evidence": {
+    "acceptable": [
+      "pulitzer.org",
+      "nationalbook.org",
+      "thebookerprizes.com",
+      "LARB",
+      "NYRB",
+      "NPR",
+      "Kirkus",
+      "Publishers Weekly",
+      "Shelf Awareness",
+      "Chicago Review of Books",
+      "academic press catalogs",
+      "scholarly reviews"
+    ],
+    "notAcceptable": [
+      "publisher blurb copy",
+      "Goodreads aggregate ratings",
+      "Amazon editorial copy",
+      "commercial listicles"
+    ],
+    "required": [
+      "publication year",
+      "publisher or imprint",
+      "translator if applicable",
+      "page count",
+      "setting-year range",
+      "one piece of vetted critical evidence"
+    ]
+  },
+  "proseFloor": {
+    "maxBandScore": 2,
+    "cap": 60,
+    "note": "Trap 3 — prose is a floor, not a tiebreaker, and below it nothing compensates. The profile hand-scores the floor at about 5 on D4 (Ohio ~6 acquired, The Deluge ~4 passed twice). A keyword estimate of prose register runs low against those hand-scores, so on the estimated scale the floor is implemented at 2 or below: it fires when a review explicitly names the prose as the book’s weakness, or reads it as comic-maximalist and quippy. When it fires the total is capped into Reserve regardless of how good the architecture is."
+  },
+  "amendments": [
+    {
+      "date": "2026-08-24",
+      "source": "Stated directly by Michael, outside the rev 2 document.",
+      "change": "The redemptive-ending penalty was a flat -10 on any warmth marker. It is now three-tiered: -10 when the warmth is cliched or obvious, 0 when the review marks it as earned or complicated, -3 when the review gives no signal either way.",
+      "documentStillReads": "§5 of the rev 2 document still lists a flat -10 for “Redemptive ending, healing arc, earned resolution”. A rev 3 should absorb this amendment.",
+      "scope": "D5 tonal bands are untouched. This is about how a book ends, not about its overall register."
+    },
+    {
+      "date": "2026-08-24",
+      "source": "Stated directly by Michael, outside the rev 2 document.",
+      "change": "The six hard filters in §4 no longer exclude. Each is now a score penalty between -10 and -45. The profile determines the score; it does not decide what is allowed to appear.",
+      "documentStillReads": "§4 is headed 'Hard filters - auto-exclude'. A rev 3 should absorb this.",
+      "scope": "Detection is unchanged - the same evidence still fires the same rule, and the row still says which one. Only the consequence changed."
+    },
+    {
+      "date": "2026-08-25",
+      "source": "Stated directly by Michael.",
+      "change": "D2, D5 and D6 softened and de-weighted; D4 raised to the heaviest dimension. Dread is not essential, length is not a disqualifier, and any subject is readable if the book is well written. The low bands of all three were raised so that a weak score describes a book rather than condemning it.",
+      "documentStillReads": "§3 of the rev 2 document weights D2 18, D4 14, D5 10 and D6 14, and its band tables bottom out at 0-2. A rev 3 should absorb this.",
+      "scope": "D1, D3 and D7 untouched. The relative ordering inside each band table is preserved - what changed is the spread, not which end is better."
+    }
+  ],
+  "evidenceRule": {
+    "minWeight": 30,
+    "cap": 69,
+    "note": "A book is scored on the dimensions the reviews actually spoke to, renormalised over them. The bar for treating that as a reading is 30 of the 100 points of weight - low on purpose. A Publishers Weekly notice that fires two or three dimensions is worth hearing about; the alternative was never hearing about it at all. Below the bar a book is still scored and shown, but capped at 6.9 so a couple of dimensions cannot manufacture a top score."
+  },
+  "filterMode": "penalty",
+  "filterModeNote": "§4 of the rev 2 document lists these as auto-excludes. Michael's instruction on 2026-08-24 was that the profile should not exclude anything - it should determine the score. So each former hard filter is now a heavy negative rather than a gate. They are sized to push a book out of the recommendation band without erasing it: a nonfiction title still gets a real number, it is just a low one, and it stays visible and sortable like everything else.",
+  "vocabulary": {
+    "note": "A band carries two things doing different jobs: a label describing the book and a score ranking it for one reader. The labels are shared vocabulary. The scores are this profile. Bands marked descriptiveOnly were added for the first job and deliberately score at the dimension default, so they describe without judging until someone overrides them."
+  },
+  "aversionStrengths": {
+    "mild": -8,
+    "strong": -20,
+    "never": null
+  },
+  "recommendShare": 0.12
+}

@@ -1,0 +1,275 @@
+{
+  "note": "The §11 calibration set. Each fixture carries the structural facts the profile itself records (setting, pages, distortion, engine) plus a short passage written in the register of review copy, so the scorer runs on the same input shape it sees in production. This validates the weights and the band mapping. It does NOT validate the extraction pipeline — that is tested separately against live feeds.",
+  "rule": "Acquisitions must score 70 or above. Passes must score 65 or below. Borderline fixtures may land anywhere between.",
+  "fixtures": [
+    {
+      "id": "biography-of-x",
+      "title": "Biography of X",
+      "author": "Catherine Lacey",
+      "year": 2023,
+      "pages": 416,
+      "publisher": "Farrar, Straus and Giroux",
+      "expected": "acquire",
+      "text": "An invented archive assembled by a widow researching her wife, an artist known only as X, across an alternate history in which the American South seceded in 1945 and sealed itself off for decades. Lacey builds the book out of false documents — footnotes, interviews, photographs, catalogue copy — and the counterfactual national past does the argument's real work. Cold, unsettling, unresolved. The prose is exact at the level of the sentence and the dread never lifts."
+    },
+    {
+      "id": "the-antidote",
+      "title": "The Antidote",
+      "author": "Karen Russell",
+      "year": 2025,
+      "pages": 432,
+      "publisher": "Knopf",
+      "expected": "acquire",
+      "text": "Nebraska, 1935, the day the dust storm hits. Russell's magical realism gives a prairie witch who stores her neighbours' memories, and the amnesia is the point: the land was taken, the topsoil is leaving, and the county has agreed to forget how both happened. Homestead claims, dispossession, foreclosure and drought drive every turn of the plot. Multiple voices, no single protagonist, with documentary interstitials. Lyrical and haunted, and the dread underneath is historical."
+    },
+    {
+      "id": "rednecks",
+      "title": "Rednecks",
+      "author": "Taylor Brown",
+      "year": 2024,
+      "pages": 336,
+      "publisher": "St. Martin's Press",
+      "expected": "acquire",
+      "text": "West Virginia, 1921: the mine wars, the union local, the march on Blair Mountain. Brown moves between a company doctor, a Black miner, a Sicilian immigrant and Mother Jones herself, so the insurrection arrives as a chorus rather than a single arc. Coal, the company town, the strike and the massacre that ended it. The prose is spare and precise, the tone unsparing and morally hot, and the causal line to the present is left implicit and obvious."
+    },
+    {
+      "id": "angel-down",
+      "title": "Angel Down",
+      "author": "Daniel Kraus",
+      "year": 2026,
+      "pages": 208,
+      "publisher": null,
+      "expected": "acquire",
+      "text": "The Western Front, 1918. A patrol crosses into no man's land and finds something that should not be there. Kraus sustains a single formal constraint for the length of the book, an unbroken present tense that never leaves the trench, and the metaphysical horror arrives as theodicy rather than as a monster: faith is being built and dismantled in real time under artillery. Short, atmospheric, sinister, entirely unresolved."
+    },
+    {
+      "id": "the-director",
+      "title": "The Director",
+      "author": "Daniel Kehlmann",
+      "year": 2024,
+      "pages": 352,
+      "publisher": "Summit Books",
+      "translated": true,
+      "translator": "Ross Benjamin",
+      "expected": "acquire",
+      "text": "G. W. Pabst returns to Austria in 1938 and finds himself making films for the propaganda ministry. Kehlmann alternates registers chapter by chapter — third person, second person, an interpolated screenplay, a servant's testimony — and the braid carries the argument about what an artist becomes under a regime. The film unit, the censor, the studio's chain of command. Translated from the German. Cold, clinical, detached, and the more chilling for it."
+    },
+    {
+      "id": "now-i-surrender",
+      "title": "Now I Surrender",
+      "author": "Álvaro Enrigue",
+      "year": 2026,
+      "pages": 400,
+      "publisher": "Riverhead",
+      "translated": true,
+      "translator": "Natasha Wimmer",
+      "expected": "acquire",
+      "text": "Translated by Natasha Wimmer. The nineteenth-century Southwest, the Apache wars and the long conquest of a border that had not yet decided what it was. Enrigue writes in fragments, testimony and rumour, multiple voices with no centre, and the invasion is narrated from four directions at once. Land title, the cavalry, the mission and the massacre. Dense, incantatory prose and a menacing, unresolved close."
+    },
+    {
+      "id": "sport-of-kings",
+      "title": "The Sport of Kings",
+      "author": "C. E. Morgan",
+      "year": 2016,
+      "pages": 560,
+      "publisher": "Farrar, Straus and Giroux",
+      "expected": "acquire",
+      "text": "Three generations of Kentucky landowners on the same acreage, turning tobacco ground into a bloodstock operation while the inheritance rots. Morgan braids the Forge family's dynasty with the life of a Black groom whose own family was dispossessed of land within living memory, and the plantation past runs directly into the stud farm's ledger. Biblical, baroque, incandescent prose across 560 pages. An indictment, unsparing and furious."
+    },
+    {
+      "id": "ohio",
+      "title": "Ohio",
+      "author": "Stephen Markley",
+      "year": 2018,
+      "pages": 483,
+      "publisher": "Simon and Schuster",
+      "expected": "acquire",
+      "text": "One night in a hollowed-out Ohio town, four classmates back on the same streets, and behind them the wreckage of the 2000s — the plant closed, the wars, the opioid trade, the foreclosure crisis. Markley gives each of the four a long section, no protagonist at the centre, and the aftermath structure is the argument. The prose is clean and propulsive rather than beautiful; the fury is what carries it. Post-industrial decay as causation, not backdrop."
+    },
+    {
+      "id": "topeka-school",
+      "title": "The Topeka School",
+      "author": "Ben Lerner",
+      "year": 2019,
+      "pages": 282,
+      "publisher": "Farrar, Straus and Giroux",
+      "expected": "acquire",
+      "text": "Kansas in the 1990s and the present day, braided: a high-school debate champion, his psychoanalyst parents at the Foundation, and the spread technique that taught a generation to speak so fast that nothing could be answered. Lerner alternates narrators and drops into essay, and the braid carries the claim about how American political speech was institutionally manufactured. Cold, precise, sentence-level distinctive. The psychology is routed through the institution."
+    },
+    {
+      "id": "the-nix",
+      "title": "The Nix",
+      "author": "Nathan Hill",
+      "year": 2016,
+      "pages": 620,
+      "publisher": "Knopf",
+      "expected": "acquire",
+      "text": "Chicago 1968 and the present day, 620 pages, alternating between a professor reconstructing the mother who left him and the Democratic convention riots that made her. Hill spans four decades and several registers — a Norwegian folk tale, a courtroom, a video game — and the two timelines are the book's whole causal argument about how the politics of now were produced. Angry and elegiac by turns, the reconstruction routed through 1968 rather than through therapy."
+    },
+    {
+      "id": "ducks-newburyport",
+      "title": "Ducks, Newburyport",
+      "author": "Lucy Ellmann",
+      "year": 2019,
+      "pages": 1030,
+      "publisher": "Biblioasis",
+      "expected": "acquire",
+      "text": "One thousand pages in a single unbroken sentence: an Ohio mother baking pies for a living while the water table, the industrial food supply, the gun in the neighbour's truck and the country's whole poisoned inheritance run through her head. The formal constraint is sustained to the end. Ellmann's dread is ambient and never resolves, the register is torrential, and the contemporary setting is structured entirely as aftermath — of extraction, of chemical agriculture, of what the land was made to do."
+    },
+    {
+      "id": "mercury-pictures",
+      "title": "Mercury Pictures Presents",
+      "author": "Anthony Marra",
+      "year": 2022,
+      "pages": 432,
+      "publisher": "Hogarth",
+      "expected": "acquire",
+      "text": "A Los Angeles B-studio in the 1940s, the Production Code office, the War Department's film unit, and an Italian émigré producer whose father is in internal exile under Mussolini. Marra runs a dozen voices — miniaturists, censors, contract players — with no centre, and the studio itself is the protagonist. Playful without ever being superior to its subject. Artists working under the wartime state, 432 pages, and the register turns elegiac when it matters."
+    },
+    {
+      "id": "the-deluge",
+      "title": "The Deluge",
+      "author": "Stephen Markley",
+      "year": 2023,
+      "pages": 896,
+      "publisher": "Simon and Schuster",
+      "expected": "pass",
+      "note": "Architecture perfect; prose below floor. The single cleanest test of the D4 floor rule.",
+      "text": "Nearly 900 pages, two decades, a dozen narrators: a climate scientist, an oil lobbyist, an eco-saboteur, an ad executive. Markley braids the strands into a systems novel about how the political machinery of energy policy produced the coming catastrophe, and the research is formidable. But the sentences are the weakest thing in it — flat prose, workshop cadences, dialogue that explains itself. The architecture is extraordinary and the writing is serviceable at best."
+    },
+    {
+      "id": "wellness",
+      "title": "Wellness",
+      "author": "Nathan Hill",
+      "year": 2023,
+      "pages": 624,
+      "publisher": "Knopf",
+      "expected": "pass",
+      "text": "A marriage in crisis in contemporary Chicago: two former art-scene bohemians now middle-aged, a wellness industry subplot, placebo studies, the algorithm serving them each a different reality. Hill is wry and quippy across 624 pages and the jokes land, but the novel is causally sealed in the present — the past appears as backstory for the couple, not as the thing that made the present. Ultimately affirming, a healing arc, the marriage repaired."
+    },
+    {
+      "id": "james",
+      "title": "James",
+      "author": "Percival Everett",
+      "year": 2024,
+      "pages": 320,
+      "publisher": "Doubleday",
+      "expected": "pass",
+      "note": "Race-engine with no land or institutional machinery underneath it.",
+      "text": "Huckleberry Finn retold from Jim's side, one journey down one antebellum river over a single season. Everett's prose is spare and controlled and the conceit — a private literate voice beneath the performed dialect — is executed exactly. But the engine is flight and personhood: no land title, no union, no institution, nothing multi-decade. A linear narrative, 320 pages, with a late reveal that reframes the family story."
+    },
+    {
+      "id": "vera-or-faith",
+      "title": "Vera, or Faith",
+      "author": "Gary Shteyngart",
+      "year": 2025,
+      "pages": 256,
+      "publisher": "Random House",
+      "expected": "pass",
+      "text": "A satire of a near-future America seen through a precocious ten-year-old, with a constitutional convention on the horizon and a stepmother's politics curdling at the dinner table. Shteyngart is hilarious and the send-up is affectionate, but satire is the primary mode throughout. Short, wry, quippy, and the ending finds a note of grace."
+    },
+    {
+      "id": "martyr",
+      "title": "Martyr!",
+      "author": "Kaveh Akbar",
+      "year": 2024,
+      "pages": 352,
+      "publisher": "Knopf",
+      "expected": "pass",
+      "text": "A recovering alcoholic poet in Indiana, obsessed with martyrdom, reconstructs the mother killed when the US Navy shot down her airliner. Akbar's prose is luminous, sentence by sentence the best thing here, and the register is elegiac. But the reconstruction is psychological rather than historical — the novel is a portrait of grief and identity in the present, and the late revelation in the museum reframes the family rather than the politics."
+    },
+    {
+      "id": "trust",
+      "title": "Trust",
+      "author": "Hernan Diaz",
+      "year": 2022,
+      "pages": 416,
+      "publisher": "Riverhead",
+      "expected": "pass",
+      "text": "Four documents about the same Wall Street fortune: a novel, an unfinished memoir, a ghostwriter's account, a diary. Diaz writes each pastiche beautifully and the archival frame is elegantly built, but the device resolves — the final diary is the reveal, and it lands tidily, the rug pulled and everything explained. Money and finance in the abstract, 1920s New York, a marriage at the centre."
+    },
+    {
+      "id": "homestead",
+      "title": "Homestead",
+      "author": "Melinda Moustakis",
+      "year": 2022,
+      "pages": 256,
+      "publisher": "Flatiron Books",
+      "expected": "pass",
+      "note": "Land subject exact; scale far too small.",
+      "text": "Alaska, 1956: a man and a woman marry almost as strangers to prove up a 150-acre homestead claim before the deadline. One couple, one season, one plot of land. Moustakis writes in short lapidary chapters, spare and restrained, and the register is quiet and haunted. The homestead claim is the whole plot and nothing institutional stands behind it."
+    },
+    {
+      "id": "buffalo-hunter-hunter",
+      "title": "The Buffalo Hunter Hunter",
+      "author": "Stephen Graham Jones",
+      "year": 2025,
+      "pages": 448,
+      "publisher": "Saga Press",
+      "expected": "pass",
+      "text": "A vampire novel built around the Marias Massacre of 1870, framed as a Lutheran pastor's recovered journal transcribing the confession of a Blackfeet undead. Jones works the horror machinery hard and the genre framing is explicit and load-bearing throughout — the vampire rules, the kills, the hunt. The journal frame resolves into a late reveal about the transcriber."
+    },
+    {
+      "id": "rabbit-hutch",
+      "title": "The Rabbit Hutch",
+      "author": "Tess Gunty",
+      "year": 2022,
+      "pages": 352,
+      "publisher": "Knopf",
+      "expected": "pass",
+      "text": "A condemned affordable-housing block in a contemporary Indiana town, a teenager out of foster care, an online obituary moderator, a comment section. Gunty writes in fragments and typographic experiments and the prose is genuinely strange, but the novel is sealed in the present: the internet, the group chat, the influencer's afterlife. The town's post-industrial history is texture rather than cause."
+    },
+    {
+      "id": "long-island-compromise",
+      "title": "Long Island Compromise",
+      "author": "Taffy Brodesser-Akner",
+      "year": 2024,
+      "pages": 464,
+      "publisher": "Random House",
+      "expected": "pass",
+      "text": "A wealthy Long Island family unravelling in the present day, decades after the father's kidnapping, told in comic-maximalist mode with jokes on every page. Brodesser-Akner is antic and sardonic and the suburban satire is the primary register. Family trauma, inherited money, therapy, three adult children processing. The ending offers consolation and reconciliation."
+    },
+    {
+      "id": "candy-house",
+      "title": "The Candy House",
+      "author": "Jennifer Egan",
+      "year": 2022,
+      "pages": 352,
+      "publisher": "Scribner",
+      "expected": "pass",
+      "text": "A dozen linked chapters in a dozen forms — an email chain, a spreadsheet, second person — orbiting a tech company that lets people upload and share their memories. Egan's polyphony is real and no chapter has a centre. But the subject is the platform, the algorithm, social media and what they do to selfhood, and the contemporary setting is where the causation begins and ends."
+    },
+    {
+      "id": "manhattan-beach",
+      "title": "Manhattan Beach",
+      "author": "Jennifer Egan",
+      "year": 2017,
+      "pages": 448,
+      "publisher": "Scribner",
+      "expected": "borderline",
+      "note": "Predicted pass on D3 alone. Unverified — the cleanest single test of whether formal ambition is a hard requirement or a strong preference. See §10.4.",
+      "text": "The Brooklyn Naval Yard in 1942 and a woman who becomes the yard's first female diver, with the waterfront unions, the mob's hold on the docks and her father's disappearance running underneath. Egan writes it straight — linear, traditional narrative, 448 pages, no formal apparatus at all. The prose is clean and unshowy and the research on the yard and the divers is exact. Period-set, institutional, and entirely conventional in form."
+    }
+  ],
+  "divergences": [
+    {
+      "id": "james",
+      "since": "2026-08-25",
+      "scores": 7.5,
+      "reason": "Passed in §11 for being a race-engine with no land or institutional machinery. Under the softened D2 that reason no longer costs much, and Everett's spare, controlled prose now carries 24 points. The fixture's expected label is left as 'pass' because that is what actually happened; the divergence is the record of the rules having moved."
+    },
+    {
+      "id": "martyr",
+      "since": "2026-08-25",
+      "scores": 7.6,
+      "reason": "Passed in §11 for psychological reconstruction with no historical causation. Akbar's prose is the best thing in it, and prose is now the heaviest dimension, so it clears. The clearest single case of the new weighting disagreeing with the old behaviour."
+    },
+    {
+      "id": "homestead",
+      "since": "2026-08-25",
+      "scores": 7.8,
+      "reason": "Passed in §11 for land subject at far too small a scale. 'Length is not a disqualifier' removes most of that objection, and the Trap 4 demotion is no longer enough to sink it on its own."
+    }
+  ],
+  "divergenceNote": "These three fixtures record real past decisions and their expected labels are never edited to match the model. When the profile is deliberately changed and a fixture moves as a result, it is listed here with the reason, so the calibration suite keeps catching genuine regressions without quietly absorbing a change of mind. If any of these three still reads as a pass to you, the softening went too far on the dimension named."
+}

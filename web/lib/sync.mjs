@@ -11,8 +11,8 @@
 // the browser swallowed — and every path through here ends in a message and a
 // working signed-out app. Nothing throws upward.
 
-import { firebaseConfig } from './firebase-config.mjs?v=f3c1dd5be0';
-import { mergeProfile, stamp } from './merge-profile.mjs?v=f3c1dd5be0';
+import { firebaseConfig } from './firebase-config.mjs';
+import { mergeProfile, stamp } from './merge-profile.mjs';
 
 const SDK = 'https://www.gstatic.com/firebasejs/10.14.1';
 

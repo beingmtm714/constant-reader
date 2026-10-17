@@ -1,0 +1,30 @@
+# HTTP response cache — rebuilt on demand, large, and stale within hours.
+.cache/
+
+# Build output. The archive accumulates across runs and would put a growing
+# multi-megabyte JSON blob into every commit. Run `npm run build` after cloning;
+# the app says so itself if the file is missing.
+data/
+web/data/
+
+# Your own exported verdicts — personal, and the input to npm run tune.
+data/verdicts.json
+
+# The Google Books API key. In Actions it is written from a secret at build time.
+google-books.key
+
+# Throwaway design mockups. Never published: the site is built from web/ only.
+.mockups/
+
+# The private half of the VAPID key pair, which signs every push notification.
+# In Actions it is written from a secret. Regenerating the pair silently
+# invalidates every subscription anyone has made.
+vapid.key
+.scratch/
+
+# The assembled static site. Built by npm run site and deployed by the Pages
+# workflow; never committed.
+site/
+
+node_modules/
+.DS_Store

@@ -1,0 +1,173 @@
+{
+ "note": "Targeted tests for rules the §11 calibration set does not exercise. The three redemptive fixtures in §11 are all hard-filtered before the penalty can matter, so a flat -10 and a tiered one produce identical calibration output — the rule was effectively untested until these existed. Each case is written to differ from its neighbour in one respect only.",
+ "tests": [
+  {
+   "id": "warm-cliche",
+   "rule": "redemptive",
+   "about": "Warmth that arrives on cue still costs the full penalty.",
+   "text": "Three hundred pages of a family losing its farm to the bank, and then the last fifty sand it all down. The estranged brother comes home, the debt is forgiven, and the novel closes on a note of grace the preceding four hundred pages had given no reason to expect. Sentimental, telegraphed, and tidily resolved.",
+   "expect": {
+    "penalty": "redemptive",
+    "tier": "cliche",
+    "points": -10
+   }
+  },
+  {
+   "id": "warm-earned",
+   "rule": "redemptive",
+   "about": "Warmth the review marks as costly or strange is not disqualifying.",
+   "text": "Three hundred pages of a family losing its farm to the bank, and then an ending that is warm and is the strangest thing in the book. Consolation arrives sideways and at a price, and the novel refuses to say whether it holds. Unsentimental to the last page.",
+   "expect": {
+    "penalty": "redemptive",
+    "tier": "earned",
+    "points": 0
+   }
+  },
+  {
+   "id": "warm-unclear",
+   "rule": "redemptive",
+   "about": "Where the review says nothing either way the penalty is small and visible, not decisive.",
+   "text": "Three hundred pages of a family losing its farm to the bank. It ends in hope.",
+   "expect": {
+    "penalty": "redemptive",
+    "tier": "unclear",
+    "points": -3
+   }
+  },
+  {
+   "id": "no-warmth",
+   "rule": "redemptive",
+   "about": "No warmth marker, no penalty of any tier.",
+   "text": "Three hundred pages of a family losing its farm to the bank, and the bank wins. The last chapter is an auction.",
+   "expect": {
+    "noPenalty": "redemptive"
+   }
+  },
+  {
+   "id": "negated-subject",
+   "rule": "negation",
+   "about": "A review listing what a book is not must not score it as what it is not. Asserts the band rather than the number, since the bands were re-scored when D2 was softened.",
+   "text": "A marriage coming apart over one winter in a city apartment. No land title, no union, nothing institutional underneath it - just two people and a diagnosis.",
+   "expect": {
+    "dimension": "D2",
+    "band": "domestic"
+   }
+  },
+  {
+   "id": "recommend-qualifies",
+   "rule": "recommend",
+   "about": "A well-evidenced, identified, fiction-confirmed high scorer earns the tag.",
+   "text": "Kentucky, 1931. Three generations of one family on the same acreage, the union local forming in the next county, and the mine that takes the ground out from under all of it. Morgan braids the strands so the dispossession of 1890 runs straight into the strike. Dense, incantatory, and furious across 560 pages, from Graywolf.",
+   "pages": 560,
+   "publisher": "Graywolf",
+   "context": {
+    "identity": "source-stated",
+    "fiction": "confirmed",
+    "inWindow": true
+   },
+   "expect": {
+    "recommended": true
+   }
+  },
+  {
+   "id": "recommend-allows-loose-identity",
+   "rule": "recommend",
+   "about": "A loosely-extracted title can still be recommended, with the caveat on the row. Silence about a book was judged the worse failure than a flagged guess.",
+   "text": "Kentucky, 1931. Three generations of one family on the same acreage, the union local forming in the next county, and the mine that takes the ground out from under all of it. Morgan braids the strands so the dispossession of 1890 runs straight into the strike. Dense, incantatory, and furious across 560 pages, from Graywolf.",
+   "pages": 560,
+   "publisher": "Graywolf",
+   "context": {
+    "identity": "unverified",
+    "fiction": "confirmed",
+    "inWindow": true
+   },
+   "expect": {
+    "recommended": true
+   }
+  },
+  {
+   "id": "recommend-allows-unverified-fiction",
+   "rule": "recommend",
+   "about": "A book nobody has catalogued yet is still recommendable. Known nonfiction is handled by a penalty now, so holding back everything unproven was suppressing 71 books for a fact about metadata.",
+   "text": "Kentucky, 1931. Three generations of one family on the same acreage, the union local forming in the next county, and the mine that takes the ground out from under all of it. Morgan braids the strands so the dispossession of 1890 runs straight into the strike. Dense, incantatory, and furious across 560 pages, from Graywolf.",
+   "pages": 560,
+   "publisher": "Graywolf",
+   "context": {
+    "identity": "source-stated",
+    "fiction": "unknown",
+    "inWindow": true
+   },
+   "expect": {
+    "recommended": true
+   }
+  },
+  {
+   "id": "recommend-needs-window",
+   "rule": "recommend",
+   "about": "Outside the ten-year window: scored and shown, never tagged.",
+   "text": "Kentucky, 1931. Three generations of one family on the same acreage, the union local forming in the next county, and the mine that takes the ground out from under all of it. Morgan braids the strands so the dispossession of 1890 runs straight into the strike. Dense, incantatory, and furious across 560 pages, from Graywolf.",
+   "pages": 560,
+   "publisher": "Graywolf",
+   "context": {
+    "identity": "source-stated",
+    "fiction": "confirmed",
+    "inWindow": false
+   },
+   "expect": {
+    "recommended": false,
+    "because": "window"
+   }
+  },
+  {
+   "id": "recommend-needs-evidence",
+   "rule": "recommend",
+   "about": "Genuinely thin evidence still cannot reach the threshold. Tone and provenance alone come to 14 of 100 points, below the 30-point bar, so the 6.9 cap applies however well those two scored.",
+   "text": "Dread-forward and unresolved throughout. From Fitzcarraldo.",
+   "context": {
+    "identity": "source-stated",
+    "fiction": "confirmed",
+    "inWindow": true
+   },
+   "expect": {
+    "recommended": false
+   },
+   "pages": null,
+   "publisher": "Fitzcarraldo"
+  },
+  {
+   "id": "recommend-weight-bar-cleared",
+   "rule": "recommend",
+   "about": "Above the bar it can be recommended even with two dimensions dark. D6 needs a page count and D7 a publisher; a book published this year often has neither, and that is a gap in the catalogue rather than a fact about the book.",
+   "text": "Kentucky, 1931. Three generations of one family on the same acreage, the union local forming in the next county, and the mine that takes the ground out from under all of it. The book braids the strands so the dispossession of 1890 runs straight into the strike.",
+   "pages": 560,
+   "context": {
+    "identity": "source-stated",
+    "fiction": "confirmed",
+    "inWindow": true
+   },
+   "expect": {
+    "recommended": true
+   }
+  },
+  {
+   "id": "nonfiction-can-reach-threshold",
+   "rule": "filter-as-penalty",
+   "about": "Nonfiction competes on equal terms from revision 3. The 45-point exclusion was one reader's stated preference and he withdrew it; a book that fires on every dimension the profile has - a causal structure, land and labour, spare prose, an elegiac register, 560 pages, a scholarly press - is now recommendable, and the registers decide where it lands.",
+   "text": "A history of the Kentucky coalfields, 1890 to 1935, braiding the company archives with union records so that the dispossession runs straight into the strike. The author argues that the land question was settled long before the shooting began. Spare and precise, elegiac, and unsparing about what the mine took.",
+   "subjects": [
+    "History",
+    "Politics"
+   ],
+   "pages": 560,
+   "context": {
+    "identity": "source-stated",
+    "fiction": "nonfiction",
+    "inWindow": true
+   },
+   "expect": {
+    "recommended": true
+   },
+   "publisher": "Farrar, Straus and Giroux"
+  }
+ ]
+}

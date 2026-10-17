@@ -10,7 +10,7 @@
 // The Firebase glue lives in sync.mjs and knows nothing about what any of this
 // means; this file knows nothing about the network.
 
-import { migrate } from './saved-books.mjs?v=f3c1dd5be0';
+import { migrate } from './saved-books.mjs';
 
 // ---------------------------------------------------------------- verdicts
 

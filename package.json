@@ -1,0 +1,28 @@
+{
+  "name": "constant-reader",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Fiction reviews from the literary press, scored against the reading taste profile.",
+  "scripts": {
+    "build": "node bin/build.mjs",
+    "build:fresh": "node bin/build.mjs --fresh",
+    "calibrate": "node bin/calibrate.mjs",
+    "calibrate:verbose": "node bin/calibrate.mjs --verbose",
+    "tune": "node bin/tune.mjs",
+    "test": "node bin/test.mjs",
+    "start": "node bin/serve.mjs",
+    "check": "npm run test && npm run calibrate",
+    "sources": "node bin/check-sources.mjs",
+    "sources:fix": "node bin/check-sources.mjs --fix",
+    "archive": "node bin/archive.mjs",
+    "archive:status": "node bin/archive.mjs --status",
+    "covers": "node bin/covers.mjs",
+    "covers:write": "node bin/covers.mjs --write",
+    "site": "node bin/site.mjs",
+    "notify": "node bin/notify.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

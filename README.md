@@ -1,8 +1,5 @@
 # Constant Reader
 
-> **This repository is generated. Do not edit it by hand.**
-> The source is `apps/lit-feed/web/` in the private `claude-vault` repo. `npm run publish` in `apps/lit-feed` rsyncs that folder here with `--delete` and pushes, so anything changed here directly is reverted by the next build. Only this README and `.nojekyll` are excluded from the copy.
-
 Everything the literary press reviewed in the last ten years, scored out of ten against one reader's taste profile.
 
 Live at https://beingmtm714.github.io/constant-reader/
@@ -37,4 +34,4 @@ Signing in is optional and off unless you ask for it. It is Google sign-in only,
 
 ## Where it comes from
 
-This repository is the published build. The source, the crawler and the taste profile live elsewhere.
+Everything is in this repository: the crawler and scorer (`bin/`, `lib/`, `sources.json`), the taste profile (`profile/`) and the app (`web/`). A GitHub Actions workflow crawls, tests and deploys it to Pages three times a week. `SCORING.md` explains the scores, `ENGINEERING.md` the system and `DESIGN.md` the app.
