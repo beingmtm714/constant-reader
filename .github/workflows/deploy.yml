@@ -147,7 +147,11 @@ jobs:
         continue-on-error: true
         run: npm run calibrate
 
+      # ASK_URL is the Ask worker's address (see ask-worker.yml). Without it
+      # the site ships keyword search only.
       - name: Assemble site
+        env:
+          ASK_URL: ${{ vars.ASK_URL }}
         run: npm run site
 
       - uses: actions/upload-pages-artifact@v3

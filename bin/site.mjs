@@ -96,11 +96,25 @@ rmSync(out, { recursive: true, force: true });
 cpSync(join(root, 'web'), out, { recursive: true, filter: (src) => !src.endsWith('.DS_Store') });
 
 checkPreviewUrls(out);
+writeAskUrl(out);
 stampVersion(out);
 console.log(`  Ready to deploy: ${relative(root, out) || out}/
 `);
 
 
+
+// Where search sends a question to be read for meaning (worker/). It comes
+// from the environment because it is a deploy setting, not code: the
+// workflow passes the ASK_URL repository variable, and without one the site
+// ships keyword search only, which is what `npm start` always serves. Written
+// before stamping so the stamp covers it.
+function writeAskUrl(dir) {
+  const url = (process.env.ASK_URL || '').trim();
+  if (!url) { console.log('  Ask: off (no ASK_URL), search is keyword-only'); return; }
+  if (!/^https:\/\/[^\s'"]+$/.test(url)) die(`ASK_URL must be an https address, not ${JSON.stringify(url)}`);
+  writeFileSync(join(dir, 'lib', 'ask-config.mjs'), `export const ASK_URL = ${JSON.stringify(url)};\n`);
+  console.log(`  Ask: ${url}`);
+}
 
 // Open Graph needs absolute URLs, so index.html carries this site's address in
 // two places rather than deriving it. A guard rather than a rewrite: if the site

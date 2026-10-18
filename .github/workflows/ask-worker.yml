@@ -1,0 +1,51 @@
+# Deploys the Ask worker (worker/), which lets search match meaning.
+#
+# Secrets:
+#   CLOUDFLARE_API_TOKEN   a token with the "Edit Cloudflare Workers" template
+#   CLOUDFLARE_ACCOUNT_ID  the account the worker lives in
+#   ANTHROPIC_API_KEY      passed to the worker as a secret, never to the site
+#
+# After the first deploy, put the worker's address (printed at the end of the
+# deploy step, https://constant-reader-ask.<you>.workers.dev) in the ASK_URL
+# repository variable and re-run Deploy. Until ASK_URL is set the site ships
+# keyword search only.
+
+name: Ask worker
+
+on:
+  push:
+    branches: [main]
+    paths: ['worker/**', '.github/workflows/ask-worker.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ask-worker
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install
+        working-directory: worker
+        run: npm ci
+
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: worker
+          secrets: |
+            ANTHROPIC_API_KEY
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

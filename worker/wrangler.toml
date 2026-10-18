@@ -1,0 +1,10 @@
+# The Ask worker: lets search match meaning. See src/index.js.
+# Deployed by .github/workflows/ask-worker.yml. ANTHROPIC_API_KEY is a worker
+# secret set by that workflow from the repository secret of the same name.
+name = "constant-reader-ask"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+ALLOWED_ORIGINS = "https://www.constantreader.app,https://constantreader.app,https://beingmtm714.github.io,http://localhost:4123"

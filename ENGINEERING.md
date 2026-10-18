@@ -16,7 +16,7 @@ Written 2026-08-30 for an engineer picking this up cold. It covers what the code
 
 **No dependencies and no build step.** Node ≥ 18, `type: module`, zero entries in `package.json` beyond scripts. Every parser, the HTTP cache, the RSS reader and the test harness are hand-written. That is deliberate: this is a private instrument maintained by one person, and a dependency tree is a maintenance surface that has to earn its place. Nothing in it has yet.
 
-**Shape of the system.** A Node crawler and scorer writes one JSON file. A static browser app reads that file and nothing else. There is no server, no API and no database in the request path — the only network call the browser ever makes after loading the page is optional Firebase sign-in, and the SDK is not fetched at all until a reader taps *Sign in*.
+**Shape of the system.** A Node crawler and scorer writes one JSON file. A static browser app reads that file and nothing else. There is no database in the request path. The browser makes two kinds of network call after loading the page: optional Firebase sign-in, whose SDK is not fetched until a reader taps *Sign in*, and Search's meaning pass, which posts the question to the Ask worker (`worker/`, a Cloudflare Worker that holds the Anthropic key and nothing else). Search works without the worker, on keywords alone; `web/lib/ask.mjs` explains the two calls it makes and why the catalogue never leaves the browser.
 
 ```
 sources.json ──▶ lib/sources.mjs ──▶ lib/books.mjs ──▶ lib/aggregate.mjs ──▶ lib/score.mjs ──▶ web/data/feed.json ──▶ web/app.js

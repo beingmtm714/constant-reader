@@ -28,3 +28,10 @@ site/
 
 node_modules/
 .DS_Store
+
+# Local secrets for `wrangler dev` in worker/. The deployed worker gets its key
+# from the Ask worker workflow.
+.dev.vars
+
+# wrangler dev local state and bundles.
+.wrangler/

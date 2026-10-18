@@ -21,6 +21,7 @@ import { jacketFor } from './lib/jacket.mjs';
 import { cleanBlurb, bestBlurb } from './lib/blurb.mjs';
 import { coverFor, fillsSlot } from './lib/cover.mjs';
 import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH_EXAMPLES } from './lib/search.mjs';
+import { askEnabled, askByMeaning } from './lib/ask.mjs';
 
 (() => {
   'use strict';
@@ -125,6 +126,8 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     // to the first of them.
     sqRun: '',
     searching: false,
+    // The meaning pass for the current query: { q, status, found }. See startAsk.
+    ask: null,
     openMenu: null,
     draftWeights: null,
   };
@@ -437,8 +440,10 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
   function inFilters(e) {
     if (state.shortOnly && !(e.book.pages && e.book.pages < 300)) return false;
     if (!isKind(e, state.kind)) return false;
-    if (!hasTag(e, state.tag)) return false;
-    return matches(e, state.q);
+    // The title filter is not applied here. For you has no field for it any
+    // more, and a filter typed on another screen that silently thinned this
+    // page would be a filter nobody could see or clear.
+    return hasTag(e, state.tag);
   }
 
   const reviewTime = (e) => Date.parse(e.lastReviewed || '') || 0;
@@ -1134,15 +1139,15 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
   // rather than shown doing nothing. For you passes no scopes, because scope
   // asks how much is known about a book and that page only ever holds scored
   // ones; it passes showSort false, because its order is the edit it is making.
-  function toolbar({ scopes, scope, showRecommended = true, showSort = true }) {
+  function toolbar({ scopes, scope, showRecommended = true, showSort = true, showQuery = true }) {
     const effective = (!hasProfile() && state.sort === 'fit') ? 'latest' : state.sort;
     const sortLabel = SORTS.find((x) => x.id === effective)?.label || 'Newest reviews';
-    return `<div class="toolbar" data-toolbar data-nosort="${!showSort}">
-      <div class="search">
-        ${ico('search')}
-        <label class="sr-only" for="q">Search books</label>
-        <input type="search" id="q" value="${esc(state.q)}" placeholder="Title, author, publisher, critic…" autocomplete="off">
-      </div>
+    return `<div class="toolbar" data-toolbar data-nosort="${!showSort}" data-noquery="${!showQuery}">
+      ${showQuery ? `<div class="search">
+        ${ico('sliders')}
+        <label class="sr-only" for="q">Filter this list by title, author, publisher or critic</label>
+        <input type="search" id="q" value="${esc(state.q)}" placeholder="Filter by title, author, critic…" autocomplete="off">
+      </div>` : ''}
       <div class="tool-pair">
         ${showSort ? `<button class="tool-btn" data-action="menu" data-menu="sort" aria-haspopup="true" aria-expanded="${state.openMenu === 'sort'}">
           <span>${esc(sortLabel)}</span>${ico('chevron')}
@@ -1419,6 +1424,22 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     </div>`;
   }
 
+  // The front page's way in to Search. It asks in the reader's own words and
+  // answers on the Search screen, so it reads as a question rather than a
+  // filter: the filter fields on Review feed and All books only narrow the
+  // list in front of them by name.
+  function homeAsk() {
+    return `<form class="asksearch homeask" id="homeask" role="search">
+      <label class="sr-only" for="hq">Ask for a book in your own words</label>
+      <div class="asksearch-field">
+        ${ico('search')}
+        <input type="search" id="hq" autocomplete="off" spellcheck="false" enterkeyhint="search"
+          placeholder="Ask for a book in your own words">
+      </div>
+      <p class="asksearch-note">Searches the whole archive by what critics said, not just this page.</p>
+    </form>`;
+  }
+
   function viewForYou() {
     // Without a profile this page shows the app rather than an argument for it:
     // real books, the real layout, drawn at random. The first-visit prompt
@@ -1432,7 +1453,7 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     // gone, and with it two lines that had started lying: "reload for a
     // different eight" and "these eight lean", on a page showing twelve reviews.
     const ranked = hasProfile() ? edit() : sinceLastVisit();
-    const filtered = Boolean(state.q || state.tag || state.kind !== 'any' || state.shortOnly);
+    const filtered = Boolean(state.tag || state.kind !== 'any' || state.shortOnly);
     // "Nothing clears the profile" is a fact about a threshold a stranger has
     // never set, so it only belongs here once there is a profile to have
     // cleared it. Without one, an empty sinceLastVisit() falls through instead
@@ -1445,7 +1466,8 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
           ? 'Nothing on today’s shelf answers the filters now set.'
           : 'Nothing in the current build clears the profile. The archive is still browseable under All books.',
         fullLede: true })}
-        ${toolbar({ scopes: null, scope: null, showRecommended: false, showSort: false })}
+        ${homeAsk()}
+        ${toolbar({ scopes: null, scope: null, showRecommended: false, showSort: false, showQuery: false })}
         <div class="panel panel-empty"><h2>${filtered ? 'Nothing matches' : 'No edit today'}</h2>
         <p>${filtered
           ? `The edit is a few dozen books, so a filter empties it long before it empties the archive. All ${esc(String(stats.total))} are still under All books.`
@@ -1484,7 +1506,8 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
         fullLede: true,
       })}
 
-      ${toolbar({ scopes: null, scope: null, showRecommended: false, showSort: false })}
+      ${homeAsk()}
+        ${toolbar({ scopes: null, scope: null, showRecommended: false, showSort: false, showQuery: false })}
       ${tagBanner(ranked.length)}
 
       ${fresh.length
@@ -1631,20 +1654,44 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
   let searchIndex = null;
   const searchIdx = () => (searchIndex ||= buildSearchIndex(FEED.books));
 
+  // Fit is what the reader's own profile makes of a book, and it is passed in
+  // only when there is a reader. Without one the ranking is relevance alone —
+  // a stranger's search must not be ordered by somebody else's taste, which is
+  // the same rule the feed and the shelf already follow.
+  const searchFit = (e) => (hasProfile() && isScored(e) ? shownScore(e) : null);
+  const keywordSearch = (q, limit) => runSearch(q, FEED.books.filter((e) => !passed(e)), {
+    index: searchIdx(),
+    dimensions: FEED.dimensions,
+    fitOf: searchFit,
+    limit,
+  });
+
+  // The meaning pass (lib/ask.mjs) for the query now on screen. Keyword
+  // results show at once; this replaces them when it answers, and leaves them
+  // standing, with a line saying so, when it cannot.
+  function startAsk(q) {
+    if (!askEnabled() || !q) { state.ask = null; return; }
+    if (state.ask?.q === q && state.ask.status !== 'failed') return;
+    state.ask = { q, status: 'loading', found: null };
+    render();
+    askByMeaning(q, { keyword: (query, limit) => keywordSearch(query, limit).results, fitOf: searchFit })
+      .then((found) => {
+        if (state.ask?.q !== q) return;
+        state.ask = { q, status: found?.results.length ? 'done' : 'failed', found };
+        if (state.view === 'search' && state.sqRun.trim() === q) render();
+      });
+  }
+
   function viewSearch() {
     const q = state.sqRun.trim();
-    // Fit is what the reader's own profile makes of a book, and it is passed in
-    // only when there is a reader. Without one the ranking is relevance alone —
-    // a stranger's search must not be ordered by somebody else's taste, which is
-    // the same rule the feed and the shelf already follow.
-    const found = q
-      ? runSearch(q, FEED.books.filter((e) => !passed(e)), {
-        index: searchIdx(),
-        dimensions: FEED.dimensions,
-        fitOf: hasProfile() ? (e) => (isScored(e) ? shownScore(e) : null) : () => null,
-        limit: 200,
-      })
-      : null;
+    const ask = q && state.ask?.q === q ? state.ask : null;
+    const keyword = q ? keywordSearch(q, 200) : null;
+    // Meaning results stand in for the keyword ones, but keep the keyword
+    // reading of the query: the band and length facets it found are still
+    // what the archive understood, and the read-back says so.
+    const found = ask?.status === 'done'
+      ? { ...keyword, results: ask.found.results, total: ask.found.total, terms: ask.found.terms, meaning: true }
+      : keyword;
 
     const rows = found ? found.results.slice(0, state.searchLimit) : [];
 
@@ -1669,6 +1716,11 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
         </div>
         <p class="asksearch-note">Plain sentences work. So do lengths, years, “in translation”, and “like <em>Trust</em>”.</p>
       </form>
+
+      ${ask ? `<p class="asksearch-mode" data-state="${ask.status}" role="status">${
+        ask.status === 'loading' ? `${ico('search')}<span>Reading the question for meaning… these are word matches until it answers.</span>`
+        : ask.status === 'done' ? `<span>Chosen for what you asked, from what critics wrote about each book.</span>`
+        : `<span>Couldn’t read this for meaning just now, so these are word matches.</span>`}</p>` : ''}
 
       ${!q ? `<div class="asksearch-eg">
         <p class="eyebrow">Try one of these</p>
@@ -1735,6 +1787,7 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
           const next = $('sq');
           if (next) { next.focus(); try { next.setSelectionRange(at, end); } catch { /* not selectable */ } }
         }
+        startAsk(q);
       };
       if (!heavy) { go(); return; }
       // Two frames, so the spinner is painted before the work that blocks the
@@ -1781,6 +1834,13 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     for (const t of q.tags) bits.push(`<span class="rb-item" data-kind="tag">${esc(t.label)}</span>`);
     for (const f of q.echo) bits.push(`<span class="rb-item" data-kind="facet">${esc(f)}</span>`);
     for (const t of q.typed || []) bits.push(`<span class="rb-item" data-kind="word">“${esc(t)}”</span>`);
+    if (found.meaning) {
+      return `<div class="readback">
+        <p class="eyebrow">What this read</p>
+        ${bits.length ? `<div class="rb-items">${bits.join('')}</div>` : ''}
+        ${found.terms?.length ? `<p class="readback-note">Also looked for ${found.terms.slice(0, 10).map((t) => `<b>${esc(t)}</b>`).join(', ')}, then kept the books that answer the question.</p>` : ''}
+      </div>`;
+    }
 
     if (!bits.length) {
       return `<div class="readback" data-state="empty"><p class="eyebrow">What this read</p>
@@ -3095,6 +3155,40 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     });
     showRemind();
 
+    // Bound before any of the first-visit returns below. They used to sit at
+    // the end of this function, so for anyone who had already seen the
+    // first-visit dialog they were never bound at all: Return on the Search
+    // screen fell through to the browser's own form submit, which reloaded the
+    // page onto For you, and the sign-in dialog's buttons did nothing.
+    //
+    // Return runs the search and blurs the field. Blurring is the whole point on
+    // a phone: it is what puts the keyboard away, and until it did, the results
+    // were behind it. `enterkeyhint="search"` labels the key.
+    document.addEventListener('submit', (ev) => {
+      if (ev.target.id === 'askform') {
+        ev.preventDefault();
+        $('sq')?.blur();
+        queueSearch({ now: true });
+        return;
+      }
+      // The ask box on For you hands the question to the Search screen, which
+      // is where its answers and the reading of it live.
+      if (ev.target.id === 'homeask') {
+        ev.preventDefault();
+        const q = $('hq')?.value.trim() || '';
+        $('hq')?.blur();
+        if (!q) return;
+        state.sq = q;
+        setView('search');
+        queueSearch({ now: true });
+      }
+    });
+
+    $('needauth-later').addEventListener('click', () => $('needauth').close());
+    // Signing in from the dialog closes it. doAuth is already bound to every
+    // [data-auth] control and re-renders on its own.
+    $('needauth-signin').addEventListener('click', () => $('needauth').close());
+
     const dlg = $('firstrun');
     // No <dialog> support, no prompt. A modal faked out of a div is one more way
     // for a first visit to go wrong, and the app is complete without this.
@@ -3148,20 +3242,6 @@ import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH
     // stranded on an error.
     $('firstrun-signin').addEventListener('click', () => { dlg.close(); doAuth(); setView('start'); });
     $('firstrun-later').addEventListener('click', () => dlg.close());
-    // Return runs the search and blurs the field. Blurring is the whole point on
-    // a phone: it is what puts the keyboard away, and until it did, the results
-    // were behind it. `enterkeyhint="search"` labels the key.
-    document.addEventListener('submit', (ev) => {
-      if (ev.target.id !== 'askform') return;
-      ev.preventDefault();
-      $('sq')?.blur();
-      queueSearch({ now: true });
-    });
-
-    $('needauth-later').addEventListener('click', () => $('needauth').close());
-    // Signing in from the dialog closes it. doAuth is already bound to every
-    // [data-auth] control and re-renders on its own.
-    $('needauth-signin').addEventListener('click', () => $('needauth').close());
   }
 
   // ------------------------------------------------------------ navigation
