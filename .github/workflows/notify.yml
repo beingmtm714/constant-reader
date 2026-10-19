@@ -1,0 +1,85 @@
+# Sends the push roundup, 55 minutes after each scheduled build.
+#
+# Reads the live feed rather than a build artifact, because the roundup
+# describes what is on the site. What each group was last told about is
+# carried between runs in the Actions cache.
+#
+# Secrets:
+#   VAPID_PRIVATE_KEY  the raw base64url private key that was in vapid.key
+#   GCP_SA_KEY         service-account JSON with Firestore read access on
+#                      constant-reader-93f05 (Cloud Datastore User is enough)
+
+name: Notify
+
+on:
+  schedule:
+    # 07:15 US Central (daylight time) on Monday, Wednesday and Saturday.
+    - cron: '15 12 * * 1,3,6'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Print what would be sent and send nothing
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: notify
+  cancel-in-progress: false
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Restore notify state
+        uses: actions/cache/restore@v4
+        with:
+          path: data/notify-state.json
+          key: notify-state-${{ github.run_id }}
+          restore-keys: notify-state-
+
+      - name: Fetch the live feed
+        id: feed
+        run: |
+          mkdir -p web/data
+          curl -sSf https://www.constantreader.app/data/feed.json -o web/data/feed.json
+          # A feed older than two days means the build has been failing. Staying
+          # quiet is the honest outcome.
+          age=$(node -e 'const f=require("./web/data/feed.json");console.log(Math.floor((Date.now()-Date.parse(f.builtAt))/1000))')
+          if [ "$age" -gt 172800 ]; then
+            echo "::warning::feed.json is $((age / 86400)) days old; the build is behind. Sending nothing."
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: google-github-actions/auth@v2
+        if: steps.feed.outputs.stale != 'true'
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+        if: steps.feed.outputs.stale != 'true'
+
+      - name: Send
+        if: steps.feed.outputs.stale != 'true'
+        env:
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+        run: |
+          printf '%s' "$VAPID_PRIVATE_KEY" > vapid.key
+          node bin/notify.mjs ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && '--dry-run' || '' }}
+          rm -f vapid.key
+
+      - name: Save notify state
+        if: always() && hashFiles('data/notify-state.json') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: data/notify-state.json
+          key: notify-state-${{ github.run_id }}

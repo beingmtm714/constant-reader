@@ -1,0 +1,27 @@
+rules_version = '2';
+
+// One document per reader, at readers/{uid}, holding the two things that are the
+// reader's own: their verdicts (saved and passed) and their ordering overrides.
+//
+// A reader may read and write their own document and nothing else. There is no
+// shared collection, no public read and no listing: the feed itself is a static
+// JSON file on GitHub Pages, so nothing about a book ever needs to come from
+// here. This database holds only what a person did with those books.
+//
+// Deployed with the Firebase Rules API rather than the firebase CLI, which is
+// not installed on this machine. See notes/ops/constant-reader-handoff.md.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /readers/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+
+      // Push subscriptions, one document per device. A rule on a document does
+      // not reach its subcollections, so this is stated rather than inherited:
+      // without it a reader cannot write their own device and the weekly
+      // roundup has nobody to send to. Same test, same owner, no listing.
+      match /devices/{device} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+    }
+  }
+}
