@@ -1754,9 +1754,6 @@ button.tag { cursor: pointer; }
 /* For you offers no sort, so its toolbar is a field and one button rather than
    a field and two. */
 .toolbar[data-nosort="true"] { grid-template-columns: 1fr auto; }
-/* For you has no list filter field, only the filter menu, which sits right. */
-.toolbar[data-noquery="true"] { grid-template-columns: auto; justify-content: end; }
-.homeask { margin: 0 0 18px; }
 .tool-count {
   min-width: 17px; height: 17px; padding: 0 4px; margin-left: 2px;
   display: inline-grid; place-items: center;
@@ -1925,15 +1922,3 @@ button.tag { cursor: pointer; }
   font-size: 13px; line-height: 1.5; color: var(--muted-ink);
   max-width: 62ch;
 }
-
-/* Which kind of answer the Search screen is showing: word matches while the
-   meaning pass runs or when it could not answer, or the meaning pass itself. */
-.asksearch-mode {
-  display: flex; align-items: center; gap: 8px;
-  margin: 14px 0 0; font-size: 14px; color: var(--muted-ink);
-}
-.asksearch-mode .ico { flex: none; width: 15px; height: 15px; color: var(--brass); }
-.asksearch-mode[data-state="loading"] .ico { animation: ask-pulse 1.2s ease-in-out infinite; }
-.asksearch-mode[data-state="done"] { color: var(--graphite); }
-@keyframes ask-pulse { 50% { opacity: .35; } }
-@media (prefers-reduced-motion: reduce) { .asksearch-mode[data-state="loading"] .ico { animation: none; } }
