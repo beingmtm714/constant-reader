@@ -287,11 +287,13 @@ a:hover { text-decoration: underline; }
 
 .menu-btn {
   display: grid; place-items: center;
-  width: 44px; height: 40px;
-  border: 1px solid var(--brass);
+  width: 44px; height: 44px;
+  border: 1px solid var(--hairline);
   border-radius: 2px;
-  color: var(--porcelain);
+  background: #1d302e;
+  color: var(--ink);
 }
+.menu-btn:hover, .menu-btn[aria-expanded="true"] { border-color: var(--brass); color: var(--porcelain); }
 .menu-btn .ico { width: 19px; height: 19px; }
 
 .menu-panel {
@@ -1739,6 +1741,7 @@ button.tag { cursor: pointer; }
 
 @media (max-width: 767px) {
   .asksearch-field { min-height: 54px; padding: 0 13px; }
+  .homeask-row { --ask-h: 54px; }
   .asksearch-field input { font-size: 17px; padding: 12px 0; }
   .asksearch-chips .chip { width: 100%; }
   .readback { padding: 13px; }
@@ -1756,7 +1759,11 @@ button.tag { cursor: pointer; }
 .toolbar[data-nosort="true"] { grid-template-columns: 1fr auto; }
 /* For you has no list filter field, only the filter menu, which sits right. */
 .toolbar[data-noquery="true"] { grid-template-columns: auto; justify-content: end; }
-.homeask { margin: 0 0 18px; }
+/* On For you the filter button sits beside the ask field, at its height, rather
+   than alone on a row of its own with a page gap above and below it. */
+.homeask-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: start; }
+.homeask { margin: 0; min-width: 0; }
+.homeask-row .tool-btn { min-height: 0; height: var(--ask-h, 60px); }
 .tool-count {
   min-width: 17px; height: 17px; padding: 0 4px; margin-left: 2px;
   display: inline-grid; place-items: center;

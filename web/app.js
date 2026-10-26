@@ -1466,8 +1466,7 @@ import { askEnabled, askByMeaning } from './lib/ask.mjs';
           ? 'Nothing on today’s shelf answers the filters now set.'
           : 'Nothing in the current build clears the profile. The archive is still browseable under All books.',
         fullLede: true })}
-        ${homeAsk()}
-        ${toolbar({ scopes: null, scope: null, showRecommended: false, showSort: false, showQuery: false })}
+        <div class="homeask-row">${homeAsk()}${toolbar({ scopes: null, scope: null, showRecommended: false, showSort: false, showQuery: false })}</div>
         <div class="panel panel-empty"><h2>${filtered ? 'Nothing matches' : 'No edit today'}</h2>
         <p>${filtered
           ? `The edit is a few dozen books, so a filter empties it long before it empties the archive. All ${esc(String(stats.total))} are still under All books.`
@@ -1506,8 +1505,7 @@ import { askEnabled, askByMeaning } from './lib/ask.mjs';
         fullLede: true,
       })}
 
-      ${homeAsk()}
-        ${toolbar({ scopes: null, scope: null, showRecommended: false, showSort: false, showQuery: false })}
+      <div class="homeask-row">${homeAsk()}${toolbar({ scopes: null, scope: null, showRecommended: false, showSort: false, showQuery: false })}</div>
       ${tagBanner(ranked.length)}
 
       ${fresh.length
