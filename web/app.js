@@ -1434,7 +1434,7 @@ import { askEnabled, askByMeaning } from './lib/ask.mjs';
       <div class="asksearch-field">
         ${ico('search')}
         <input type="search" id="hq" autocomplete="off" spellcheck="false" enterkeyhint="search"
-          placeholder="Ask for a book in your own words">
+          placeholder="Ask for a book in your words">
       </div>
       <p class="asksearch-note">Searches the whole archive by what critics said, not just this page.</p>
     </form>`;

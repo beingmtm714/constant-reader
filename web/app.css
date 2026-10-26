@@ -1764,6 +1764,10 @@ button.tag { cursor: pointer; }
 .homeask-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: start; }
 .homeask { margin: 0; min-width: 0; }
 .homeask-row .tool-btn { min-height: 0; height: var(--ask-h, 60px); }
+/* Beside the button the field is too narrow for the placeholder on 360px
+   phones. 16px is the floor: below it iOS zooms the page when the field takes
+   focus. */
+@media (max-width: 370px) { .homeask .asksearch-field input { font-size: 16px; } }
 .tool-count {
   min-width: 17px; height: 17px; padding: 0 4px; margin-left: 2px;
   display: inline-grid; place-items: center;
