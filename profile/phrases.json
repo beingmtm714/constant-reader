@@ -1,0 +1,81 @@
+{
+  "note": "Plain-language phrases for each dimension band, used to describe a book in relation to the profile. Editable like the rest of profile/ — nothing here is compiled into code.",
+
+  "bands": {
+    "D1": {
+      "dual_timeline": "runs a historical rupture straight into the present",
+      "period_causal": "period-set, with the causal line running forward",
+      "generational": "a multi-generational sweep over one family or one place",
+      "aftermath": "contemporary, but built as the aftermath of something specific",
+      "texture_only": "historical texture with no argument behind it",
+      "sealed": "sealed in the present"
+    },
+    "D2": {
+      "land": "driven by land, water, extraction or labour",
+      "state_violence": "driven by state violence, conquest or repression",
+      "institution": "about how an institution forms the people inside it",
+      "art_under_state": "art made under political constraint",
+      "faith": "a belief system being built",
+      "finance": "money in the abstract",
+      "domestic": "family, marriage and identity as the engine",
+      "media_tech": "contemporary media and internet life as the subject"
+    },
+    "D3": {
+      "constraint": "sustains a formal constraint",
+      "alt_archive": "an invented archive or an alternate history",
+      "polyphony": "genuinely polyphonic, with no centre",
+      "braid": "braided timelines carrying the argument",
+      "conventional": "conventional in form",
+      "device_twist": "a formal device that resolves into a reveal",
+      "inert_device": "a device that goes nowhere"
+    },
+    "D4": {
+      "lyric_dread": "lyric, with dread underneath",
+      "baroque": "dense and incantatory",
+      "spare": "spare and precise",
+      "functional": "clean but unremarkable prose",
+      "quippy": "wry and comic at sentence level",
+      "flat": "prose the review names as the weak point"
+    },
+    "D5": {
+      "dread": "dread-forward and unresolved",
+      "elegiac": "elegiac and haunted",
+      "indicting": "angry and indicting",
+      "cold": "cold and clinical",
+      "warm": "warm and humane",
+      "comic": "comic as its primary mode"
+    },
+    "D6": {
+      "sprawl": "sprawling, decades-spanning",
+      "long_ambit": "long and structurally ambitious",
+      "short_formal": "short but formally extreme",
+      "mid_conv": "mid-length and conventional",
+      "short_conv": "short and conventional"
+    },
+    "D7": {
+      "indie": "from an independent press",
+      "literary": "a literary imprint",
+      "translation": "in translation",
+      "commercial": "a commercial imprint",
+      "bookclub": "positioned as book-club fiction"
+    }
+  },
+
+  "openers": {
+    "high":   ["Close to the centre of the profile.", "This is the shape the profile keeps acquiring.", "Squarely in range."],
+    "good":   ["In range.", "This one holds up against the profile.", "Enough of the profile is here."],
+    "near":   ["Near the line.", "Half of what the profile wants.", "Arguable."],
+    "some":   ["Some of it lands.", "Partly in range.", "The subject is closer than the book."],
+    "off":    ["Off the profile.", "Not what the profile goes for.", "Little here for you."]
+  },
+
+  "connectors": {
+    "against": ["Against it:", "Working against it:", "What drags:"],
+    "anchor": "Nearest thing in your own set is",
+    "noAnchor": "Nothing in your set sits especially close.",
+    "thin": "The review is short enough that several dimensions fell back to defaults, so read this as a guess.",
+    "filtered": "Hard-filtered:",
+    "unknownFiction": "Nothing establishes this is fiction.",
+    "outOfWindow": "Published outside the ten-year window."
+  }
+}

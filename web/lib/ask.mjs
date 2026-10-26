@@ -10,8 +10,8 @@
 // failure, a timeout, a refusal or an empty answer all return null, and the
 // caller keeps the keyword results it already showed.
 
-import { ASK_URL } from './ask-config.mjs?v=7b9522d022';
-import { bestBlurb } from './blurb.mjs?v=7b9522d022';
+import { ASK_URL } from './ask-config.mjs';
+import { bestBlurb } from './blurb.mjs';
 
 const TIMEOUT_MS = 20000;
 const CANDIDATES = 45;

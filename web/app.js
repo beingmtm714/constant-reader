@@ -8,20 +8,20 @@
    browser and the build can never disagree about what a number means. This file
    decides what is shown and in what order. */
 
-import * as saved from './lib/saved-books.mjs?v=7b9522d022';
-import { RETAILERS, linkFor, canFindCopy } from './lib/retailers.mjs?v=7b9522d022';
-import { createAnalytics } from './lib/analytics.mjs?v=7b9522d022';
-import { buildTasteModel, tunedTotal, explore, MIN_SIGNAL, MIN_JUDGMENTS, MAX_ADJUSTMENT } from './lib/taste.mjs?v=7b9522d022';
-import { outOfTen, RECOMMEND_AT } from './lib/recommend.mjs?v=7b9522d022';
-import { rescore, isEmpty, bandKey, AVERSION_STRENGTHS, MAX_AVERSIONS, EMPTY as EMPTY_OVERRIDES } from './lib/overrides.mjs?v=7b9522d022';
-import { READS, REFUSALS, MIN_PICKS, answersReady, chipsFor, groupedChipsFor, buildProfile } from './lib/onboard.mjs?v=7b9522d022';
-import * as sync from './lib/sync.mjs?v=7b9522d022';
-import * as push from './lib/push.mjs?v=7b9522d022';
-import { jacketFor } from './lib/jacket.mjs?v=7b9522d022';
-import { cleanBlurb, bestBlurb } from './lib/blurb.mjs?v=7b9522d022';
-import { coverFor, fillsSlot } from './lib/cover.mjs?v=7b9522d022';
-import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH_EXAMPLES } from './lib/search.mjs?v=7b9522d022';
-import { askEnabled, askByMeaning } from './lib/ask.mjs?v=7b9522d022';
+import * as saved from './lib/saved-books.mjs';
+import { RETAILERS, linkFor, canFindCopy } from './lib/retailers.mjs';
+import { createAnalytics } from './lib/analytics.mjs';
+import { buildTasteModel, tunedTotal, explore, MIN_SIGNAL, MIN_JUDGMENTS, MAX_ADJUSTMENT } from './lib/taste.mjs';
+import { outOfTen, RECOMMEND_AT } from './lib/recommend.mjs';
+import { rescore, isEmpty, bandKey, AVERSION_STRENGTHS, MAX_AVERSIONS, EMPTY as EMPTY_OVERRIDES } from './lib/overrides.mjs';
+import { READS, REFUSALS, MIN_PICKS, answersReady, chipsFor, groupedChipsFor, buildProfile } from './lib/onboard.mjs';
+import * as sync from './lib/sync.mjs';
+import * as push from './lib/push.mjs';
+import { jacketFor } from './lib/jacket.mjs';
+import { cleanBlurb, bestBlurb } from './lib/blurb.mjs';
+import { coverFor, fillsSlot } from './lib/cover.mjs';
+import { buildIndex as buildSearchIndex, search as runSearch, EXAMPLES as SEARCH_EXAMPLES } from './lib/search.mjs';
+import { askEnabled, askByMeaning } from './lib/ask.mjs';
 
 (() => {
   'use strict';
@@ -1434,7 +1434,7 @@ import { askEnabled, askByMeaning } from './lib/ask.mjs?v=7b9522d022';
       <div class="asksearch-field">
         ${ico('search')}
         <input type="search" id="hq" autocomplete="off" spellcheck="false" enterkeyhint="search"
-          placeholder="Ask for a book in your own words">
+          placeholder="Ask for a book in your words">
       </div>
       <p class="asksearch-note">Searches the whole archive by what critics said, not just this page.</p>
     </form>`;
