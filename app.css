@@ -287,11 +287,13 @@ a:hover { text-decoration: underline; }
 
 .menu-btn {
   display: grid; place-items: center;
-  width: 44px; height: 40px;
-  border: 1px solid var(--brass);
+  width: 44px; height: 44px;
+  border: 1px solid var(--hairline);
   border-radius: 2px;
-  color: var(--porcelain);
+  background: #1d302e;
+  color: var(--ink);
 }
+.menu-btn:hover, .menu-btn[aria-expanded="true"] { border-color: var(--brass); color: var(--porcelain); }
 .menu-btn .ico { width: 19px; height: 19px; }
 
 .menu-panel {
